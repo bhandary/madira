@@ -1,0 +1,11 @@
+[project]
+name = "madira"
+version = "0.1.0"
+description = "Maison Madira beverage-program agent backend"
+requires-python = ">=3.11"
+readme = "README.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = ["ignore::DeprecationWarning"]

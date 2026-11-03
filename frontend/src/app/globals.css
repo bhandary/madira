@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #1c1410;
+  --color-paper: #f7f1e6;
+  --color-cream: #efe4d2;
+  --color-burgundy: #6b1d32;
+  --color-gold: #c4a35a;
+  --font-sans: var(--font-outfit), "Segoe UI", sans-serif;
+  --font-serif: var(--font-fraunces), "Times New Roman", serif;
+}
+
+html,
+body {
+  min-height: 100%;
+  background-color: #f7f1e6;
+  color: #1c1410;
+  font-family: var(--font-outfit), "Segoe UI", sans-serif;
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 500px at 10% -10%, rgba(196, 163, 90, 0.18), transparent 50%),
+    radial-gradient(900px 400px at 100% 0%, rgba(107, 29, 50, 0.12), transparent 45%);
+}
+
+.font-serif {
+  font-family: var(--font-fraunces), "Times New Roman", serif;
+}
+
+.a2ui-surface {
+  --a2ui-color-surface: #fffaf2;
+  --a2ui-color-border: #e4d2a3;
+  --a2ui-color-muted: #7a6a58;
+  --a2ui-color-error: #a33b24;
+  --a2ui-primary-color: #6b1d32;
+}
+
+.demo-ribbon {
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
