@@ -23,7 +23,15 @@ export default function InventoryPage() {
   }
 
   useEffect(() => {
-    refresh().catch(() => undefined);
+    let cancelled = false;
+    getInventory()
+      .then((data) => {
+        if (!cancelled) setItems(data.items || []);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const prompt = `Set on-hand for ${sku} to ${qty}, then draft purchase orders for every SKU below par. Do not transmit orders.`;

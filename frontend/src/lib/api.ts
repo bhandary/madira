@@ -72,3 +72,96 @@ export async function getSampleMenu() {
   const res = await fetch(`${API}/fixtures/sample-menu`, { cache: "no-store" });
   return res.json();
 }
+
+export type LlmSettings = {
+  configured: boolean;
+  stored: boolean;
+  provider: string | null;
+  model: string | null;
+  key_hint: string | null;
+  demo_mode: boolean;
+  demo_forced: boolean;
+  source: string;
+  label: string;
+  warning: string;
+  default_models: Record<string, string>;
+};
+
+const TOKEN_KEY = "madira_admin_token";
+
+export function readAdminToken(): string {
+  if (typeof window === "undefined") return "";
+  return sessionStorage.getItem(TOKEN_KEY) || "";
+}
+
+export function storeAdminToken(token: string) {
+  sessionStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearAdminToken() {
+  sessionStorage.removeItem(TOKEN_KEY);
+}
+
+export function notifyStatusChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("madira-status"));
+  }
+}
+
+async function errorMessage(res: Response): Promise<string> {
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text) as { detail?: unknown };
+    if (typeof data.detail === "string" && data.detail) return data.detail;
+  } catch {
+    // The body was not JSON.
+  }
+  return text || `Request failed (${res.status})`;
+}
+
+function adminHeaders(token: string): HeadersInit {
+  return { "X-Madira-Admin-Token": token };
+}
+
+export async function unlockSettings(password: string): Promise<string> {
+  const res = await fetch(`${API}/settings/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res));
+  const data = (await res.json()) as { token?: string };
+  if (!data.token) throw new Error("Sign-in did not return a token.");
+  return data.token;
+}
+
+export async function getLlmSettings(token: string): Promise<LlmSettings> {
+  const res = await fetch(`${API}/settings/llm`, {
+    headers: adminHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await errorMessage(res));
+  return res.json();
+}
+
+export async function saveLlmSettings(
+  token: string,
+  body: { provider: string; model: string; api_key: string }
+): Promise<LlmSettings> {
+  const res = await fetch(`${API}/settings/llm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...adminHeaders(token) },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res));
+  return res.json();
+}
+
+export async function deleteLlmSettings(token: string): Promise<LlmSettings> {
+  const res = await fetch(`${API}/settings/llm`, {
+    method: "DELETE",
+    headers: adminHeaders(token),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res));
+  return res.json();
+}
