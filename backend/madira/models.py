@@ -182,6 +182,19 @@ class Tasting(Base):
     supplier: Mapped[Supplier] = relationship(back_populates="tastings")
 
 
+class LlmCredential(Base):
+    """One saved provider key. The secret is Fernet ciphertext, never the raw key."""
+
+    __tablename__ = "llm_credentials"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32))
+    model: Mapped[str] = mapped_column(String(120), default="")
+    ciphertext: Mapped[str] = mapped_column(Text)
+    key_last4: Mapped[str] = mapped_column(String(8), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class AgentRun(Base):
     __tablename__ = "agent_runs"
 

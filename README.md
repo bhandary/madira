@@ -72,12 +72,29 @@ See `.env.example`.
 | `MADIRA_LLM_PROVIDER` | `openai` | Also `anthropic`, `google_genai` |
 | `MADIRA_LLM_MODEL` | `gpt-4.1-mini` | Provider model id |
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` / `MADIRA_API_KEY` | empty | If unset, **DEMO MODE** |
-| `MADIRA_DEMO_MODE` | auto | `true` forces fixtures; `false` requires a key |
+| `MADIRA_DEMO_MODE` | auto | `true` forces fixtures even if a key is saved; `false` requires a key |
+| `MADIRA_SECRET_KEY` | dev file | Fernet key (or any secret) for keys saved in Settings. If unset, `backend/data/.madira_secret` is created. Set this in production. |
+| `MADIRA_ADMIN_PASSWORD` | unset | Unlocks Settings. If unset, settings reads and writes are refused until you set it and restart. |
 | `DATABASE_URL` | sqlite file | Switch to Postgres here |
 | `MADIRA_BACKEND_URL` | `http://127.0.0.1:8123` | Used by Next rewrites / CopilotKit HttpAgent |
 | `MADIRA_PORT` | `8123` | Backend |
 
 Demo mode uses `DemoChatModel`: it inspects the user message, emits `write_todos` + `task` calls, and specialists run deterministic tools against fixtures. No secrets required.
+
+## Settings
+
+Open **Settings** in the nav to leave demo mode without editing a file or restarting.
+
+1. Set `MADIRA_ADMIN_PASSWORD` and restart the backend once. Until that is set, the settings endpoints refuse every read and write with instructions to set it.
+2. Unlock the page with that password. The browser sends it once, then keeps a signed token in `sessionStorage` for this tab (8 hours, or until you lock the page or close the tab). The password is not stored.
+3. Choose OpenAI, Anthropic, or Google, optionally a model, and paste an API key. The backend checks the key with one list-models call before saving. A bad key is not stored.
+4. The key is encrypted with Fernet (`MADIRA_SECRET_KEY`, or the dev fallback file) and the API returns only a hint such as `ends in …abcd`. Saving or removing a key rebuilds the sommelier immediately.
+
+Precedence: a saved key overrides `MADIRA_LLM_PROVIDER`, `MADIRA_LLM_MODEL`, and the provider API keys. Removing it falls back to those environment variables, then to demo mode. `MADIRA_DEMO_MODE=true` still forces demo.
+
+`MADIRA_LLM_VALIDATOR=accept` skips the provider check. Use it only for local tests when you do not have a real key. Do not set it in production.
+
+The Settings end-to-end test needs the running backend to have the same `MADIRA_ADMIN_PASSWORD` as the Playwright process, and `MADIRA_LLM_VALIDATOR=accept` if you are not using a real key.
 
 ## Local run
 

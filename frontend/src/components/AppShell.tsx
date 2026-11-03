@@ -12,6 +12,7 @@ const NAV = [
   { href: "/inventory", label: "Inventory" },
   { href: "/training", label: "Staff training" },
   { href: "/suppliers", label: "Supplier tastings" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -19,10 +20,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<{ demo_mode?: boolean; label?: string; llm_model?: string } | null>(null);
 
   useEffect(() => {
-    getStatus()
-      .then(setStatus)
-      .catch(() => setStatus({ demo_mode: true, label: "DEMO MODE — backend starting" }));
-  }, []);
+    let cancelled = false;
+    const load = () => {
+      getStatus()
+        .then((next) => {
+          if (!cancelled) setStatus(next);
+        })
+        .catch(() => {
+          if (!cancelled) setStatus({ demo_mode: true, label: "DEMO MODE — backend starting" });
+        });
+    };
+    load();
+    window.addEventListener("madira-status", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("madira-status", load);
+    };
+  }, [pathname]);
 
   return (
     <div className="min-h-screen">

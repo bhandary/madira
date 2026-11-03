@@ -7,6 +7,9 @@ services:
       MADIRA_DEMO_MODE: "true"
       MADIRA_PORT: "8123"
       MADIRA_FRONTEND_ORIGIN: "http://localhost:3000"
+      # Empty until an operator sets them. Settings writes stay refused without a password.
+      MADIRA_ADMIN_PASSWORD: ${MADIRA_ADMIN_PASSWORD:-}
+      MADIRA_SECRET_KEY: ${MADIRA_SECRET_KEY:-}
     ports:
       - "8123:8123"
     volumes:

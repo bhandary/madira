@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { A2UISurface } from "@/components/A2UISurface";
 import { DelegationPanel } from "@/components/DelegationPanel";
 import { runAgent, type AgentResult } from "@/lib/api";
@@ -20,11 +20,13 @@ export function AgentWorkbench({
   testId: string;
 }) {
   const [message, setMessage] = useState(prompt);
+  const [seenPrompt, setSeenPrompt] = useState(prompt);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  if (prompt !== seenPrompt) {
+    setSeenPrompt(prompt);
     setMessage(prompt);
-  }, [prompt]);
+  }
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AgentResult | null>(null);
 

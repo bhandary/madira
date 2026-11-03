@@ -15,7 +15,7 @@ from madira.agents.tools import (
     TRAINING_TOOLS,
 )
 from madira.agents import tracker
-from madira.config import DEMO_MODE, LLM_MODEL, LLM_PROVIDER
+from madira.llm_runtime import LlmRuntime, resolve_runtime
 
 SPECIALIST_NAMES = list(SPECIALISTS)
 
@@ -74,23 +74,28 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
 ]
 
 
-def _live_model():
+def _live_model(runtime: LlmRuntime):
     from langchain.chat_models import init_chat_model
 
-    return init_chat_model(f"{LLM_PROVIDER}:{LLM_MODEL}")
+    kwargs: dict[str, Any] = {}
+    if runtime.api_key:
+        kwargs["api_key"] = runtime.api_key
+    return init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
 
 
-def _model_for(role: str):
-    if DEMO_MODE:
+def _model_for(role: str, runtime: LlmRuntime | None = None):
+    runtime = runtime or resolve_runtime()
+    if runtime.demo_mode:
         return DemoChatModel(role=role)
-    return _live_model()
+    return _live_model(runtime)
 
 
-def specialist_specs() -> list[dict[str, Any]]:
+def specialist_specs(runtime: LlmRuntime | None = None) -> list[dict[str, Any]]:
+    runtime = runtime or resolve_runtime()
     specs = []
     for spec in SUBAGENT_SPECS:
         item = dict(spec)
-        item["model"] = _model_for(spec["name"])
+        item["model"] = _model_for(spec["name"], runtime)
         specs.append(item)
     return specs
 
@@ -98,10 +103,11 @@ def specialist_specs() -> list[dict[str, Any]]:
 def build_head_sommelier():
     from deepagents import create_deep_agent
 
+    runtime = resolve_runtime()
     kwargs: dict[str, Any] = {
-        "model": _model_for("head-sommelier"),
+        "model": _model_for("head-sommelier", runtime),
         "tools": [],
-        "subagents": specialist_specs(),
+        "subagents": specialist_specs(runtime),
         "system_prompt": HEAD_PROMPT,
     }
     try:
@@ -169,6 +175,7 @@ def extract_a2ui(messages: list[Any]) -> list[dict[str, Any]]:
 
 def invoke_head_sommelier(message: str, thread_id: str | None = None) -> dict[str, Any]:
     tracker.start_run()
+    runtime = resolve_runtime()
     agent = build_head_sommelier()
     result = agent.invoke({"messages": [{"role": "user", "content": message}]})
     messages = result.get("messages", []) if isinstance(result, dict) else []
@@ -187,7 +194,7 @@ def invoke_head_sommelier(message: str, thread_id: str | None = None) -> dict[st
         "delegation": delegated,
         "todos": snap["todos"],
         "a2ui_operations": ops,
-        "demo_mode": DEMO_MODE,
+        "demo_mode": runtime.demo_mode,
         "thread_id": thread_id,
         "messages_count": len(messages),
     }

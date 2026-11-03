@@ -3,7 +3,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parent.parent
+# Repo-root `.env` is a template for the process environment. Existing variables win.
+load_dotenv(ROOT.parent / ".env")
 DATA_DIR = Path(os.environ.get("MADIRA_DATA_DIR", ROOT / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -49,13 +53,12 @@ CATALOG_ID = "madira://beverage-catalog"
 
 
 def status_payload() -> dict:
+    """Live status. A key saved in Settings overrides env vars without a restart."""
+    from madira.llm_runtime import describe_runtime, resolve_runtime
+
+    info = describe_runtime(resolve_runtime())
     return {
         "app": "madira",
-        "demo_mode": DEMO_MODE,
-        "llm_provider": LLM_PROVIDER,
-        "llm_model": "madira-demo-fixtures" if DEMO_MODE else LLM_MODEL,
+        **info,
         "database": "postgres" if DATABASE_URL.startswith("postgres") else "sqlite",
-        "label": "DEMO MODE — deterministic fixtures, no API key"
-        if DEMO_MODE
-        else f"LIVE — {LLM_PROVIDER}:{LLM_MODEL}",
     }
