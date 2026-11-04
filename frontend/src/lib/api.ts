@@ -26,7 +26,7 @@ export async function runAgent(message: string): Promise<AgentResult> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await errorMessage(res));
   return res.json();
 }
 
