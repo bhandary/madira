@@ -335,28 +335,65 @@ def test_live_validator_checks_each_provider_and_hides_the_key(monkeypatch):
             self.status_code = status_code
             self.text = text
 
-    def fake_get(url, headers=None, params=None, timeout=None):
-        calls.append({"url": url, "headers": headers or {}, "params": params or {}})
+    def fake_post(url, headers=None, params=None, json=None, timeout=None):
+        calls.append({"url": url, "headers": headers or {}, "params": params or {}, "json": json or {}})
         return Response(200, "ok")
 
-    monkeypatch.setattr("madira.llm_validate.httpx.get", fake_get)
+    monkeypatch.setattr("madira.llm_validate.httpx.post", fake_post)
     validate_provider_key_live("openai", API_KEY, "gpt-4.1-mini")
     validate_provider_key_live("anthropic", API_KEY, "")
-    validate_provider_key_live("google_genai", API_KEY, "")
-    assert calls[0]["url"] == "https://api.openai.com/v1/models"
+    validate_provider_key_live("google_genai", API_KEY, "models/gemini-3.5-flash")
+    assert calls[0]["url"] == "https://api.openai.com/v1/chat/completions"
     assert calls[0]["headers"]["Authorization"] == f"Bearer {API_KEY}"
-    assert calls[1]["url"] == "https://api.anthropic.com/v1/models"
+    assert calls[0]["json"]["model"] == "gpt-4.1-mini"
+    assert calls[0]["json"]["max_completion_tokens"] == 1
+    assert calls[1]["url"] == "https://api.anthropic.com/v1/messages"
     assert calls[1]["headers"]["x-api-key"] == API_KEY
-    assert calls[2]["url"] == "https://generativelanguage.googleapis.com/v1beta/models"
+    assert calls[1]["json"]["model"] == "claude-haiku-4-5-20251001"
+    assert calls[1]["json"]["max_tokens"] == 1
+    assert calls[2]["url"].endswith("/models/gemini-3.5-flash:generateContent")
     assert calls[2]["params"]["key"] == API_KEY
+    assert calls[2]["json"]["generationConfig"]["maxOutputTokens"] == 1
 
     monkeypatch.setattr(
-        "madira.llm_validate.httpx.get",
+        "madira.llm_validate.httpx.post",
         lambda *args, **kwargs: Response(401, f"invalid {API_KEY}"),
     )
     with pytest.raises(ValueError, match="rejected") as raised:
         validate_provider_key_live("openai", API_KEY, "")
     assert API_KEY not in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("provider", "label", "status", "message"),
+    [
+        ("openai", "OpenAI", 429, "You have no credits remaining"),
+        ("openai", "OpenAI", 401, "Incorrect API key provided"),
+        ("anthropic", "Anthropic", 429, "Your credit balance is too low"),
+        ("anthropic", "Anthropic", 401, "invalid x-api-key"),
+        ("google_genai", "Google", 429, "Quota exceeded"),
+        ("google_genai", "Google", 401, "API key not valid"),
+    ],
+)
+def test_save_surfaces_quota_and_auth_failures(client: TestClient, monkeypatch, provider, label, status, message):
+    set_key_validator(None)
+    refreshed: list[str] = []
+    monkeypatch.setattr("madira.main.refresh_sommelier_agent", lambda: refreshed.append("refresh"))
+
+    class Response:
+        def __init__(self):
+            self.status_code = status
+            self.text = json.dumps({"error": {"message": f"{message} {API_KEY}"}})
+
+    monkeypatch.setattr("madira.llm_validate.httpx.post", lambda *args, **kwargs: Response())
+    response = _save(client, provider=provider)
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert f"{label} rejected the API key ({status})." in detail
+    assert message in detail
+    assert API_KEY not in response.text
+    assert read_stored() is None
+    assert refreshed == []
 
 
 def test_accept_mode_skips_the_network(monkeypatch):
@@ -366,8 +403,44 @@ def test_accept_mode_skips_the_network(monkeypatch):
     def boom(*args, **kwargs):
         raise AssertionError("network")
 
-    monkeypatch.setattr("madira.llm_validate.httpx.get", boom)
+    monkeypatch.setattr("madira.llm_validate.httpx.post", boom)
     validate_provider_key("openai", API_KEY, "")
+
+
+def test_agent_run_returns_the_provider_message_without_the_key(client: TestClient, monkeypatch):
+    secret = "sk-live-secret-should-not-leak"
+
+    class ProviderError(Exception):
+        def __init__(self, status_code: int, body: dict):
+            super().__init__(f"request failed {secret}")
+            self.status_code = status_code
+            self.body = body
+
+    def quota(message, thread_id=None):
+        raise ProviderError(429, {"error": {"message": f"You have no credits remaining {secret}"}})
+
+    monkeypatch.setattr("madira.main.invoke_head_sommelier", quota)
+    monkeypatch.setenv("OPENAI_API_KEY", secret)
+    response = client.post("/agent/run", json={"message": "pair the duck"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "You have no credits remaining"
+    assert secret not in response.text
+
+    def denied(message, thread_id=None):
+        raise RuntimeError("model call failed") from ProviderError(401, {"error": {"message": "Incorrect API key provided"}})
+
+    monkeypatch.setattr("madira.main.invoke_head_sommelier", denied)
+    auth = client.post("/agent/run", json={"message": "pair the duck"})
+    assert auth.status_code == 401
+    assert auth.json()["detail"] == "Incorrect API key provided"
+
+    def outage(message, thread_id=None):
+        raise ProviderError(500, {"error": {"message": "upstream failed"}})
+
+    monkeypatch.setattr("madira.main.invoke_head_sommelier", outage)
+    failed = client.post("/agent/run", json={"message": "pair the duck"})
+    assert failed.status_code == 502
+    assert failed.json()["detail"] == "upstream failed"
 
 
 def test_secret_roundtrip_and_dev_fallback(monkeypatch, tmp_path):

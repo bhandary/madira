@@ -256,7 +256,15 @@ def status() -> dict[str, Any]:
 
 @app.post("/agent/run")
 def agent_run(body: AgentRunBody) -> dict[str, Any]:
-    return invoke_head_sommelier(body.message, thread_id=body.thread_id)
+    from madira.provider_errors import describe_provider_failure
+
+    try:
+        return invoke_head_sommelier(body.message, thread_id=body.thread_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        status, detail = describe_provider_failure(exc)
+        raise HTTPException(status_code=status, detail=detail) from exc
 
 
 def _extract_upload_text(filename: str, data: bytes) -> str:
