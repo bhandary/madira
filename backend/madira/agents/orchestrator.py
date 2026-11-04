@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Any
+
+from langgraph.checkpoint.memory import MemorySaver
 
 from madira.agents.demo_model import DemoChatModel, SPECIALISTS
 from madira.agents.tools import (
@@ -18,6 +21,10 @@ from madira.agents import tracker
 from madira.llm_runtime import LlmRuntime, resolve_runtime
 
 SPECIALIST_NAMES = list(SPECIALISTS)
+
+# One saver for every rebuild. Settings key save/delete calls refresh_sommelier_agent(),
+# which compiles a new graph; the same MemorySaver keeps each thread's checkpoints.
+_checkpointer = MemorySaver()
 
 HEAD_PROMPT = """You are the Head Sommelier of Maison Madira, a California-French dining room.
 
@@ -109,6 +116,7 @@ def build_head_sommelier():
         "tools": [],
         "subagents": specialist_specs(runtime),
         "system_prompt": HEAD_PROMPT,
+        "checkpointer": _checkpointer,
     }
     try:
         from copilotkit import CopilotKitMiddleware
@@ -177,7 +185,11 @@ def invoke_head_sommelier(message: str, thread_id: str | None = None) -> dict[st
     tracker.start_run()
     runtime = resolve_runtime()
     agent = build_head_sommelier()
-    result = agent.invoke({"messages": [{"role": "user", "content": message}]})
+    # A checkpointer refuses invoke unless the run names a thread.
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": message}]},
+        config={"configurable": {"thread_id": thread_id or str(uuid.uuid4())}},
+    )
     messages = result.get("messages", []) if isinstance(result, dict) else []
     snap = tracker.snapshot()
     delegated = snap["delegation"] or extract_task_delegations(messages)
