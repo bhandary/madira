@@ -1,0 +1,26 @@
+.sommelier-chat {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sommelier-chat .copilotKitInput {
+  border: 1px solid #2c2e36 !important;
+  border-radius: 8px !important;
+  background: #121318 !important;
+  box-shadow: none !important;
+}
+
+.sommelier-chat .copilotKitMessages,
+.sommelier-chat .copilotKitMessage,
+.sommelier-chat .copilotKitAssistantMessage,
+.sommelier-chat .copilotKitUserMessage,
+.sommelier-chat [data-copilotkit] {
+  max-width: 100%;
+  min-width: 0;
+  color: #f4f4f5;
+}
+
+.sommelier-chat .copilotKitAssistantMessage,
+.sommelier-chat .copilotKitUserMessage {
+  overflow-wrap: anywhere;
+}

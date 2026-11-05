@@ -1,17 +1,13 @@
 import type { Metadata } from "next";
-import { Fraunces, Outfit } from "next/font/google";
+import { Inter } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
 import { Providers } from "@/app/providers";
 import "./globals.css";
 
-const outfit = Outfit({
-  variable: "--font-outfit",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-});
-
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -21,7 +17,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${outfit.variable} ${fraunces.variable} h-full`}>
+    <html lang="en" className={`${inter.variable} ${inter.className} dark h-full`}>
       <body className="min-h-full">
         <Providers>
           <AppShell>{children}</AppShell>

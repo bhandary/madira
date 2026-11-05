@@ -31,30 +31,26 @@ const CARDS = [
 
 export default function Home() {
   return (
-    <div>
-      <p className="demo-ribbon text-xs text-burgundy">Head Sommelier desk</p>
-      <h1 className="mt-2 max-w-3xl font-serif text-5xl leading-tight">
-        The floor program, delegated.
-      </h1>
-      <p className="mt-4 max-w-2xl text-lg text-[#5c4c3c]">
+    <div className="max-w-3xl">
+      <p className="kicker">Head Sommelier desk</p>
+      <h1 className="mt-2 h-page">The floor program, delegated.</h1>
+      <p className="lead">
         Madira is a Deep Agents orchestrator for restaurants. Six specialists sit behind one Head Sommelier.
         They speak A2UI — pairing cards, margin tables, quizzes — not walls of chat.
       </p>
-      <div className="mt-8 grid gap-4 md:grid-cols-2">
+      <ul className="panel mt-6 divide-y divide-line">
         {CARDS.map((card) => (
-          <Link
-            key={card.href}
-            href={card.href}
-            className="rounded-2xl border border-gold/40 bg-white/70 p-5 transition hover:border-burgundy"
-          >
-            <h2 className="font-serif text-2xl">{card.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-[#5c4c3c]">{card.body}</p>
-          </Link>
+          <li key={card.href}>
+            <Link href={card.href} className="desk-link">
+              <h2 className="text-sm font-medium">{card.title}</h2>
+              <p className="mt-1 text-sm leading-5 text-muted">{card.body}</p>
+            </Link>
+          </li>
         ))}
-      </div>
-      <section className="mt-10">
-        <h2 className="font-serif text-3xl">Ask the Head Sommelier</h2>
-        <p className="mb-3 text-sm text-[#5c4c3c]">
+      </ul>
+      <section className="mt-8">
+        <h2 className="text-base font-medium">Ask the Head Sommelier</h2>
+        <p className="mb-3 mt-1 text-sm text-muted">
           CopilotKit AG-UI chat streams the same Deep Agent. Specialists still render A2UI in the well.
         </p>
         <SommelierChat />

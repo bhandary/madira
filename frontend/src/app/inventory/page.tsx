@@ -16,19 +16,28 @@ export default function InventoryPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [sku, setSku] = useState("W-MUS-01");
   const [qty, setQty] = useState(1);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState("");
 
   async function refresh() {
     const data = await getInventory();
     setItems(data.items || []);
+    setLoaded(true);
+    setError("");
   }
 
   useEffect(() => {
     let cancelled = false;
     getInventory()
       .then((data) => {
-        if (!cancelled) setItems(data.items || []);
+        if (!cancelled) {
+          setItems(data.items || []);
+          setLoaded(true);
+        }
       })
-      .catch(() => undefined);
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Inventory could not be loaded.");
+      });
     return () => {
       cancelled = true;
     };
@@ -44,21 +53,23 @@ export default function InventoryPage() {
       prompt={prompt}
     >
       <div className="mt-4 flex flex-wrap items-end gap-3">
-        <label className="text-sm">
+        <label className="lbl" htmlFor="inv-sku">
           SKU
           <input
+            id="inv-sku"
             data-testid="inv-sku"
-            className="ml-2 w-28 rounded-lg border border-gold/40 bg-white px-2 py-1 font-mono"
+            className="field w-36 font-mono"
             value={sku}
             onChange={(e) => setSku(e.target.value)}
           />
         </label>
-        <label className="text-sm">
+        <label className="lbl" htmlFor="inv-qty">
           On hand
           <input
+            id="inv-qty"
             data-testid="inv-qty"
             type="number"
-            className="ml-2 w-20 rounded-lg border border-gold/40 bg-white px-2 py-1"
+            className="field w-24"
             value={qty}
             onChange={(e) => setQty(Number(e.target.value))}
           />
@@ -66,18 +77,28 @@ export default function InventoryPage() {
         <button
           type="button"
           data-testid="inv-adjust"
-          className="rounded-full border border-burgundy px-3 py-1 text-sm"
+          className="btn btn-secondary"
           onClick={async () => {
-            await patchStock(sku, qty);
-            await refresh();
+            try {
+              await patchStock(sku, qty);
+              await refresh();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Stock could not be adjusted.");
+            }
           }}
         >
           Adjust stock now
         </button>
       </div>
-      <p className="mt-2 text-xs text-[#7a6a58]">
-        {items.filter((i) => i.low).length} SKUs under par in the seeded cellar.
-      </p>
+      {error ? (
+        <p className="banner-error mt-3" role="alert" data-testid="inventory-error">
+          {error}
+        </p>
+      ) : (
+        <p className="mt-2 text-xs text-muted">
+          {loaded ? `${items.filter((i) => i.low).length} SKUs under par in the seeded cellar.` : "Loading cellar…"}
+        </p>
+      )}
     </AgentWorkbench>
   );
 }
