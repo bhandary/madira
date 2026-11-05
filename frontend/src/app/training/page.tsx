@@ -18,12 +18,13 @@ export default function TrainingPage() {
       blurb="Lessons, tonight's pairing briefing, a scored quiz, and a diner roleplay. Staff Trainer owns the floor notebook."
       prompt={prompts[mode]}
     >
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Training mode">
         {(["briefing", "quiz", "roleplay"] as const).map((key) => (
           <button
             key={key}
             type="button"
             data-testid={`training-${key}`}
+            aria-pressed={mode === key}
             onClick={() => {
               setMode(key);
               const el = document.getElementById("training-workbench-prompt") as HTMLTextAreaElement;
@@ -32,9 +33,7 @@ export default function TrainingPage() {
                 el.dispatchEvent(new Event("input", { bubbles: true }));
               }
             }}
-            className={`rounded-full px-3 py-1 text-sm ${
-              mode === key ? "bg-burgundy text-cream" : "border border-burgundy"
-            }`}
+            className="btn btn-segment"
           >
             {key}
           </button>

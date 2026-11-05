@@ -3,6 +3,7 @@
 import { CopilotKit } from "@copilotkit/react-core/v2";
 import "@copilotkit/react-core/v2/styles.css";
 import { beverageCatalog } from "@/a2ui/catalog";
+import "./copilot-overrides.css";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -11,7 +12,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       agent="head_sommelier"
       a2ui={{
         theme: {
-          colors: { primary: "#6b1d32" },
+          colors: { primary: "#8d3846" },
         },
         catalog: beverageCatalog,
       }}

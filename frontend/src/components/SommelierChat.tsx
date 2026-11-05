@@ -15,16 +15,9 @@ export function SommelierChat() {
   }, [agent]);
 
   return (
-    <div
-      className="flex h-[480px] flex-col overflow-hidden rounded-2xl border border-gold/40 bg-white/80"
-      data-testid="copilot-chat"
-    >
+    <div className="sommelier-chat panel flex h-[32rem] flex-col overflow-hidden" data-testid="copilot-chat">
       {error ? (
-        <p
-          className="shrink-0 border-b border-[#e7cfc6] bg-[#f8e8e4] px-3 py-2 text-sm text-[#a33b24]"
-          role="alert"
-          data-testid="copilot-chat-error"
-        >
+        <p className="banner-error shrink-0 rounded-none border-x-0 border-t-0" role="alert" data-testid="copilot-chat-error">
           {error}
         </p>
       ) : null}

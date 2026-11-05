@@ -125,58 +125,53 @@ export default function SettingsPage() {
   const placeholder = defaults[provider] || "";
 
   return (
-    <div data-testid="settings-page" className="max-w-xl">
-      <h1 className="font-serif text-4xl">Settings</h1>
-      <p className="mt-2 text-[#5c4c3c]">
+    <div data-testid="settings-page" className="max-w-lg">
+      <h1 className="h-page">Settings</h1>
+      <p className="lead">
         Paste a provider key to leave demo mode. It is encrypted in the database and overrides environment
         variables until you remove it. The key is never shown again.
       </p>
       {!ready ? (
-        <p className="mt-6 text-sm text-[#5c4c3c]">Checking the session…</p>
+        <p className="mt-6 text-sm text-muted">Checking the session…</p>
       ) : !token ? (
         <form className="mt-6 space-y-3" onSubmit={(event) => void unlock(event)}>
-          <p className="text-sm text-[#5c4c3c]">
-            Settings are locked with <span className="font-medium">MADIRA_ADMIN_PASSWORD</span>. The password is
+          <p className="text-sm leading-6 text-muted">
+            Settings are locked with <span className="font-medium text-ink">MADIRA_ADMIN_PASSWORD</span>. The password is
             sent once and is not stored in the browser. This tab keeps a short-lived token until you close it or
             lock the page. If that variable is unset, the server refuses changes until you set it and restart.
           </p>
-          <label className="block text-sm font-medium" htmlFor="settings-password">
+          <label className="lbl" htmlFor="settings-password">
             Admin password
+            <input
+              id="settings-password"
+              ref={passwordRef}
+              data-testid="settings-password"
+              type="password"
+              autoComplete="current-password"
+              className="field"
+            />
           </label>
-          <input
-            id="settings-password"
-            ref={passwordRef}
-            data-testid="settings-password"
-            type="password"
-            autoComplete="current-password"
-            className="w-full rounded-2xl border border-gold/40 bg-white/80 px-3 py-2"
-          />
-          <button
-            type="submit"
-            data-testid="settings-unlock"
-            disabled={busy}
-            className="rounded-full bg-burgundy px-5 py-2 text-cream disabled:opacity-60"
-          >
+          <button type="submit" data-testid="settings-unlock" disabled={busy} className="btn btn-primary">
             {busy ? "Checking…" : "Unlock"}
           </button>
           {error && (
-            <p className="text-sm text-[#a33b24]" data-testid="settings-error">
+            <p className="banner-error" role="alert" data-testid="settings-error">
               {error}
             </p>
           )}
         </form>
       ) : (
         <form className="mt-6 space-y-4" onSubmit={(event) => void save(event)}>
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm" data-testid="settings-mode">
               {settings?.label || "Loading settings…"}
             </p>
-            <button type="button" className="text-sm text-burgundy underline" onClick={lock} data-testid="settings-lock">
+            <button type="button" className="btn btn-secondary" onClick={lock} data-testid="settings-lock">
               Lock
             </button>
           </div>
           {settings?.demo_forced && (
-            <p className="text-sm text-[#5c4c3c]" data-testid="settings-demo-forced">
+            <p className="text-sm text-muted" data-testid="settings-demo-forced">
               MADIRA_DEMO_MODE=true is forcing demo mode. A saved key is kept, and it applies after that variable
               is turned off.
             </p>
@@ -186,52 +181,47 @@ export default function SettingsPage() {
               ? `Key set, ends in …${settings.key_hint}`
               : "No key saved in Settings."}
           </p>
-          <label className="block text-sm font-medium" htmlFor="settings-provider">
+          <label className="lbl" htmlFor="settings-provider">
             Provider
-          </label>
-          <select
-            id="settings-provider"
-            data-testid="settings-provider"
-            className="w-full rounded-2xl border border-gold/40 bg-white/80 px-3 py-2"
-            value={provider}
-            onChange={(event) => setProvider(event.target.value)}
-          >
-            {PROVIDERS.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-          <label className="block text-sm font-medium" htmlFor="settings-model">
-            Model <span className="font-normal text-[#5c4c3c]">(optional)</span>
-          </label>
-          <input
-            id="settings-model"
-            data-testid="settings-model"
-            value={model}
-            placeholder={placeholder}
-            onChange={(event) => setModel(event.target.value)}
-            className="w-full rounded-2xl border border-gold/40 bg-white/80 px-3 py-2"
-          />
-          <label className="block text-sm font-medium" htmlFor="settings-api-key">
-            API key
-          </label>
-          <input
-            id="settings-api-key"
-            data-testid="settings-api-key"
-            type="password"
-            autoComplete="off"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            className="w-full rounded-2xl border border-gold/40 bg-white/80 px-3 py-2"
-          />
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="submit"
-              data-testid="settings-save"
-              disabled={busy}
-              className="rounded-full bg-burgundy px-5 py-2 text-cream disabled:opacity-60"
+            <select
+              id="settings-provider"
+              data-testid="settings-provider"
+              className="field"
+              value={provider}
+              onChange={(event) => setProvider(event.target.value)}
             >
+              {PROVIDERS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="lbl" htmlFor="settings-model">
+            Model <span className="font-normal text-muted">(optional)</span>
+            <input
+              id="settings-model"
+              data-testid="settings-model"
+              value={model}
+              placeholder={placeholder}
+              onChange={(event) => setModel(event.target.value)}
+              className="field"
+            />
+          </label>
+          <label className="lbl" htmlFor="settings-api-key">
+            API key
+            <input
+              id="settings-api-key"
+              data-testid="settings-api-key"
+              type="password"
+              autoComplete="off"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              className="field"
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" data-testid="settings-save" disabled={busy} className="btn btn-primary">
               {busy ? "Saving…" : "Save key"}
             </button>
             <button
@@ -239,13 +229,13 @@ export default function SettingsPage() {
               data-testid="settings-remove"
               disabled={busy || !settings?.stored}
               onClick={() => void remove()}
-              className="rounded-full border border-burgundy px-5 py-2 text-burgundy disabled:opacity-40"
+              className="btn btn-secondary"
             >
               Remove key
             </button>
           </div>
           {error && (
-            <p className="text-sm text-[#a33b24]" data-testid="settings-error">
+            <p className="banner-error" role="alert" data-testid="settings-error">
               {error}
             </p>
           )}

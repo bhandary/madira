@@ -25,14 +25,15 @@ export default function MenuPage() {
       blurb="Upload a PDF, an image, or paste text. Menu Analyst parses dishes; Pairing Sommelier renders A2UI pairing cards."
       prompt={prompt}
     >
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <label className="text-sm">
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <label className="lbl" htmlFor="menu-file">
           Upload PDF, image, or text
           <input
+            id="menu-file"
             data-testid="menu-file"
             type="file"
             accept=".pdf,image/*,.txt"
-            className="ml-2 text-sm"
+            className="field-file"
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
@@ -49,7 +50,7 @@ export default function MenuPage() {
           />
         </label>
         {fileName && (
-          <span className="text-xs" data-testid="menu-filename">
+          <span className="text-xs text-muted" data-testid="menu-filename">
             {fileName}
           </span>
         )}

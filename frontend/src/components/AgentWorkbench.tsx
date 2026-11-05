@@ -46,10 +46,10 @@ export function AgentWorkbench({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]" data-testid={testId}>
-      <div>
-        <h1 className="font-serif text-4xl">{title}</h1>
-        <p className="mt-2 max-w-2xl text-[#5c4c3c]">{blurb}</p>
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_16rem]" data-testid={testId}>
+      <div className="min-w-0">
+        <h1 className="h-page">{title}</h1>
+        <p className="lead">{blurb}</p>
         {children}
         <form
           className="mt-4 space-y-3"
@@ -58,36 +58,31 @@ export function AgentWorkbench({
             void submit();
           }}
         >
-          <label className="block text-sm font-medium" htmlFor={`${testId}-prompt`}>
+          <label className="lbl" htmlFor={`${testId}-prompt`}>
             Ask the Head Sommelier
+            <textarea
+              id={`${testId}-prompt`}
+              data-testid={`${testId}-prompt`}
+              className="field-area"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+            />
           </label>
-          <textarea
-            id={`${testId}-prompt`}
-            data-testid={`${testId}-prompt`}
-            className="h-36 w-full rounded-2xl border border-gold/40 bg-white/80 p-3"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-          />
-          <button
-            type="submit"
-            data-testid={`${testId}-submit`}
-            disabled={busy}
-            className="rounded-full bg-burgundy px-5 py-2 text-cream disabled:opacity-60"
-          >
+          <button type="submit" data-testid={`${testId}-submit`} disabled={busy} className="btn btn-primary">
             {busy ? "Delegating…" : "Run specialists"}
           </button>
         </form>
         {error && (
-          <p className="mt-3 text-sm text-[#a33b24]" data-testid="agent-error">
+          <p className="banner-error mt-3" role="alert" data-testid="agent-error">
             {error}
           </p>
         )}
         {result?.reply && (
-          <p className="mt-4 rounded-xl bg-white/70 p-3 text-sm" data-testid="agent-reply">
+          <p className="panel mt-4 p-3 text-sm leading-6" data-testid="agent-reply">
             {result.reply}
           </p>
         )}
-        <div className="mt-6">
+        <div className="mt-5">
           <A2UISurface operations={(result?.a2ui_operations || []) as A2UIOperation[]} />
         </div>
       </div>
