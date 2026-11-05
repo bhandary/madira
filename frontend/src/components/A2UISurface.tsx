@@ -322,6 +322,11 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
   TastingCalendar: (p) => <TastingCalendar tastings={p.tastings} />,
 };
 
+export function renderMadiraComponent(name: string, props: Record<string, unknown>) {
+  const render = CUSTOM[name];
+  return render ? render(props) : null;
+}
+
 function boundProps(component: A2UIComponent, data: unknown): Record<string, unknown> {
   const props: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(component)) {
