@@ -10,6 +10,10 @@ services:
       # Empty until an operator sets them. Settings writes stay refused without a password.
       MADIRA_ADMIN_PASSWORD: ${MADIRA_ADMIN_PASSWORD:-}
       MADIRA_SECRET_KEY: ${MADIRA_SECRET_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      MADIRA_AUTH_SECRET: ${MADIRA_AUTH_SECRET:-}
+      MADIRA_PUBLIC_URL: ${MADIRA_PUBLIC_URL:-}
     ports:
       - "8123:8123"
     volumes:

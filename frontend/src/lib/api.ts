@@ -157,6 +157,50 @@ export async function saveLlmSettings(
   return res.json();
 }
 
+export type Account = {
+  name: string;
+  email: string;
+  picture: string;
+};
+
+export async function getAuthConfig(): Promise<{ configured: boolean }> {
+  const res = await fetch(`${API}/auth/config`, { cache: "no-store" });
+  if (!res.ok) throw new Error("auth config failed");
+  const data = (await res.json()) as { configured?: boolean };
+  return { configured: data.configured === true };
+}
+
+export async function getAccount(): Promise<Account | null> {
+  try {
+    const res = await fetch(`${API}/auth/me`, { cache: "no-store", credentials: "same-origin" });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { user?: Partial<Account> | null };
+    if (!data.user || typeof data.user !== "object") return null;
+    return {
+      name: typeof data.user.name === "string" ? data.user.name : "",
+      email: typeof data.user.email === "string" ? data.user.email : "",
+      picture: typeof data.user.picture === "string" ? data.user.picture : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function signOutAccount(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API}/auth/logout`, { method: "POST", credentials: "same-origin" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export function notifyAuthChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("madira-auth"));
+  }
+}
+
 export async function deleteLlmSettings(token: string): Promise<LlmSettings> {
   const res = await fetch(`${API}/settings/llm`, {
     method: "DELETE",

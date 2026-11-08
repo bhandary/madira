@@ -28,6 +28,7 @@ from madira.agents.tools import (
     start_roleplay,
     update_stock,
 )
+from madira.auth import router as auth_router
 from madira.config import FRONTEND_ORIGIN, HOST, PORT, status_payload
 from madira.db import SessionLocal, init_db
 from madira.fixtures_data import SAMPLE_MENU_TEXT
@@ -42,6 +43,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(auth_router)
 
 
 @app.on_event("startup")
