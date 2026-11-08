@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const routes = [
-  ["/", "The floor program, delegated."],
+  ["/", "Ask the Head Sommelier"],
   ["/menu", "Menu & pairings"],
   ["/list", "List curation"],
   ["/inventory", "Inventory & purchasing"],
