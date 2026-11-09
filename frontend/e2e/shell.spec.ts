@@ -8,6 +8,7 @@ const routes = [
   ["/training", "Staff training"],
   ["/suppliers", "Supplier tastings"],
   ["/settings", "Settings"],
+  ["/login", "Sign in"],
 ] as const;
 
 for (const viewport of [

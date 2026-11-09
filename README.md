@@ -78,6 +78,10 @@ See `.env.example`.
 | `DATABASE_URL` | sqlite file | Switch to Postgres here |
 | `MADIRA_BACKEND_URL` | `http://127.0.0.1:8123` | Used by Next rewrites / CopilotKit HttpAgent |
 | `MADIRA_PORT` | `8123` | Backend |
+| `GOOGLE_CLIENT_ID` | unset | Google OAuth client id. Sign-in stays disabled until this is set. |
+| `GOOGLE_CLIENT_SECRET` | unset | Google OAuth client secret. Backend only. |
+| `MADIRA_AUTH_SECRET` | unset | HMAC secret for the sign-in session cookie. |
+| `MADIRA_PUBLIC_URL` | unset | Browser origin, no path. Used as the OAuth redirect base. |
 
 Demo mode uses `DemoChatModel`: it inspects the user message, emits `write_todos` + `task` calls, and specialists run deterministic tools against fixtures. No secrets required.
 
@@ -95,6 +99,41 @@ Precedence: a saved key overrides `MADIRA_LLM_PROVIDER`, `MADIRA_LLM_MODEL`, and
 `MADIRA_LLM_VALIDATOR=accept` skips the provider check. Use it only for local tests when you do not have a real key. Do not set it in production.
 
 The Settings end-to-end test needs the running backend to have the same `MADIRA_ADMIN_PASSWORD` as the Playwright process, and `MADIRA_LLM_VALIDATOR=accept` if you are not using a real key.
+
+## Sign in
+
+`/login` offers **Continue with Google**. The rest of the floor, including chat, stays usable while signed out. Google sign-in does not unlock Settings; that still uses `MADIRA_ADMIN_PASSWORD`.
+
+The browser only talks to the Next.js origin. `/madira-api/*` is already rewritten to FastAPI, so the authorization code is exchanged there and the session cookie is first-party (`madira_session`, HttpOnly, SameSite=Lax, Secure when `MADIRA_PUBLIC_URL` is https, 14 days). Sign out is `POST /auth/logout`.
+
+On the first successful sign-in the backend inserts a `users` row (`google_sub` unique, email, name, picture, `created_at`, `last_login_at`). Later sign-ins update that row. The table is created on startup with the other tables (`Base.metadata.create_all`). There is no separate migration tool.
+
+Set these on the **backend** service (Railway's API service, not only `madira-web`):
+
+| Variable | Example |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` | from Google Cloud |
+| `GOOGLE_CLIENT_SECRET` | from Google Cloud |
+| `MADIRA_AUTH_SECRET` | long random string |
+| `MADIRA_PUBLIC_URL` | `http://localhost:3000` or `https://madira-web-production.up.railway.app` |
+
+`MADIRA_PUBLIC_URL` is the origin only: scheme, host, optional port, no path, no trailing slash. If any of the four is missing, or the public URL is not an origin, `/login` says Google sign-in isn't configured and `/auth/google` redirects back there instead of raising.
+
+In Google Cloud, create an OAuth client of type **Web application**. The consent screen needs the non-sensitive scopes `openid`, `email`, and `profile`. Authorized redirect URIs, exactly:
+
+```text
+http://localhost:3000/madira-api/auth/callback
+http://127.0.0.1:3000/madira-api/auth/callback
+https://madira-web-production.up.railway.app/madira-api/auth/callback
+```
+
+`MADIRA_PUBLIC_URL` has to be the origin you are actually browsing. Playwright and `make doctor` use `http://127.0.0.1:3000`, so local sign-in from that host needs `MADIRA_PUBLIC_URL=http://127.0.0.1:3000`. Production:
+
+```text
+MADIRA_PUBLIC_URL=https://madira-web-production.up.railway.app
+```
+
+The flow is the authorization code grant with S256 PKCE, `state`, and `nonce`. The ID token is checked (RS256 signature against Google's JWKS, issuer, audience, expiry, nonce, `email_verified`) before the user row is written. The cookie is an HMAC of the Google subject, not the Google token.
 
 ## Local run
 

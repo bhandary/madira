@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AccountMenu, useAccount } from "@/components/AccountMenu";
 import { getStatus } from "@/lib/api";
 
 const NAV = [
@@ -34,6 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [openPath, setOpenPath] = useState<string | null>(null);
   const open = openPath === pathname;
   const [status, setStatus] = useState<{ demo_mode?: boolean; label?: string; llm_model?: string } | null>(null);
+  const { user, signOut } = useAccount();
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +84,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <p className="text-[11px] leading-4 text-muted">Beverage program</p>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">{links("app-nav")}</div>
+          <div className="px-2 pb-3">
+            <AccountMenu user={user} onSignOut={() => void signOut()} />
+          </div>
         </aside>
         <div className="min-w-0 flex-1">
           <header className="sticky top-0 z-30 border-b border-line bg-canvas/95 backdrop-blur">
@@ -100,7 +105,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
               <ModeBanner status={status} />
             </div>
-            {open ? <div className="border-t border-line px-2 py-2 md:hidden">{links("app-nav-mobile")}</div> : null}
+            {open ? (
+              <div className="border-t border-line px-2 py-2 md:hidden" data-testid="mobile-menu">
+                {links("app-nav-mobile")}
+                <AccountMenu user={user} onSignOut={() => void signOut()} />
+              </div>
+            ) : null}
           </header>
           <main id="content" className="mx-auto w-full max-w-6xl px-3 py-5 md:px-6 md:py-6">
             {children}

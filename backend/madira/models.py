@@ -203,3 +203,17 @@ class AgentRun(Base):
     reply: Mapped[str] = mapped_column(Text, default="")
     delegated: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class User(Base):
+    """Someone who signed in with Google. `google_sub` is the OIDC subject."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    google_sub: Mapped[str] = mapped_column(String(255), unique=True)
+    email: Mapped[str] = mapped_column(String(320), default="")
+    name: Mapped[str] = mapped_column(String(200), default="")
+    picture: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    last_login_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
