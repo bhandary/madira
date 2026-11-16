@@ -22,9 +22,12 @@ function removeSavedKey() {
     ],
     {
       cwd: repoRoot,
-      env: Object.fromEntries(
-        Object.entries({ ...process.env, PYTHONPATH: "backend" }).filter(([name]) => name !== "DATABASE_URL"),
-      ),
+      env: {
+        ...Object.fromEntries(
+          Object.entries({ ...process.env, PYTHONPATH: "backend" }).filter(([name]) => name !== "DATABASE_URL"),
+        ),
+        NODE_ENV: process.env.NODE_ENV,
+      },
     },
   );
 }
