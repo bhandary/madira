@@ -244,7 +244,7 @@ def test_demo_mode_flag_forces_fixtures_even_with_a_saved_key(client: TestClient
 
 
 def test_save_rebuilds_the_agent_with_the_saved_key(client: TestClient, monkeypatch):
-    from madira.agents.demo_model import DemoChatModel
+    from madira.agents.demo.model import DemoChatModel
 
     seen: list[tuple[str, str | None]] = []
 

@@ -4,13 +4,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from madira.db import SessionLocal, init_db
-from madira.fixtures_data import INVENTORY, LESSONS, QUIZ, SUPPLIERS
 from madira.money import DEFAULT_CURRENCY, to_minor
 from madira.models import InventoryItem, Lesson, Quiz, Supplier
-from madira.tenancy import bind, ensure_demo_tenant, reset
+from madira.tenancy import bind, demo_posture, ensure_demo_tenant, reset
 
 
 def seed(session: Session | None = None) -> None:
+    if not demo_posture():
+        if session is None:
+            init_db()
+        return
+    from madira.agents.demo.fixtures import INVENTORY, LESSONS, QUIZ, SUPPLIERS
+
     own = False
     if session is None:
         init_db()

@@ -7,8 +7,8 @@ import uuid
 
 from sqlalchemy import select
 
+from madira.domain.errors import require_demo
 from madira.domain.session import session_scope
-from madira.fixtures_data import ROLEPLAY_OPENER
 from madira.models import Lesson, Quiz, QuizAttempt
 
 
@@ -33,7 +33,14 @@ def briefing(venue_id: uuid.UUID) -> dict:
                 "title": quiz.title,
                 "questions": [{key: value for key, value in question.items() if key != "answer"} for question in quiz.questions],
             }
-        return {"lessons": lessons, "quiz": quiz_payload, "roleplay": ROLEPLAY_OPENER}
+        opener = None
+        from madira.tenancy import demo_posture
+
+        if demo_posture():
+            from madira.agents.demo.fixtures import ROLEPLAY_OPENER
+
+            opener = ROLEPLAY_OPENER
+        return {"lessons": lessons, "quiz": quiz_payload, "roleplay": opener}
 
 
 def grade(venue_id: uuid.UUID, answers: str, staff_name: str = "Floor") -> dict:
@@ -75,6 +82,9 @@ def grade(venue_id: uuid.UUID, answers: str, staff_name: str = "Floor") -> dict:
 
 
 def roleplay() -> dict:
+    require_demo("Diner roleplay")
+    from madira.agents.demo.fixtures import ROLEPLAY_OPENER
+
     return {
         "mode": "roleplay",
         "persona": "Skeptical diner, ordered the dry-aged ribeye",

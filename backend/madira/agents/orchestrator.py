@@ -8,7 +8,6 @@ from typing import Any
 
 from langgraph.checkpoint.memory import MemorySaver
 
-from madira.agents.demo_model import DemoChatModel, SPECIALISTS
 from madira.agents.tools import (
     INVENTORY_TOOLS,
     LIST_TOOLS,
@@ -19,8 +18,6 @@ from madira.agents.tools import (
 )
 from madira.agents import tracker
 from madira.llm_runtime import LlmRuntime, resolve_runtime
-
-SPECIALIST_NAMES = list(SPECIALISTS)
 
 # One saver for every rebuild. Settings key save/delete calls refresh_sommelier_agent(),
 # which compiles a new graph; the same MemorySaver keeps each thread's checkpoints.
@@ -81,6 +78,9 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
 ]
 
 
+SPECIALIST_NAMES = [spec["name"] for spec in SUBAGENT_SPECS]
+
+
 def _live_model(runtime: LlmRuntime):
     from langchain.chat_models import init_chat_model
 
@@ -93,6 +93,8 @@ def _live_model(runtime: LlmRuntime):
 def _model_for(role: str, runtime: LlmRuntime | None = None):
     runtime = runtime or resolve_runtime()
     if runtime.demo_mode:
+        from madira.agents.demo.model import DemoChatModel
+
         return DemoChatModel(role=role)
     return _live_model(runtime)
 

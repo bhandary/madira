@@ -20,7 +20,7 @@ from madira.domain.menu.service import (
     parse_menu,
     recommend_pairings,
 )
-from madira.fixtures_data import SAMPLE_MENU_TEXT
+from madira.agents.demo.fixtures import SAMPLE_MENU_TEXT
 from madira.main import app
 from madira.models import Venue
 from madira.seed import seed

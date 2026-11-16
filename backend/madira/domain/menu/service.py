@@ -7,9 +7,8 @@ import uuid
 
 from sqlalchemy import delete, select
 
-from madira.domain.errors import NotFound
+from madira.domain.errors import NotFound, require_demo
 from madira.domain.session import session_scope
-from madira.fixtures_data import SAMPLE_MENU_TEXT, pairings_for_dishes, parse_menu_text
 from madira.models import Dish, Menu, Pairing
 from madira.money import DEFAULT_CURRENCY, to_minor
 
@@ -22,24 +21,41 @@ def extract_upload_text(filename: str, data: bytes) -> str:
         reader = PdfReader(io.BytesIO(data))
         return "\n".join(page.extract_text() or "" for page in reader.pages)
     if name.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+        require_demo("Image menu extraction")
+        from madira.agents.demo.fixtures import SAMPLE_MENU_TEXT
+
         return SAMPLE_MENU_TEXT + "\n\n[image upload in demo mode — using Maison Madira fixture]"
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError:
+        require_demo("Menu text extraction")
+        from madira.agents.demo.fixtures import SAMPLE_MENU_TEXT
+
         return SAMPLE_MENU_TEXT
 
 
 def coerce_parse_text(text: str | None) -> str:
-    return text or SAMPLE_MENU_TEXT
+    if text:
+        return text
+    require_demo("Menu parsing")
+    from madira.agents.demo.fixtures import SAMPLE_MENU_TEXT
+
+    return SAMPLE_MENU_TEXT
 
 
 def coerce_upload_text(raw: str) -> str:
-    if not raw.strip():
-        return SAMPLE_MENU_TEXT
-    return raw
+    if raw.strip():
+        return raw
+    require_demo("Menu parsing")
+    from madira.agents.demo.fixtures import SAMPLE_MENU_TEXT
+
+    return SAMPLE_MENU_TEXT
 
 
 def parse_menu(venue_id: uuid.UUID, text: str, source_name: str = "pasted") -> dict:
+    require_demo("Menu parsing")
+    from madira.agents.demo.fixtures import parse_menu_text
+
     parsed = parse_menu_text(text, source_name=source_name)
     with session_scope() as session:
         menu = Menu(
@@ -155,6 +171,9 @@ def latest_menu_id(venue_id: uuid.UUID) -> uuid.UUID | None:
 
 def recommend_pairings(venue_id: uuid.UUID, menu_id: str = "") -> dict:
     """Pair the requested menu. An empty id with no menu yet stores the sample menu first."""
+    require_demo("Pairing recommendations")
+    from madira.agents.demo.fixtures import pairings_for_dishes
+
     created = None
     if menu_key(menu_id) is None and latest_menu_id(venue_id) is None:
         created = parse_menu(venue_id, "", "demo")

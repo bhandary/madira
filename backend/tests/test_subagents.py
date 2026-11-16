@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from madira.agents.demo_model import DemoChatModel, classify_intent
+from madira.agents.demo.model import DemoChatModel, classify_intent
 from madira.agents.orchestrator import (
     SPECIALIST_NAMES,
     SUBAGENT_SPECS,
@@ -16,7 +16,7 @@ from madira.agents.orchestrator import (
     specialist_specs,
 )
 from madira.db import init_db
-from madira.fixtures_data import SAMPLE_MENU_TEXT
+from madira.agents.demo.fixtures import SAMPLE_MENU_TEXT
 from madira.seed import seed
 
 

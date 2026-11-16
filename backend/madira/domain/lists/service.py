@@ -6,8 +6,8 @@ import uuid
 
 from sqlalchemy import select
 
+from madira.domain.errors import require_demo
 from madira.domain.session import session_scope
-from madira.fixtures_data import curate_list as curate_list_fixture
 from madira.models import BeverageList, ListItem
 
 
@@ -17,6 +17,9 @@ def curate(
     target_margin: float = 3.2,
     name: str = "Maison Madira autumn list",
 ) -> dict:
+    require_demo("List curation")
+    from madira.agents.demo.fixtures import curate_list as curate_list_fixture
+
     payload = curate_list_fixture(budget=budget, target_margin=target_margin)
     payload["name"] = name
     with session_scope() as session:

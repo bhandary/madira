@@ -413,7 +413,9 @@ def test_no_session_outside_demo_mode_is_401(monkeypatch):
         assert fresh.post("/agent/run", json={"message": "hello"}).status_code == 401
         assert fresh.get("/health").status_code == 200
         assert fresh.get("/status").status_code == 200
-        assert fresh.get("/fixtures/sample-menu").status_code == 200
+        sample = fresh.get("/fixtures/sample-menu")
+        assert sample.status_code == 501
+        assert "no live backend" in sample.json()["detail"]
         assert fresh.get("/auth/config").status_code == 200
 
 

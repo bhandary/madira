@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from madira.api.agent import mount_agui, router as agent_router
 from madira.api.health import fixtures_router, router as health_router, status_router
@@ -15,6 +16,7 @@ from madira.api.training import router as training_router
 from madira.auth import router as auth_router
 from madira.config import FRONTEND_ORIGIN, HOST, PORT
 from madira.db import init_db
+from madira.domain.errors import Unavailable
 from madira.seed import seed
 from madira.tenancy import TenancyMiddleware
 
@@ -40,6 +42,11 @@ app.include_router(purchasing_router)
 app.include_router(training_router)
 app.include_router(procurement_router)
 app.include_router(fixtures_router)
+
+
+@app.exception_handler(Unavailable)
+def unavailable(_request: Request, exc: Unavailable) -> JSONResponse:
+    return JSONResponse(status_code=501, content={"detail": exc.message})
 
 
 @app.on_event("startup")

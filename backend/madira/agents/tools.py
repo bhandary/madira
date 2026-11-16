@@ -107,8 +107,9 @@ def grade_quiz(answers: str, staff_name: str = "Floor") -> str:
 
 def start_roleplay() -> str:
     """Start diner roleplay: the agent plays a skeptical guest at Maison Madira."""
+    payload = training_service.roleplay()
     tracker.complete_delegation("staff-trainer")
-    return _dumps(training_service.roleplay())
+    return _dumps(payload)
 
 
 def list_tastings() -> str:
