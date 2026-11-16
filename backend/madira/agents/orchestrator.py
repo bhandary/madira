@@ -158,7 +158,7 @@ def extract_task_delegations(messages: list[Any]) -> list[dict[str, str]]:
 
 
 def extract_a2ui(messages: list[Any]) -> list[dict[str, Any]]:
-    from madira.a2ui_ops import parse_operations
+    from madira.agents.presenters.ops import parse_operations
 
     ops: list[dict[str, Any]] = []
     for msg in messages:

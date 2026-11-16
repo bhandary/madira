@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-import json
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
-from sqlalchemy import select
 
-from madira.agents.tools import list_tastings, schedule_tasting
-from madira.db import SessionLocal
-from madira.models import Supplier, Tasting
+from madira.agents.presenters.procurement import with_scheduled, with_tasting_list
+from madira.domain.errors import NotFound
+from madira.domain.procurement.service import ics_text, list_suppliers, list_tastings, schedule
 from madira.rbac import Capability, require
-from madira.tenancy import active_venue_id, scoped_get
+from madira.tenancy import active_venue_id
 
 router = APIRouter()
 
@@ -29,45 +27,34 @@ class TastingBody(BaseModel):
 
 @router.get("/tastings", dependencies=[require(Capability.RECORDS)])
 def tastings() -> dict[str, Any]:
-    return json.loads(list_tastings())
+    return with_tasting_list(list_tastings(active_venue_id()))
 
 
 @router.post("/tastings", dependencies=[require(Capability.EDIT)])
 def tastings_create(body: TastingBody) -> dict[str, Any]:
-    return json.loads(
-        schedule_tasting(
-            supplier_name=body.supplier_name,
-            title=body.title,
-            starts_at=body.starts_at,
-            ends_at=body.ends_at,
-            location=body.location,
-            notes=body.notes,
-        )
+    payload = schedule(
+        active_venue_id(),
+        supplier_name=body.supplier_name,
+        title=body.title,
+        starts_at=body.starts_at,
+        ends_at=body.ends_at,
+        location=body.location,
+        notes=body.notes,
     )
+    if "error" in payload:
+        return payload
+    return with_scheduled(payload)
 
 
 @router.get("/tastings/{tasting_id}/ics", dependencies=[require(Capability.RECORDS)])
 def tasting_ics(tasting_id: uuid.UUID) -> PlainTextResponse:
-    session = SessionLocal()
     try:
-        tasting = scoped_get(session, Tasting, tasting_id)
-        if not tasting:
-            raise HTTPException(404, "tasting not found")
-        return PlainTextResponse(tasting.ics, media_type="text/calendar")
-    finally:
-        session.close()
+        body = ics_text(active_venue_id(), tasting_id)
+    except NotFound as exc:
+        raise HTTPException(404, exc.message) from exc
+    return PlainTextResponse(body, media_type="text/calendar")
 
 
 @router.get("/suppliers", dependencies=[require(Capability.RECORDS)])
 def suppliers() -> dict[str, Any]:
-    session = SessionLocal()
-    try:
-        rows = session.scalars(select(Supplier).where(Supplier.venue_id == active_venue_id())).all()
-        return {
-            "suppliers": [
-                {"id": s.id, "name": s.name, "kind": s.kind, "contact_email": s.contact_email, "notes": s.notes}
-                for s in rows
-            ]
-        }
-    finally:
-        session.close()
+    return list_suppliers(active_venue_id())

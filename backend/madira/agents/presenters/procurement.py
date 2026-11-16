@@ -1,27 +1,10 @@
-"""A2UI surfaces for domains that have not moved to agents/presenters yet."""
+"""Tasting surfaces. The draft calendar text comes from the procurement service."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from madira.agents.presenters.ops import (
-    create_surface,
-    parse_operations,
-    render,
-    surface,
-    update_components,
-    update_data_model,
-)
-
-__all__ = [
-    "create_surface",
-    "parse_operations",
-    "render",
-    "surface",
-    "update_components",
-    "update_data_model",
-    "tasting_surface",
-]
+from madira.agents.presenters.ops import surface
 
 TASTING_SCHEMA = [
     {"id": "root", "component": "Column", "children": ["title", "form", "cal"]},
@@ -33,3 +16,19 @@ TASTING_SCHEMA = [
 
 def tasting_surface(title: str, draft: dict, tastings: list[dict]) -> list[dict[str, Any]]:
     return surface("tasting", TASTING_SCHEMA, {"title": title, "draft": draft, "tastings": tastings})
+
+
+def with_tasting_list(payload: dict) -> dict:
+    tastings = payload["tastings"]
+    return {
+        "tastings": tastings,
+        "a2ui_operations": tasting_surface("Supplier calendar", {}, tastings),
+    }
+
+
+def with_scheduled(payload: dict) -> dict:
+    return {
+        "draft": payload["draft"],
+        "tastings": payload["tastings"],
+        "a2ui_operations": tasting_surface("Tasting scheduled (draft)", payload["draft"], payload["tastings"]),
+    }

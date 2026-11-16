@@ -12,7 +12,8 @@ from pathlib import Path
 from sqlalchemy import func, select, text
 
 from madira.db import SessionLocal, init_db
-from madira.fixtures_data import build_ics, curate_list
+from madira.domain.procurement.service import build_ics
+from madira.fixtures_data import curate_list
 from madira.models import Supplier, Tasting
 from madira.money import bottle_multiple, format_whole, pour_multiple, to_minor
 from madira.seed import seed

@@ -683,29 +683,3 @@ INVENTORY = [
     {"sku": "K-YAM-01", "name": "Tedorigawa Yamahai", "category": "sake", "supplier": "World Sake Imports", "on_hand": 6, "par": 6, "unit_cost": 29, "depletion_30d": 4},
     {"sku": "K-KIM-01", "name": "Dewazakura Ichiro Kimoto", "category": "sake", "supplier": "World Sake Imports", "on_hand": 2, "par": 6, "unit_cost": 27, "depletion_30d": 7},
 ]
-
-
-def build_ics(title: str, starts_at: str, ends_at: str, location: str, notes: str) -> str:
-    def _compact(ts: str) -> str:
-        return ts.replace("-", "").replace(":", "").replace(" ", "T")[:15]
-
-    uid = f"{_compact(starts_at)}-madira@maison.local"
-    return "\r\n".join(
-        [
-            "BEGIN:VCALENDAR",
-            "VERSION:2.0",
-            "PRODID:-//Maison Madira//Madira//EN",
-            "CALSCALE:GREGORIAN",
-            "METHOD:PUBLISH",
-            "BEGIN:VEVENT",
-            f"UID:{uid}",
-            f"DTSTART:{_compact(starts_at)}",
-            f"DTEND:{_compact(ends_at)}",
-            f"SUMMARY:{title}",
-            f"LOCATION:{location}",
-            f"DESCRIPTION:{notes} (draft only — not sent)",
-            "END:VEVENT",
-            "END:VCALENDAR",
-            "",
-        ]
-    )
