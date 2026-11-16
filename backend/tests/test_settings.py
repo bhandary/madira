@@ -14,7 +14,8 @@ from madira.crypto import decrypt_secret, encrypt_secret
 from madira.db import SessionLocal, init_db
 from madira.llm_runtime import read_stored, resolve_runtime
 from madira.llm_validate import set_key_validator, validate_provider_key, validate_provider_key_live
-from madira.main import _agent_slot, app, refresh_sommelier_agent
+from madira.api.agent import _agent_slot, refresh_sommelier_agent
+from madira.main import app
 from madira.models import LlmCredential
 
 PASSWORD = "floor-secret"
@@ -148,7 +149,7 @@ def test_save_validates_stores_ciphertext_and_hides_the_key(client: TestClient, 
 
     set_key_validator(record)
     calls: list[str] = []
-    monkeypatch.setattr("madira.main.refresh_sommelier_agent", lambda: calls.append("refresh"))
+    monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: calls.append("refresh"))
 
     response = _save(client, provider="Anthropic", model="claude-haiku-4-5-20251001")
     assert response.status_code == 200
@@ -190,7 +191,7 @@ def test_rejected_key_is_not_stored(client: TestClient, monkeypatch):
 
     set_key_validator(reject)
     calls: list[str] = []
-    monkeypatch.setattr("madira.main.refresh_sommelier_agent", lambda: calls.append("refresh"))
+    monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: calls.append("refresh"))
     response = _save(client)
     assert response.status_code == 400
     assert "rejected" in response.json()["detail"]
@@ -204,7 +205,7 @@ def test_failed_rebuild_rolls_back_the_new_key(client: TestClient, monkeypatch):
     def boom():
         raise RuntimeError("rebuild failed")
 
-    monkeypatch.setattr("madira.main.refresh_sommelier_agent", boom)
+    monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", boom)
     response = _save(client)
     assert response.status_code == 500
     assert "rebuild failed" in response.json()["detail"]
@@ -214,7 +215,7 @@ def test_failed_rebuild_rolls_back_the_new_key(client: TestClient, monkeypatch):
 
 
 def test_delete_falls_back_to_demo(client: TestClient, monkeypatch):
-    monkeypatch.setattr("madira.main.refresh_sommelier_agent", lambda: None)
+    monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: None)
     assert _save(client).status_code == 200
     response = client.delete("/settings/llm", headers=_auth())
     assert response.status_code == 200
@@ -232,7 +233,7 @@ def test_saved_key_overrides_env_then_delete_uses_env(client: TestClient, monkey
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env-key-zzzz")
     monkeypatch.setenv("MADIRA_LLM_PROVIDER", "openai")
     monkeypatch.setenv("MADIRA_LLM_MODEL", "gpt-4.1-mini")
-    monkeypatch.setattr("madira.main.refresh_sommelier_agent", lambda: None)
+    monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: None)
 
     before = resolve_runtime()
     assert before.source == "env"
@@ -263,7 +264,7 @@ def test_saved_key_overrides_env_then_delete_uses_env(client: TestClient, monkey
 
 def test_demo_mode_flag_forces_fixtures_even_with_a_saved_key(client: TestClient, monkeypatch):
     monkeypatch.setenv("MADIRA_DEMO_MODE", "true")
-    monkeypatch.setattr("madira.main.refresh_sommelier_agent", lambda: None)
+    monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: None)
     response = _save(client)
     assert response.status_code == 200
     body = response.json()
@@ -378,7 +379,7 @@ def test_live_validator_checks_each_provider_and_hides_the_key(monkeypatch):
 def test_save_surfaces_quota_and_auth_failures(client: TestClient, monkeypatch, provider, label, status, message):
     set_key_validator(None)
     refreshed: list[str] = []
-    monkeypatch.setattr("madira.main.refresh_sommelier_agent", lambda: refreshed.append("refresh"))
+    monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: refreshed.append("refresh"))
 
     class Response:
         def __init__(self):
@@ -419,7 +420,7 @@ def test_agent_run_returns_the_provider_message_without_the_key(client: TestClie
     def quota(message, thread_id=None):
         raise ProviderError(429, {"error": {"message": f"You have no credits remaining {secret}"}})
 
-    monkeypatch.setattr("madira.main.invoke_head_sommelier", quota)
+    monkeypatch.setattr("madira.api.agent.invoke_head_sommelier", quota)
     monkeypatch.setenv("OPENAI_API_KEY", secret)
     response = client.post("/agent/run", json={"message": "pair the duck"})
     assert response.status_code == 429
@@ -429,7 +430,7 @@ def test_agent_run_returns_the_provider_message_without_the_key(client: TestClie
     def denied(message, thread_id=None):
         raise RuntimeError("model call failed") from ProviderError(401, {"error": {"message": "Incorrect API key provided"}})
 
-    monkeypatch.setattr("madira.main.invoke_head_sommelier", denied)
+    monkeypatch.setattr("madira.api.agent.invoke_head_sommelier", denied)
     auth = client.post("/agent/run", json={"message": "pair the duck"})
     assert auth.status_code == 401
     assert auth.json()["detail"] == "Incorrect API key provided"
@@ -437,7 +438,7 @@ def test_agent_run_returns_the_provider_message_without_the_key(client: TestClie
     def outage(message, thread_id=None):
         raise ProviderError(500, {"error": {"message": "upstream failed"}})
 
-    monkeypatch.setattr("madira.main.invoke_head_sommelier", outage)
+    monkeypatch.setattr("madira.api.agent.invoke_head_sommelier", outage)
     failed = client.post("/agent/run", json={"message": "pair the duck"})
     assert failed.status_code == 502
     assert failed.json()["detail"] == "upstream failed"
@@ -461,7 +462,7 @@ def test_secret_roundtrip_and_dev_fallback(monkeypatch, tmp_path):
 
 
 def test_blank_model_uses_the_provider_default(client: TestClient, monkeypatch):
-    monkeypatch.setattr("madira.main.refresh_sommelier_agent", lambda: None)
+    monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: None)
     response = _save(client, provider="google", model="")
     assert response.status_code == 200
     body = response.json()
@@ -471,7 +472,7 @@ def test_blank_model_uses_the_provider_default(client: TestClient, monkeypatch):
 
 
 def test_unreadable_ciphertext_can_be_removed(client: TestClient, monkeypatch):
-    monkeypatch.setattr("madira.main.refresh_sommelier_agent", lambda: None)
+    monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: None)
     assert _save(client).status_code == 200
     monkeypatch.setenv("MADIRA_SECRET_KEY", Fernet.generate_key().decode())
     listed = client.get("/settings/llm", headers=_auth())
