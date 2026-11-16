@@ -11,19 +11,15 @@ from sqlalchemy import select
 
 from madira import a2ui_ops
 from madira.agents import tracker
+from madira.agents.presenters.lists import with_list
 from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.db import SessionLocal
+from madira.domain.lists import service as lists_service
 from madira.domain.menu import service as menu_service
-from madira.fixtures_data import (
-    ROLEPLAY_OPENER,
-    build_ics,
-    curate_list as curate_list_fixture,
-)
+from madira.fixtures_data import ROLEPLAY_OPENER, build_ics
 from madira.models import (
-    BeverageList,
     InventoryItem,
     Lesson,
-    ListItem,
     POLine,
     PurchaseOrder,
     Quiz,
@@ -73,48 +69,10 @@ def recommend_pairings(menu_id: str = "") -> str:
 
 def curate_beverage_list(budget: float = 12000, target_margin: float = 3.2, name: str = "Maison Madira autumn list") -> str:
     """Build a balanced wine/beer/spirit/sake list within a buying budget and target pour/bottle margin. Show coverage and gaps."""
-    payload = curate_list_fixture(budget=budget, target_margin=target_margin)
-    payload["name"] = name
-    session = _session()
-    vid = _vid()
-    try:
-        bl = BeverageList(
-            venue_id=vid,
-            name=name,
-            budget=payload["budget"],
-            currency=payload["currency"],
-            target_margin=target_margin,
-            notes=payload["notes"],
-        )
-        session.add(bl)
-        session.flush()
-        for item in payload["items"]:
-            session.add(
-                ListItem(
-                    venue_id=vid,
-                    list_id=bl.id,
-                    category=item["category"],
-                    name=item["name"],
-                    producer=item["producer"],
-                    region=item["region"],
-                    style=item["style"],
-                    vintage=item["vintage"],
-                    cost=item["cost"],
-                    pour_price=item["pour_price"],
-                    bottle_price=item["bottle_price"],
-                    currency=item["currency"],
-                    margin_pct=item["margin_pct"],
-                )
-            )
-        session.commit()
-        payload["list_id"] = bl.id
-        ops = a2ui_ops.list_surface(payload)
-        tracker.record_operations(ops)
-        tracker.complete_delegation("list-curator")
-        payload["a2ui_operations"] = ops
-        return _dumps(payload)
-    finally:
-        session.close()
+    body = with_list(lists_service.curate(_vid(), budget=budget, target_margin=target_margin, name=name))
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("list-curator")
+    return _dumps(body)
 
 
 def _inventory_rows(session) -> list[dict]:
