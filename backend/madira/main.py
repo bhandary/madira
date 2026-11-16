@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from madira.agents.checkpointer import get_checkpointer
 from madira.api.agent import mount_agui, router as agent_router
 from madira.api.health import fixtures_router, router as health_router, status_router
 from madira.api.inventory import router as inventory_router
@@ -15,12 +17,16 @@ from madira.api.training import router as training_router
 from madira.auth import router as auth_router
 from madira.config import FRONTEND_ORIGIN, HOST, PORT
 from madira.db import init_db
+from madira.domain.errors import Unavailable
 from madira.seed import seed
+from madira.tenancy import TenancyMiddleware
 
 app = FastAPI(title="Madira", version="0.1.0")
+# Added last so CORS wraps tenancy and 401 responses still carry the allow-origin header.
+app.add_middleware(TenancyMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000", "*"],
+    allow_origins=[FRONTEND_ORIGIN.rstrip("/")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,10 +45,16 @@ app.include_router(procurement_router)
 app.include_router(fixtures_router)
 
 
+@app.exception_handler(Unavailable)
+def unavailable(_request: Request, exc: Unavailable) -> JSONResponse:
+    return JSONResponse(status_code=501, content={"detail": exc.message})
+
+
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
     seed()
+    get_checkpointer()
     mount_agui(app)
 
 

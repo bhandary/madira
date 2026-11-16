@@ -8,7 +8,7 @@ is first-party: HttpOnly, SameSite=Lax, and Secure when that URL is https.
 The flow is the authorization code grant with S256 PKCE, `state`, and
 `nonce`. joserfc checks the ID token (RS256, issuer, audience, expiry,
 nonce) before a User row is written. The cookie is an HMAC of the Google
-subject, not the Google token. Settings stays on `MADIRA_ADMIN_PASSWORD`.
+subject, not the Google token. Settings is limited to the Owner role.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ def _now() -> int:
 
 
 def utcnow() -> datetime:
-    return datetime.fromtimestamp(_now(), timezone.utc).replace(tzinfo=None)
+    return datetime.fromtimestamp(_now(), timezone.utc)
 
 
 def _env(name: str) -> str:
@@ -303,6 +303,9 @@ def upsert_google_user(profile: dict[str, str]) -> str:
             )
             session.add(user)
             try:
+                from madira.tenancy import grant_configured_owner
+
+                grant_configured_owner(session, user)
                 session.commit()
                 return sub
             except IntegrityError:
@@ -314,6 +317,9 @@ def upsert_google_user(profile: dict[str, str]) -> str:
         user.name = profile["name"]
         user.picture = profile["picture"]
         user.last_login_at = now
+        from madira.tenancy import grant_configured_owner
+
+        grant_configured_owner(session, user)
         session.commit()
         return sub
     except AuthError:
@@ -331,8 +337,14 @@ def issue_session(google_sub: str) -> str:
     return _sign(payload, b"madira-session-v1")
 
 
-def user_from_session(token: str | None) -> dict[str, str] | None:
-    if not google_configured() or not token:
+def session_subject(token: str | None) -> str | None:
+    """Google subject from a valid session cookie, or None.
+
+    This checks the HMAC and expiry only. It does not require the Google
+    client to still be configured, so a cookie issued earlier can be read.
+    """
+
+    if not token:
         return None
     data = _read(token, b"madira-session-v1")
     if not data:
@@ -345,6 +357,15 @@ def user_from_session(token: str | None) -> dict[str, str] | None:
         return None
     sub = data.get("sub")
     if not isinstance(sub, str) or not sub:
+        return None
+    return sub
+
+
+def user_from_session(token: str | None) -> dict[str, str] | None:
+    if not google_configured():
+        return None
+    sub = session_subject(token)
+    if not sub:
         return None
     session = SessionLocal()
     try:

@@ -1,32 +1,8 @@
 export const API = "/madira-api";
 
-export type Delegation = {
-  subagent: string;
-  description: string;
-  status: string;
-};
-
-export type AgentResult = {
-  reply: string;
-  delegation: Delegation[];
-  todos: { content: string; status: string }[];
-  a2ui_operations: Record<string, unknown>[];
-  demo_mode: boolean;
-};
-
 export async function getStatus() {
   const res = await fetch(`${API}/status`, { cache: "no-store" });
   if (!res.ok) throw new Error("status failed");
-  return res.json();
-}
-
-export async function runAgent(message: string): Promise<AgentResult> {
-  const res = await fetch(`${API}/agent/run`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
-  });
-  if (!res.ok) throw new Error(await errorMessage(res));
   return res.json();
 }
 
@@ -87,19 +63,13 @@ export type LlmSettings = {
   default_models: Record<string, string>;
 };
 
-const TOKEN_KEY = "madira_admin_token";
+export class ApiError extends Error {
+  status: number;
 
-export function readAdminToken(): string {
-  if (typeof window === "undefined") return "";
-  return sessionStorage.getItem(TOKEN_KEY) || "";
-}
-
-export function storeAdminToken(token: string) {
-  sessionStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearAdminToken() {
-  sessionStorage.removeItem(TOKEN_KEY);
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
 }
 
 export function notifyStatusChanged() {
@@ -119,42 +89,28 @@ async function errorMessage(res: Response): Promise<string> {
   return text || `Request failed (${res.status})`;
 }
 
-function adminHeaders(token: string): HeadersInit {
-  return { "X-Madira-Admin-Token": token };
-}
-
-export async function unlockSettings(password: string): Promise<string> {
-  const res = await fetch(`${API}/settings/session`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
-  });
-  if (!res.ok) throw new Error(await errorMessage(res));
-  const data = (await res.json()) as { token?: string };
-  if (!data.token) throw new Error("Sign-in did not return a token.");
-  return data.token;
-}
-
-export async function getLlmSettings(token: string): Promise<LlmSettings> {
-  const res = await fetch(`${API}/settings/llm`, {
-    headers: adminHeaders(token),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(await errorMessage(res));
+async function readSettings(res: Response): Promise<LlmSettings> {
+  if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
   return res.json();
 }
 
-export async function saveLlmSettings(
-  token: string,
-  body: { provider: string; model: string; api_key: string }
-): Promise<LlmSettings> {
+export async function getLlmSettings(): Promise<LlmSettings> {
+  const res = await fetch(`${API}/settings/llm`, { cache: "no-store", credentials: "same-origin" });
+  return readSettings(res);
+}
+
+export async function saveLlmSettings(body: {
+  provider: string;
+  model: string;
+  api_key: string;
+}): Promise<LlmSettings> {
   const res = await fetch(`${API}/settings/llm`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...adminHeaders(token) },
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await errorMessage(res));
-  return res.json();
+  return readSettings(res);
 }
 
 export type Account = {
@@ -201,11 +157,7 @@ export function notifyAuthChanged() {
   }
 }
 
-export async function deleteLlmSettings(token: string): Promise<LlmSettings> {
-  const res = await fetch(`${API}/settings/llm`, {
-    method: "DELETE",
-    headers: adminHeaders(token),
-  });
-  if (!res.ok) throw new Error(await errorMessage(res));
-  return res.json();
+export async function deleteLlmSettings(): Promise<LlmSettings> {
+  const res = await fetch(`${API}/settings/llm`, { method: "DELETE", credentials: "same-origin" });
+  return readSettings(res);
 }

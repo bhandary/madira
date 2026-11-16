@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { CopilotChat, useAgent } from "@copilotkit/react-core/v2";
+import { useStoredThreadId } from "@/lib/thread";
 
 export function SommelierChat() {
   const { agent } = useAgent();
   const [error, setError] = useState<string | null>(null);
+  const threadId = useStoredThreadId("madira-thread:floor");
 
   useEffect(() => {
     const subscription = agent.subscribe({
@@ -21,14 +23,17 @@ export function SommelierChat() {
           {error}
         </p>
       ) : null}
-      <CopilotChat
-        className="min-h-0 flex-1"
-        onError={(event) => {
-          if (!("error" in event) || !(event.error instanceof Error)) return;
-          const message = event.error.message.trim();
-          setError(message || "The sommelier could not answer.");
-        }}
-      />
+      {threadId ? (
+        <CopilotChat
+          threadId={threadId}
+          className="min-h-0 flex-1"
+          onError={(event) => {
+            if (!("error" in event) || !(event.error instanceof Error)) return;
+            const message = event.error.message.trim();
+            setError(message || "The sommelier could not answer.");
+          }}
+        />
+      ) : null}
     </div>
   );
 }

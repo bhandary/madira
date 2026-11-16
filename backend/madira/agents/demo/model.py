@@ -345,13 +345,13 @@ def _extract_answers(text: str) -> str:
     return "1,2,2,1"
 
 
-def _extract_menu_id(messages: list[BaseMessage]) -> int:
+def _extract_menu_id(messages: list[BaseMessage]) -> str:
     for msg in reversed(messages):
         if isinstance(msg, ToolMessage) and isinstance(msg.content, str):
             try:
                 data = json.loads(msg.content)
             except json.JSONDecodeError:
                 continue
-            if isinstance(data, dict) and "menu_id" in data:
-                return int(data["menu_id"])
-    return 0
+            if isinstance(data, dict) and data.get("menu_id"):
+                return str(data["menu_id"])
+    return ""

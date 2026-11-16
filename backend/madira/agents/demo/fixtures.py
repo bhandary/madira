@@ -363,108 +363,31 @@ def _pairings_for(dish_name: str) -> list[dict]:
 
 def parse_menu_text(text: str, source_name: str = "pasted") -> dict:
     """Parse menu text into dishes. Sample menu maps to rich fixtures; other text is line-parsed."""
+    from madira.domain.menu.parsing import line_parse_menu, matches_sample_menu
+
     raw = (text or "").strip()
     if not raw:
-        dishes = [dict(d) for d in SAMPLE_DISHES]
         return {
             "name": "Maison Madira — Autumn Tasting",
             "cuisine": "California-French",
             "price_tier": "$$$",
             "source_type": source_name,
             "raw_text": SAMPLE_MENU_TEXT,
-            "dishes": dishes,
+            "dishes": [dict(dish) for dish in SAMPLE_DISHES],
         }
-
-    lowered = raw.lower()
-    if "dungeness" in lowered or "maison madira" in lowered or "ribeye" in lowered and "truffle" in lowered:
+    if matches_sample_menu(raw):
         return {
             "name": "Maison Madira — Autumn Tasting",
             "cuisine": "California-French",
             "price_tier": "$$$",
             "source_type": source_name,
             "raw_text": raw,
-            "dishes": [dict(d) for d in SAMPLE_DISHES],
+            "dishes": [dict(dish) for dish in SAMPLE_DISHES],
         }
-
-    dishes: list[dict] = []
-    course = "course"
-    for line in raw.splitlines():
-        cleaned = line.strip().lstrip("-•*").strip()
-        if not cleaned or len(cleaned) < 4:
-            continue
-        if cleaned.isupper() and len(cleaned) < 40:
-            continue
-        if cleaned.lower().startswith("maison"):
-            continue
-        price = 0.0
-        name = cleaned
-        if "—" in cleaned:
-            left, right = cleaned.rsplit("—", 1)
-            name = left.strip()
-            try:
-                price = float(right.replace("$", "").strip().split()[0])
-            except (ValueError, IndexError):
-                price = 0.0
-        elif "$" in cleaned:
-            try:
-                price = float(cleaned.split("$")[-1].strip().split()[0])
-                name = cleaned.split("$")[0].rstrip(" -—").strip()
-            except ValueError:
-                price = 0.0
-        name = name.lstrip("0123456789.").strip()
-        if len(name) < 4:
-            continue
-        flavor = _guess_flavor(name)
-        dishes.append(
-            {
-                "name": name,
-                "course": course,
-                "description": name,
-                "flavor_profile": flavor,
-                "price": price,
-            }
-        )
-        course = "following"
-    if not dishes:
-        dishes = [dict(d) for d in SAMPLE_DISHES]
-    cuisine = "California-French" if "french" in lowered else "contemporary"
-    return {
-        "name": source_name or "Uploaded menu",
-        "cuisine": cuisine,
-        "price_tier": "$$$",
-        "source_type": source_name,
-        "raw_text": raw,
-        "dishes": dishes[:12],
-    }
-
-
-def _guess_flavor(name: str) -> str:
-    n = name.lower()
-    tags = []
-    mapping = {
-        "crab": "sweet-briny",
-        "fish": "lean ocean",
-        "oyster": "saline",
-        "duck": "rich game",
-        "liver": "umami",
-        "beef": "charred fat",
-        "ribeye": "charred fat",
-        "steak": "charred fat",
-        "truffle": "earthy",
-        "risotto": "creamy",
-        "chocolate": "bitter cocoa",
-        "yuzu": "citrus",
-        "lemon": "citrus",
-        "cherry": "sweet-sour fruit",
-        "mushroom": "woodland",
-        "lamb": "herbal roast",
-        "pork": "sweet-savory",
-        "salad": "green acid",
-    }
-    for key, tag in mapping.items():
-        if key in n:
-            tags.append(tag)
-    return ", ".join(tags) or "savory, balanced"
+    parsed = line_parse_menu(raw, source_name)
+    if not parsed["dishes"]:
+        parsed["dishes"] = [dict(dish) for dish in SAMPLE_DISHES]
+    return parsed
 
 
 def pairings_for_dishes(dishes: list[dict]) -> list[dict]:
@@ -498,30 +421,56 @@ CURATED_LIST_ITEMS = [
 
 
 def curate_list(budget: float = 12000, target_margin: float = 3.2) -> dict:
+    from decimal import Decimal
+
+    from madira.money import (
+        DEFAULT_CURRENCY,
+        bottle_multiple,
+        format_whole,
+        margin_percent,
+        pour_multiple,
+        to_minor,
+        within_buying_room,
+    )
+
+    budget_minor = to_minor(budget)
     items = []
-    spent = 0.0
+    spent = 0
     # Assume 12 bottles (or case-equivalent) per wine/sake SKU, 24 for beer, 2 for spirits.
     pack = {"wine": 12, "beer": 24, "spirit": 2, "sake": 12}
     for row in CURATED_LIST_ITEMS:
         qty = pack.get(row["category"], 6)
-        line_cost = row["cost"] * qty
-        if spent + line_cost > budget * 1.02 and spent > budget * 0.6:
+        cost = to_minor(row["cost"])
+        pour = to_minor(row["pour_price"])
+        bottle = to_minor(row["bottle_price"])
+        line_cost = cost * qty
+        if not within_buying_room(spent, line_cost, budget_minor):
             continue
-        pour = row["pour_price"]
-        bottle = row["bottle_price"]
-        cost = row["cost"]
         if pour:
-            margin = round(pour / max(cost / 5, 0.01), 2)  # ~5oz pour from 750
+            multiple = pour_multiple(pour, cost)
         elif bottle:
-            margin = round(bottle / max(cost, 0.01), 2)
+            multiple = bottle_multiple(bottle, cost)
         else:
-            margin = target_margin
-        items.append({**row, "qty": qty, "line_cost": round(line_cost, 2), "margin_pct": round((1 - 1 / max(margin, 0.01)) * 100, 1), "pour_multiple": margin})
+            multiple = Decimal(str(target_margin))
+        copied = {key: value for key, value in row.items() if key not in {"cost", "pour_price", "bottle_price"}}
+        items.append(
+            {
+                **copied,
+                "cost": cost,
+                "pour_price": pour,
+                "bottle_price": bottle,
+                "currency": DEFAULT_CURRENCY,
+                "qty": qty,
+                "line_cost": line_cost,
+                "margin_pct": float(margin_percent(multiple)),
+                "pour_multiple": float(multiple),
+            }
+        )
         spent += line_cost
 
     coverage = {}
     for item in items:
-        coverage.setdefault(item["category"], {"count": 0, "regions": set(), "styles": set(), "spend": 0.0})
+        coverage.setdefault(item["category"], {"count": 0, "regions": set(), "styles": set(), "spend": 0})
         coverage[item["category"]]["count"] += 1
         coverage[item["category"]]["regions"].add(item["region"])
         coverage[item["category"]]["styles"].add(item["style"])
@@ -531,7 +480,7 @@ def curate_list(budget: float = 12000, target_margin: float = 3.2) -> dict:
             "count": v["count"],
             "regions": sorted(v["regions"]),
             "styles": sorted(v["styles"]),
-            "spend": round(v["spend"], 2),
+            "spend": v["spend"],
         }
         for k, v in coverage.items()
     }
@@ -539,17 +488,21 @@ def curate_list(budget: float = 12000, target_margin: float = 3.2) -> dict:
     gaps = sorted(expected - set(coverage_out))
     if coverage_out.get("wine", {}).get("count", 0) < 6:
         gaps.append("more still wine breadth (need 6+)")
-    remaining = round(budget - spent, 2)
+    remaining = budget_minor - spent
     return {
         "name": "Maison Madira autumn list",
-        "budget": budget,
+        "budget": budget_minor,
+        "currency": DEFAULT_CURRENCY,
         "target_margin": target_margin,
-        "spent": round(spent, 2),
+        "spent": spent,
         "remaining": remaining,
         "items": items,
         "coverage": coverage_out,
         "gaps": gaps or ["none — categories covered"],
-        "notes": f"Buys stay at ${spent:,.0f} of ${budget:,.0f}. Target pour/bottle multiple {target_margin}x.",
+        "notes": (
+            f"Buys stay at ${format_whole(spent)} of ${format_whole(budget_minor)}. "
+            f"Target pour/bottle multiple {target_margin}x."
+        ),
     }
 
 
@@ -653,29 +606,3 @@ INVENTORY = [
     {"sku": "K-YAM-01", "name": "Tedorigawa Yamahai", "category": "sake", "supplier": "World Sake Imports", "on_hand": 6, "par": 6, "unit_cost": 29, "depletion_30d": 4},
     {"sku": "K-KIM-01", "name": "Dewazakura Ichiro Kimoto", "category": "sake", "supplier": "World Sake Imports", "on_hand": 2, "par": 6, "unit_cost": 27, "depletion_30d": 7},
 ]
-
-
-def build_ics(title: str, starts_at: str, ends_at: str, location: str, notes: str) -> str:
-    def _compact(ts: str) -> str:
-        return ts.replace("-", "").replace(":", "").replace(" ", "T")[:15]
-
-    uid = f"{_compact(starts_at)}-madira@maison.local"
-    return "\r\n".join(
-        [
-            "BEGIN:VCALENDAR",
-            "VERSION:2.0",
-            "PRODID:-//Maison Madira//Madira//EN",
-            "CALSCALE:GREGORIAN",
-            "METHOD:PUBLISH",
-            "BEGIN:VEVENT",
-            f"UID:{uid}",
-            f"DTSTART:{_compact(starts_at)}",
-            f"DTEND:{_compact(ends_at)}",
-            f"SUMMARY:{title}",
-            f"LOCATION:{location}",
-            f"DESCRIPTION:{notes} (draft only — not sent)",
-            "END:VEVENT",
-            "END:VCALENDAR",
-            "",
-        ]
-    )
