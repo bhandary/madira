@@ -1,82 +1,31 @@
-"""A2UI v0.9 helpers. Prefer CopilotKit's a2ui module; fall back to local builders."""
+"""A2UI surfaces for domains that have not moved to agents/presenters yet."""
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
-from madira.config import CATALOG_ID
+from madira.agents.presenters.ops import (
+    create_surface,
+    parse_operations,
+    render,
+    surface,
+    update_components,
+    update_data_model,
+)
 
-try:
-    from copilotkit import a2ui as _ck_a2ui
-except Exception:  # pragma: no cover - optional at import time
-    _ck_a2ui = None
-
-
-def create_surface(surface_id: str, catalog_id: str = CATALOG_ID) -> dict[str, Any]:
-    if _ck_a2ui is not None:
-        return _ck_a2ui.create_surface(surface_id, catalog_id=catalog_id)
-    return {
-        "version": "v0.9",
-        "createSurface": {"surfaceId": surface_id, "catalogId": catalog_id},
-    }
-
-
-def update_components(surface_id: str, components: list[dict[str, Any]]) -> dict[str, Any]:
-    if _ck_a2ui is not None:
-        return _ck_a2ui.update_components(surface_id, components)
-    return {
-        "version": "v0.9",
-        "updateComponents": {"surfaceId": surface_id, "components": components},
-    }
-
-
-def update_data_model(surface_id: str, data: Any, path: str = "/") -> dict[str, Any]:
-    if _ck_a2ui is not None:
-        return _ck_a2ui.update_data_model(surface_id, data, path=path)
-    return {
-        "version": "v0.9",
-        "updateDataModel": {"surfaceId": surface_id, "path": path, "value": data},
-    }
-
-
-def render(operations: list[dict[str, Any]]) -> str:
-    if _ck_a2ui is not None:
-        return _ck_a2ui.render(operations=operations)
-    return json.dumps({"a2ui_operations": operations})
-
-
-def parse_operations(payload: str | dict | list | None) -> list[dict[str, Any]]:
-    if payload is None:
-        return []
-    if isinstance(payload, list):
-        return payload
-    if isinstance(payload, dict):
-        if "a2ui_operations" in payload:
-            return list(payload["a2ui_operations"])
-        if any(k in payload for k in ("createSurface", "updateComponents", "updateDataModel")):
-            return [payload]
-        return []
-    if isinstance(payload, str):
-        try:
-            return parse_operations(json.loads(payload))
-        except json.JSONDecodeError:
-            return []
-    return []
-
-
-def surface(surface_id: str, components: list[dict[str, Any]], data: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        create_surface(surface_id),
-        update_components(surface_id, components),
-        update_data_model(surface_id, data),
-    ]
-
-
-PAIRING_SCHEMA = [
-    {"id": "root", "component": "Column", "children": ["title", "grid"]},
-    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
-    {"id": "grid", "component": "PairingGrid", "dishes": {"path": "/dishes"}},
+__all__ = [
+    "create_surface",
+    "parse_operations",
+    "render",
+    "surface",
+    "update_components",
+    "update_data_model",
+    "list_surface",
+    "inventory_surface",
+    "po_surface",
+    "quiz_surface",
+    "briefing_surface",
+    "tasting_surface",
 ]
 
 LIST_SCHEMA = [
@@ -126,24 +75,6 @@ TASTING_SCHEMA = [
     {"id": "form", "component": "ScheduleForm", "draft": {"path": "/draft"}},
     {"id": "cal", "component": "TastingCalendar", "tastings": {"path": "/tastings"}},
 ]
-
-DISH_SCHEMA = [
-    {"id": "root", "component": "Column", "children": ["title", "dishes"]},
-    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
-    {"id": "dishes", "component": "DishList", "dishes": {"path": "/dishes"}},
-]
-
-
-def pairings_surface(title: str, dishes: list[dict]) -> list[dict[str, Any]]:
-    return surface("pairings", PAIRING_SCHEMA, {"title": title, "dishes": dishes})
-
-
-def dishes_surface(title: str, dishes: list[dict], cuisine: str, price_tier: str) -> list[dict[str, Any]]:
-    return surface(
-        "dishes",
-        DISH_SCHEMA,
-        {"title": title, "dishes": dishes, "cuisine": cuisine, "price_tier": price_tier},
-    )
 
 
 def list_surface(payload: dict) -> list[dict[str, Any]]:

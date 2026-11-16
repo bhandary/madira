@@ -7,37 +7,33 @@ import re
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from madira import a2ui_ops
 from madira.agents import tracker
+from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.db import SessionLocal
-from madira.money import DEFAULT_CURRENCY, to_minor
-from madira.tenancy import active_venue_id
-from madira.timestamps import format_wall, parse_stamp
+from madira.domain.menu import service as menu_service
 from madira.fixtures_data import (
-    QUIZ,
     ROLEPLAY_OPENER,
     build_ics,
     curate_list as curate_list_fixture,
-    pairings_for_dishes,
-    parse_menu_text,
 )
 from madira.models import (
     BeverageList,
-    Dish,
     InventoryItem,
     Lesson,
     ListItem,
-    Menu,
     POLine,
-    Pairing,
     PurchaseOrder,
     Quiz,
     QuizAttempt,
     Supplier,
     Tasting,
 )
+from madira.money import DEFAULT_CURRENCY
+from madira.tenancy import active_venue_id
+from madira.timestamps import format_wall, parse_stamp
 
 
 def _session():
@@ -52,129 +48,27 @@ def _vid() -> uuid.UUID:
     return active_venue_id()
 
 
-def _menu_key(menu_id: str | uuid.UUID | None) -> uuid.UUID | None:
-    if menu_id is None or menu_id == "":
-        return None
-    if isinstance(menu_id, uuid.UUID):
-        return menu_id
-    return uuid.UUID(str(menu_id))
-
-
-def _priced(row: dict, *fields: str) -> dict:
-    copied = dict(row)
-    for field in fields:
-        copied[field] = to_minor(copied.get(field) or 0)
-    copied["currency"] = DEFAULT_CURRENCY
-    return copied
-
-
 def parse_menu(text: str, source_name: str = "pasted") -> str:
     """Parse a restaurant menu into dishes, flavor profiles, cuisine, and price tier. Persist the menu."""
-    parsed = parse_menu_text(text, source_name=source_name)
-    session = _session()
-    vid = _vid()
-    try:
-        menu = Menu(
-            venue_id=vid,
-            name=parsed["name"],
-            source_type=parsed["source_type"],
-            raw_text=parsed["raw_text"],
-            cuisine=parsed["cuisine"],
-            price_tier=parsed["price_tier"],
-        )
-        session.add(menu)
-        session.flush()
-        dishes_out = []
-        for row in parsed["dishes"]:
-            dish = Dish(venue_id=vid, menu_id=menu.id, **_priced(row, "price"))
-            session.add(dish)
-            session.flush()
-            dishes_out.append(
-                {
-                    "id": dish.id,
-                    "name": dish.name,
-                    "course": dish.course,
-                    "description": dish.description,
-                    "flavor_profile": dish.flavor_profile,
-                    "price": dish.price,
-                    "currency": dish.currency,
-                }
-            )
-        session.commit()
-        ops = a2ui_ops.dishes_surface(
-            f"Parsed · {menu.name}",
-            dishes_out,
-            menu.cuisine,
-            menu.price_tier,
-        )
-        tracker.record_operations(ops)
-        tracker.complete_delegation("menu-analyst")
-        return _dumps(
-            {
-                "menu_id": menu.id,
-                "name": menu.name,
-                "cuisine": menu.cuisine,
-                "price_tier": menu.price_tier,
-                "dishes": dishes_out,
-                "a2ui_operations": ops,
-            }
-        )
-    finally:
-        session.close()
+    body = with_dishes(menu_service.parse_menu(_vid(), text, source_name))
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("menu-analyst")
+    return _dumps(body)
 
 
 def recommend_pairings(menu_id: str = "") -> str:
     """Recommend wine, beer, spirit, and sake pairings for each dish on a menu, with rationale and price-tier fit."""
-    session = _session()
-    vid = _vid()
-    try:
-        menu = None
-        key = _menu_key(menu_id)
-        if key is not None:
-            menu = session.get(Menu, key)
-            if menu is None or menu.venue_id != vid:
-                return _dumps({"error": "menu not found"})
-        else:
-            menu = session.scalar(
-                select(Menu).where(Menu.venue_id == vid).order_by(Menu.created_at.desc(), Menu.id.desc())
-            )
-        if menu is None:
-            parse_menu("", "demo")
-            session.expire_all()
-            menu = session.scalar(
-                select(Menu).where(Menu.venue_id == vid).order_by(Menu.created_at.desc(), Menu.id.desc())
-            )
-        dishes = list(menu.dishes)
-        dish_payload = [
-            {"name": d.name, "flavor_profile": d.flavor_profile, "price": d.price, "course": d.course}
-            for d in dishes
-        ]
-        planned = pairings_for_dishes(dish_payload)
-        cards = []
-        for dish, block in zip(dishes, planned):
-            session.execute(delete(Pairing).where(Pairing.dish_id == dish.id, Pairing.venue_id == vid))
-            stored = []
-            for raw in block["pairings"]:
-                priced = _priced(raw, "glass_price", "bottle_price")
-                session.add(Pairing(venue_id=vid, dish_id=dish.id, **priced))
-                stored.append(priced)
-            cards.append(
-                {
-                    "dish": dish.name,
-                    "course": dish.course,
-                    "flavor_profile": dish.flavor_profile,
-                    "price": dish.price,
-                    "currency": dish.currency,
-                    "pairings": stored,
-                }
-            )
-        session.commit()
-        ops = a2ui_ops.pairings_surface(f"Pairings · {menu.name}", cards)
-        tracker.record_operations(ops)
-        tracker.complete_delegation("pairing-sommelier")
-        return _dumps({"menu_id": menu.id, "dishes": cards, "a2ui_operations": ops})
-    finally:
-        session.close()
+    payload = menu_service.recommend_pairings(_vid(), menu_id)
+    if "error" in payload:
+        return _dumps({"error": payload["error"]})
+    created = payload.get("created_menu")
+    if created:
+        tracker.record_operations(with_dishes(created)["a2ui_operations"])
+        tracker.complete_delegation("menu-analyst")
+    body = with_pairings(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("pairing-sommelier")
+    return _dumps(body)
 
 
 def curate_beverage_list(budget: float = 12000, target_margin: float = 3.2, name: str = "Maison Madira autumn list") -> str:
