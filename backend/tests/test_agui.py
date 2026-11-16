@@ -53,23 +53,19 @@ def _assert_finished(events: list[dict]) -> None:
     assert "Head Sommelier" in text, types
 
 
-def test_agent_run_answers_in_demo_with_checkpointer(client: TestClient):
-    thread_id = str(uuid.uuid4())
-    response = client.post(
-        "/agent/run",
-        json={"message": "Show the supplier tasting calendar.", "thread_id": thread_id},
-    )
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["demo_mode"] is True
-    assert body["thread_id"] == thread_id
-    assert "Head Sommelier" in body["reply"]
-    assert "supplier-scheduler" in [item["subagent"] for item in body["delegation"]]
+def test_agent_run_is_gone(client: TestClient):
+    response = client.post("/agent/run", json={"message": "hello"})
+    assert response.status_code == 404
 
 
 def test_agui_demo_run_finishes(client: TestClient):
-    events = _run(client, str(uuid.uuid4()), "Show the supplier tasting calendar.", "msg-calendar")
+    thread_id = str(uuid.uuid4())
+    text = "Show the supplier tasting calendar."
+    events = _run(client, thread_id, text, "msg-calendar")
     _assert_finished(events)
+    saved = client.get(f"/ag-ui/threads/{thread_id}/messages")
+    assert saved.status_code == 200, saved.text
+    assert text in saved.text
 
 
 def test_agui_second_run_on_the_same_thread(client: TestClient):

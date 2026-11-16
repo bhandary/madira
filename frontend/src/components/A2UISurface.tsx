@@ -1,10 +1,9 @@
 "use client";
 
-import { applyOperations, resolveBinding, type A2UIComponent, type A2UIOperation, type SurfaceState } from "@/lib/a2ui";
-
-function money(n: unknown) {
-  const v = Number(n || 0);
-  return v.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+function money(n: unknown, currency?: unknown) {
+  const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
+  const major = Number(n || 0) / 100;
+  return major.toLocaleString(undefined, { style: "currency", currency: code, maximumFractionDigits: 0 });
 }
 
 function Badge({ children, tone = "draft" }: { children: React.ReactNode; tone?: "draft" | "wine" | "ok" | "alert" }) {
@@ -25,7 +24,7 @@ function PairingGrid({ dishes }: { dishes: unknown }) {
           </div>
           <p className="mt-1 text-sm text-muted">
             Flavor profile: {String(dish.flavor_profile || "")}
-            {dish.price ? ` · ${money(dish.price)}` : ""}
+            {dish.price ? ` · ${money(dish.price, dish.currency)}` : ""}
           </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {((dish.pairings as Record<string, unknown>[]) || []).map((p, j) => (
@@ -40,8 +39,8 @@ function PairingGrid({ dishes }: { dishes: unknown }) {
                 </div>
                 <p className="mt-2 text-sm leading-5">{String(p.rationale)}</p>
                 <div className="mt-2 text-xs text-muted">
-                  {p.glass_price ? `Glass ${money(p.glass_price)}` : ""}
-                  {p.bottle_price ? ` · Bottle ${money(p.bottle_price)}` : ""}
+                  {p.glass_price ? `Glass ${money(p.glass_price, p.currency || dish.currency)}` : ""}
+                  {p.bottle_price ? ` · Bottle ${money(p.bottle_price, p.currency || dish.currency)}` : ""}
                 </div>
               </div>
             ))}
@@ -60,7 +59,7 @@ function DishList({ dishes }: { dishes: unknown }) {
         <li key={i} className="px-3 py-2.5">
           <div className="text-sm font-medium">{String(d.name)}</div>
           <div className="text-sm text-muted">
-            {String(d.course)} · {String(d.flavor_profile)} {d.price ? `· ${money(d.price)}` : ""}
+            {String(d.course)} · {String(d.flavor_profile)} {d.price ? `· ${money(d.price, d.currency)}` : ""}
           </div>
         </li>
       ))}
@@ -73,15 +72,15 @@ function ListSummary(props: Record<string, unknown>) {
   const gaps = Array.isArray(props.gaps) ? props.gaps : [];
   return (
     <div className="mb-4 grid gap-2 sm:grid-cols-4" data-testid="list-summary">
-      <Stat label="Budget" value={money(props.budget)} />
-      <Stat label="Spent" value={money(props.spent)} />
-      <Stat label="Remaining" value={money(props.remaining)} />
+      <Stat label="Budget" value={money(props.budget, props.currency)} />
+      <Stat label="Spent" value={money(props.spent, props.currency)} />
+      <Stat label="Remaining" value={money(props.remaining, props.currency)} />
       <Stat label="Target multiple" value={`${props.targetMargin || props.target_margin || ""}x`} />
       <div className="panel p-3 text-sm sm:col-span-4">
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(coverage).map(([k, v]) => (
             <Badge key={k}>
-              {k} {v.count} · {money(v.spend)}
+              {k} {v.count} · {money(v.spend, props.currency)}
             </Badge>
           ))}
         </div>
@@ -124,9 +123,9 @@ function BeverageListTable({ items }: { items: unknown }) {
                 {String(row.region)}
                 <div className="text-xs text-muted">{String(row.style)}</div>
               </td>
-              <td>{money(row.cost)}</td>
-              <td>{row.pour_price ? money(row.pour_price) : "—"}</td>
-              <td>{row.bottle_price ? money(row.bottle_price) : "—"}</td>
+              <td>{money(row.cost, row.currency)}</td>
+              <td>{row.pour_price ? money(row.pour_price, row.currency) : "—"}</td>
+              <td>{row.bottle_price ? money(row.bottle_price, row.currency) : "—"}</td>
               <td>{row.margin_pct ? `${row.margin_pct}%` : `${row.pour_multiple || ""}x`}</td>
             </tr>
           ))}
@@ -191,11 +190,11 @@ function PurchaseOrderTable({ orders }: { orders: unknown }) {
             <h3 className="text-sm font-medium">{String(po.supplier)}</h3>
             <Badge>DRAFT · not sent</Badge>
           </div>
-          <div className="mt-1 text-sm text-muted">Total {money(po.total)}</div>
+          <div className="mt-1 text-sm text-muted">Total {money(po.total, po.currency)}</div>
           <ul className="mt-2 space-y-1 text-sm">
             {((po.lines as Record<string, unknown>[]) || []).map((line, i) => (
               <li key={i}>
-                {String(line.sku)} · {String(line.name)} × {String(line.qty)} @ {money(line.unit_cost)}
+                {String(line.sku)} · {String(line.name)} × {String(line.qty)} @ {money(line.unit_cost, line.currency || po.currency)}
               </li>
             ))}
           </ul>
@@ -316,82 +315,4 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
 export function renderMadiraComponent(name: string, props: Record<string, unknown>) {
   const render = CUSTOM[name];
   return render ? render(props) : null;
-}
-
-function boundProps(component: A2UIComponent, data: unknown): Record<string, unknown> {
-  const props: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(component)) {
-    if (k === "id" || k === "component") continue;
-    props[k] = resolveBinding(v, data);
-  }
-  return props;
-}
-
-function RenderNode({ id, surface }: { id: string; surface: SurfaceState }) {
-  const component = surface.components[id];
-  if (!component) return null;
-  const type = component.component;
-  const props = boundProps(component, surface.data);
-  const custom = CUSTOM[type];
-  if (custom) return <>{custom(props)}</>;
-
-  if (type === "Text") {
-    const variant = String(props.variant || "body");
-    const text = String(props.text ?? "");
-    if (variant === "h2") return <h2 className="mb-2 text-base font-medium">{text}</h2>;
-    if (variant === "h3") return <h3 className="text-sm font-medium">{text}</h3>;
-    if (variant === "caption") return <p className="kicker">{text}</p>;
-    return <p className="text-sm">{text}</p>;
-  }
-  if (type === "Column") {
-    const children = (props.children as string[]) || [];
-    return (
-      <div className="flex flex-col gap-3">
-        {children.map((child) => (
-          <RenderNode key={child} id={child} surface={surface} />
-        ))}
-      </div>
-    );
-  }
-  if (type === "Row") {
-    const children = (props.children as string[]) || [];
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        {children.map((child) => (
-          <RenderNode key={child} id={child} surface={surface} />
-        ))}
-      </div>
-    );
-  }
-  if (type === "Card") {
-    const child = String(props.child || "");
-    return <div className="panel p-3">{child ? <RenderNode id={child} surface={surface} /> : null}</div>;
-  }
-  if (type === "Button") {
-    return <button className="btn btn-primary">{String(props.child || "OK")}</button>;
-  }
-  if (type === "Divider") return <hr className="border-line" />;
-  return (
-    <div className="text-xs text-muted">
-      {type} {JSON.stringify(props)}
-    </div>
-  );
-}
-
-export function A2UISurface({ operations }: { operations: A2UIOperation[] }) {
-  const surfaces = applyOperations(operations);
-  if (!surfaces.length) return null;
-  return (
-    <div className="a2ui-surface space-y-5" data-testid="a2ui-surface">
-      {surfaces.map((surface) => (
-        <section key={surface.surfaceId} data-surface={surface.surfaceId}>
-          {surface.components.root ? (
-            <RenderNode id="root" surface={surface} />
-          ) : (
-            <pre className="ics">{JSON.stringify(surface.data, null, 2)}</pre>
-          )}
-        </section>
-      ))}
-    </div>
-  );
 }

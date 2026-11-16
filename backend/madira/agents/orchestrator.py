@@ -6,9 +6,7 @@ import json
 import uuid
 from typing import Any
 
-from langgraph.checkpoint.memory import MemorySaver
-
-from madira.agents.demo_model import DemoChatModel, SPECIALISTS
+from madira.agents.checkpointer import get_checkpointer
 from madira.agents.tools import (
     INVENTORY_TOOLS,
     LIST_TOOLS,
@@ -19,12 +17,6 @@ from madira.agents.tools import (
 )
 from madira.agents import tracker
 from madira.llm_runtime import LlmRuntime, resolve_runtime
-
-SPECIALIST_NAMES = list(SPECIALISTS)
-
-# One saver for every rebuild. Settings key save/delete calls refresh_sommelier_agent(),
-# which compiles a new graph; the same MemorySaver keeps each thread's checkpoints.
-_checkpointer = MemorySaver()
 
 HEAD_PROMPT = """You are the Head Sommelier of Maison Madira, a California-French dining room.
 
@@ -81,6 +73,9 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
 ]
 
 
+SPECIALIST_NAMES = [spec["name"] for spec in SUBAGENT_SPECS]
+
+
 def _live_model(runtime: LlmRuntime):
     from langchain.chat_models import init_chat_model
 
@@ -93,6 +88,8 @@ def _live_model(runtime: LlmRuntime):
 def _model_for(role: str, runtime: LlmRuntime | None = None):
     runtime = runtime or resolve_runtime()
     if runtime.demo_mode:
+        from madira.agents.demo.model import DemoChatModel
+
         return DemoChatModel(role=role)
     return _live_model(runtime)
 
@@ -116,7 +113,7 @@ def build_head_sommelier():
         "tools": [],
         "subagents": specialist_specs(runtime),
         "system_prompt": HEAD_PROMPT,
-        "checkpointer": _checkpointer,
+        "checkpointer": get_checkpointer(),
     }
     try:
         from copilotkit import CopilotKitMiddleware
@@ -158,7 +155,7 @@ def extract_task_delegations(messages: list[Any]) -> list[dict[str, str]]:
 
 
 def extract_a2ui(messages: list[Any]) -> list[dict[str, Any]]:
-    from madira.a2ui_ops import parse_operations
+    from madira.agents.presenters.ops import parse_operations
 
     ops: list[dict[str, Any]] = []
     for msg in messages:
@@ -182,13 +179,32 @@ def extract_a2ui(messages: list[Any]) -> list[dict[str, Any]]:
 
 
 def invoke_head_sommelier(message: str, thread_id: str | None = None) -> dict[str, Any]:
+    from madira.tenancy import active_venue_id, bind, current_request, demo_posture, ensure_demo_tenant, reset
+
+    token = None
+    if current_request() is None and demo_posture():
+        token = bind(ensure_demo_tenant())
+    try:
+        return _invoke_head_sommelier(message, thread_id, active_venue_id())
+    finally:
+        if token is not None:
+            reset(token)
+
+
+def _invoke_head_sommelier(message: str, thread_id: str | None, venue_id: uuid.UUID) -> dict[str, Any]:
     tracker.start_run()
     runtime = resolve_runtime()
     agent = build_head_sommelier()
     # A checkpointer refuses invoke unless the run names a thread.
+    # madira_venue_id is read by tools if the context variable does not cross a worker thread.
     result = agent.invoke(
         {"messages": [{"role": "user", "content": message}]},
-        config={"configurable": {"thread_id": thread_id or str(uuid.uuid4())}},
+        config={
+            "configurable": {
+                "thread_id": thread_id or str(uuid.uuid4()),
+                "madira_venue_id": str(venue_id),
+            }
+        },
     )
     messages = result.get("messages", []) if isinstance(result, dict) else []
     snap = tracker.snapshot()

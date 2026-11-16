@@ -1,15 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import {
-  clearAdminToken,
+  ApiError,
   deleteLlmSettings,
   getLlmSettings,
   notifyStatusChanged,
-  readAdminToken,
   saveLlmSettings,
-  storeAdminToken,
-  unlockSettings,
   type LlmSettings,
 } from "@/lib/api";
 
@@ -26,9 +24,8 @@ const FALLBACK_MODELS: Record<string, string> = {
 };
 
 export default function SettingsPage() {
-  const passwordRef = useRef<HTMLInputElement>(null);
-  const [token, setToken] = useState("");
   const [ready, setReady] = useState(false);
+  const [gate, setGate] = useState<"" | "signin" | "forbidden">("");
   const [settings, setSettings] = useState<LlmSettings | null>(null);
   const [provider, setProvider] = useState<string>("openai");
   const [model, setModel] = useState("");
@@ -36,65 +33,35 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function load(nextToken: string) {
-    const data = await getLlmSettings(nextToken);
-    setSettings(data);
-    if (data.provider) setProvider(data.provider);
-    setModel(data.model || "");
-    setError(data.warning || "");
-    notifyStatusChanged();
-  }
-
   useEffect(() => {
-    const existing = readAdminToken();
-    void Promise.resolve().then(() => {
-      if (!existing) {
-        setReady(true);
-        return;
-      }
-      setToken(existing);
-      load(existing)
-        .catch((err: unknown) => {
-          clearAdminToken();
-          setToken("");
-          setError(err instanceof Error ? err.message : "Sign-in expired.");
-        })
-        .finally(() => setReady(true));
-    });
+    void getLlmSettings()
+      .then((data) => {
+        setSettings(data);
+        if (data.provider) setProvider(data.provider);
+        setModel(data.model || "");
+        setError(data.warning || "");
+        notifyStatusChanged();
+      })
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 401) {
+          setGate("signin");
+          return;
+        }
+        if (err instanceof ApiError && err.status === 403) {
+          setGate("forbidden");
+          return;
+        }
+        setError(err instanceof Error ? err.message : "Could not load settings.");
+      })
+      .finally(() => setReady(true));
   }, []);
-
-  async function unlock(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const password = passwordRef.current?.value ?? "";
-    if (passwordRef.current) passwordRef.current.value = "";
-    setBusy(true);
-    setError("");
-    try {
-      const next = await unlockSettings(password);
-      storeAdminToken(next);
-      setToken(next);
-      await load(next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign-in failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function lock() {
-    clearAdminToken();
-    setToken("");
-    setSettings(null);
-    setApiKey("");
-    setError("");
-  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const data = await saveLlmSettings(token, { provider, model, api_key: apiKey });
+      const data = await saveLlmSettings({ provider, model, api_key: apiKey });
       setApiKey("");
       setSettings(data);
       setModel(data.model || "");
@@ -110,7 +77,7 @@ export default function SettingsPage() {
     setBusy(true);
     setError("");
     try {
-      const data = await deleteLlmSettings(token);
+      const data = await deleteLlmSettings();
       setSettings(data);
       setApiKey("");
       notifyStatusChanged();
@@ -129,47 +96,26 @@ export default function SettingsPage() {
       <h1 className="h-page">Settings</h1>
       <p className="lead">
         Paste a provider key to leave demo mode. It is encrypted in the database and overrides environment
-        variables until you remove it. The key is never shown again.
+        variables until you remove it. The key is never shown again. Model keys are limited to the Owner.
       </p>
       {!ready ? (
         <p className="mt-6 text-sm text-muted">Checking the session…</p>
-      ) : !token ? (
-        <form className="mt-6 space-y-3" onSubmit={(event) => void unlock(event)}>
-          <p className="text-sm leading-6 text-muted">
-            Settings are locked with <span className="font-medium text-ink">MADIRA_ADMIN_PASSWORD</span>. The password is
-            sent once and is not stored in the browser. This tab keeps a short-lived token until you close it or
-            lock the page. If that variable is unset, the server refuses changes until you set it and restart.
-          </p>
-          <label className="lbl" htmlFor="settings-password">
-            Admin password
-            <input
-              id="settings-password"
-              ref={passwordRef}
-              data-testid="settings-password"
-              type="password"
-              autoComplete="current-password"
-              className="field"
-            />
-          </label>
-          <button type="submit" data-testid="settings-unlock" disabled={busy} className="btn btn-primary">
-            {busy ? "Checking…" : "Unlock"}
-          </button>
-          {error && (
-            <p className="banner-error" role="alert" data-testid="settings-error">
-              {error}
-            </p>
-          )}
-        </form>
+      ) : gate === "signin" ? (
+        <p className="mt-6 text-sm leading-6 text-muted" data-testid="settings-signed-out">
+          Sign in with the Owner account to manage model keys.{" "}
+          <Link href="/login" className="font-medium text-ink">
+            Continue with Google
+          </Link>
+        </p>
+      ) : gate === "forbidden" ? (
+        <p className="mt-6 text-sm leading-6 text-muted" data-testid="settings-forbidden">
+          Only the Owner can change settings, billing, and model keys.
+        </p>
       ) : (
         <form className="mt-6 space-y-4" onSubmit={(event) => void save(event)}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm" data-testid="settings-mode">
-              {settings?.label || "Loading settings…"}
-            </p>
-            <button type="button" className="btn btn-secondary" onClick={lock} data-testid="settings-lock">
-              Lock
-            </button>
-          </div>
+          <p className="text-sm" data-testid="settings-mode">
+            {settings?.label || "Loading settings…"}
+          </p>
           {settings?.demo_forced && (
             <p className="text-sm text-muted" data-testid="settings-demo-forced">
               MADIRA_DEMO_MODE=true is forcing demo mode. A saved key is kept, and it applies after that variable

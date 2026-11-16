@@ -9,7 +9,6 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
-from madira.admin_auth import UNSET_MESSAGE, issue_admin_token, verify_admin_token
 from madira.crypto import decrypt_secret, encrypt_secret
 from madira.db import SessionLocal, init_db
 from madira.llm_runtime import read_stored, resolve_runtime
@@ -18,7 +17,6 @@ from madira.api.agent import _agent_slot, refresh_sommelier_agent
 from madira.main import app
 from madira.models import LlmCredential
 
-PASSWORD = "floor-secret"
 API_KEY = "sk-settings-unique-key-abcd"
 ENV_KEYS = (
     "OPENAI_API_KEY",
@@ -29,13 +27,13 @@ ENV_KEYS = (
 
 
 def _wipe() -> None:
+    from sqlalchemy import delete
+
     init_db()
     session = SessionLocal()
     try:
-        row = session.get(LlmCredential, 1)
-        if row is not None:
-            session.delete(row)
-            session.commit()
+        session.execute(delete(LlmCredential))
+        session.commit()
     finally:
         session.close()
 
@@ -43,7 +41,6 @@ def _wipe() -> None:
 @pytest.fixture(scope="module")
 def client():
     tracked = (
-        "MADIRA_ADMIN_PASSWORD",
         "MADIRA_SECRET_KEY",
         "MADIRA_LLM_VALIDATOR",
         "MADIRA_DEMO_MODE",
@@ -52,7 +49,6 @@ def client():
         *ENV_KEYS,
     )
     previous = {name: os.environ.get(name) for name in tracked}
-    os.environ["MADIRA_ADMIN_PASSWORD"] = PASSWORD
     os.environ["MADIRA_SECRET_KEY"] = Fernet.generate_key().decode()
     os.environ.pop("MADIRA_LLM_VALIDATOR", None)
     os.environ.pop("MADIRA_DEMO_MODE", None)
@@ -73,7 +69,6 @@ def client():
 
 @pytest.fixture(autouse=True)
 def _isolated(monkeypatch):
-    monkeypatch.setenv("MADIRA_ADMIN_PASSWORD", PASSWORD)
     monkeypatch.setenv("MADIRA_SECRET_KEY", Fernet.generate_key().decode())
     monkeypatch.delenv("MADIRA_LLM_VALIDATOR", raising=False)
     monkeypatch.delenv("MADIRA_DEMO_MODE", raising=False)
@@ -88,57 +83,22 @@ def _isolated(monkeypatch):
     _wipe()
 
 
-def _auth(token: str | None = None) -> dict[str, str]:
-    return {"X-Madira-Admin-Token": token or issue_admin_token()}
-
-
-def _save(client: TestClient, *, provider: str = "openai", model: str = "", api_key: str = API_KEY, token: str | None = None):
+def _save(client: TestClient, *, provider: str = "openai", model: str = "", api_key: str = API_KEY):
     return client.post(
         "/settings/llm",
-        headers=_auth(token),
         json={"provider": provider, "model": model, "api_key": api_key},
     )
 
 
-def test_settings_require_a_token(client: TestClient):
-    assert client.get("/settings/llm").status_code == 401
-    assert client.post("/settings/llm", json={"provider": "openai", "api_key": API_KEY}).status_code == 401
-    assert client.delete("/settings/llm").status_code == 401
-    denied = client.get("/settings/llm", headers={"X-Madira-Admin-Token": "not-a-token"})
-    assert denied.status_code == 401
-    assert API_KEY not in denied.text
+def _sign_in_owner(client: TestClient, monkeypatch) -> None:
+    """Attach the demo Owner cookie. Needed once an environment provider key turns demo posture off."""
 
+    monkeypatch.setenv("MADIRA_AUTH_SECRET", "settings-test-secret")
+    from madira.auth import issue_session
+    from madira.tenancy import DEMO_USER_SUB, ensure_demo_tenant
 
-def test_wrong_password_is_rejected_without_echoing_it(client: TestClient):
-    secret = "not-the-floor-password"
-    response = client.post("/settings/session", json={"password": secret})
-    assert response.status_code == 401
-    assert "Incorrect admin password" in response.json()["detail"]
-    assert secret not in response.text
-
-
-def test_missing_admin_password_refuses_settings(client: TestClient, monkeypatch):
-    monkeypatch.delenv("MADIRA_ADMIN_PASSWORD", raising=False)
-    for method, kwargs in (
-        ("get", {}),
-        ("post", {"json": {"provider": "openai", "api_key": API_KEY}}),
-        ("delete", {}),
-    ):
-        response = getattr(client, method)("/settings/llm", **kwargs)
-        assert response.status_code == 403
-        assert response.json()["detail"] == UNSET_MESSAGE
-    session = client.post("/settings/session", json={"password": PASSWORD})
-    assert session.status_code == 403
-    assert session.json()["detail"] == UNSET_MESSAGE
-
-
-def test_session_token_expires_and_dies_when_the_password_changes(monkeypatch):
-    token = issue_admin_token(ttl_seconds=-5)
-    assert verify_admin_token(token) is False
-    fresh = issue_admin_token()
-    assert verify_admin_token(fresh) is True
-    monkeypatch.setenv("MADIRA_ADMIN_PASSWORD", "a-different-password")
-    assert verify_admin_token(fresh) is False
+    ensure_demo_tenant()
+    client.cookies.set("madira_session", issue_session(DEMO_USER_SUB))
 
 
 def test_save_validates_stores_ciphertext_and_hides_the_key(client: TestClient, monkeypatch):
@@ -172,7 +132,8 @@ def test_save_validates_stores_ciphertext_and_hides_the_key(client: TestClient, 
     assert API_KEY not in stored.ciphertext
     assert decrypt_secret(stored.ciphertext) == API_KEY
 
-    listed = client.get("/settings/llm", headers=_auth())
+    _sign_in_owner(client, monkeypatch)
+    listed = client.get("/settings/llm")
     assert listed.status_code == 200
     assert API_KEY not in listed.text
     assert listed.json()["key_hint"] == "abcd"
@@ -217,7 +178,8 @@ def test_failed_rebuild_rolls_back_the_new_key(client: TestClient, monkeypatch):
 def test_delete_falls_back_to_demo(client: TestClient, monkeypatch):
     monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: None)
     assert _save(client).status_code == 200
-    response = client.delete("/settings/llm", headers=_auth())
+    _sign_in_owner(client, monkeypatch)
+    response = client.delete("/settings/llm")
     assert response.status_code == 200
     body = response.json()
     assert body["configured"] is False
@@ -230,6 +192,7 @@ def test_delete_falls_back_to_demo(client: TestClient, monkeypatch):
 
 
 def test_saved_key_overrides_env_then_delete_uses_env(client: TestClient, monkeypatch):
+    _sign_in_owner(client, monkeypatch)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env-key-zzzz")
     monkeypatch.setenv("MADIRA_LLM_PROVIDER", "openai")
     monkeypatch.setenv("MADIRA_LLM_MODEL", "gpt-4.1-mini")
@@ -249,7 +212,7 @@ def test_saved_key_overrides_env_then_delete_uses_env(client: TestClient, monkey
     assert current.api_key == API_KEY
     assert current.demo_mode is False
 
-    deleted = client.delete("/settings/llm", headers=_auth())
+    deleted = client.delete("/settings/llm")
     assert deleted.status_code == 200
     restored = resolve_runtime()
     assert restored.source == "env"
@@ -281,7 +244,7 @@ def test_demo_mode_flag_forces_fixtures_even_with_a_saved_key(client: TestClient
 
 
 def test_save_rebuilds_the_agent_with_the_saved_key(client: TestClient, monkeypatch):
-    from madira.agents.demo_model import DemoChatModel
+    from madira.agents.demo.model import DemoChatModel
 
     seen: list[tuple[str, str | None]] = []
 
@@ -295,12 +258,13 @@ def test_save_rebuilds_the_agent_with_the_saved_key(client: TestClient, monkeypa
     assert seen
     assert all(api_key == API_KEY for _, api_key in seen)
     assert all(model == "openai:gpt-4.1-mini" for model, _ in seen)
+    _sign_in_owner(client, monkeypatch)
     agent = _agent_slot.get("agent")
     assert agent is not None
     assert agent.graph is not None
 
     seen.clear()
-    deleted = client.delete("/settings/llm", headers=_auth())
+    deleted = client.delete("/settings/llm")
     assert deleted.status_code == 200
     assert seen == []
     assert resolve_runtime().demo_mode is True
@@ -408,7 +372,9 @@ def test_accept_mode_skips_the_network(monkeypatch):
     validate_provider_key("openai", API_KEY, "")
 
 
-def test_agent_run_returns_the_provider_message_without_the_key(client: TestClient, monkeypatch):
+def test_describe_provider_failure_returns_the_message_without_the_key(monkeypatch):
+    from madira.provider_errors import describe_provider_failure
+
     secret = "sk-live-secret-should-not-leak"
 
     class ProviderError(Exception):
@@ -417,31 +383,25 @@ def test_agent_run_returns_the_provider_message_without_the_key(client: TestClie
             self.status_code = status_code
             self.body = body
 
-    def quota(message, thread_id=None):
-        raise ProviderError(429, {"error": {"message": f"You have no credits remaining {secret}"}})
-
-    monkeypatch.setattr("madira.api.agent.invoke_head_sommelier", quota)
     monkeypatch.setenv("OPENAI_API_KEY", secret)
-    response = client.post("/agent/run", json={"message": "pair the duck"})
-    assert response.status_code == 429
-    assert response.json()["detail"] == "You have no credits remaining"
-    assert secret not in response.text
+    status, detail = describe_provider_failure(
+        ProviderError(429, {"error": {"message": f"You have no credits remaining {secret}"}})
+    )
+    assert status == 429
+    assert detail == "You have no credits remaining"
+    assert secret not in detail
 
-    def denied(message, thread_id=None):
-        raise RuntimeError("model call failed") from ProviderError(401, {"error": {"message": "Incorrect API key provided"}})
+    denied = RuntimeError("model call failed")
+    denied.__cause__ = ProviderError(401, {"error": {"message": "Incorrect API key provided"}})
+    auth_status, auth_detail = describe_provider_failure(denied)
+    assert auth_status == 401
+    assert auth_detail == "Incorrect API key provided"
 
-    monkeypatch.setattr("madira.api.agent.invoke_head_sommelier", denied)
-    auth = client.post("/agent/run", json={"message": "pair the duck"})
-    assert auth.status_code == 401
-    assert auth.json()["detail"] == "Incorrect API key provided"
-
-    def outage(message, thread_id=None):
-        raise ProviderError(500, {"error": {"message": "upstream failed"}})
-
-    monkeypatch.setattr("madira.api.agent.invoke_head_sommelier", outage)
-    failed = client.post("/agent/run", json={"message": "pair the duck"})
-    assert failed.status_code == 502
-    assert failed.json()["detail"] == "upstream failed"
+    outage_status, outage_detail = describe_provider_failure(
+        ProviderError(500, {"error": {"message": "upstream failed"}})
+    )
+    assert outage_status == 502
+    assert outage_detail == "upstream failed"
 
 
 def test_secret_roundtrip_and_dev_fallback(monkeypatch, tmp_path):
@@ -475,7 +435,7 @@ def test_unreadable_ciphertext_can_be_removed(client: TestClient, monkeypatch):
     monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: None)
     assert _save(client).status_code == 200
     monkeypatch.setenv("MADIRA_SECRET_KEY", Fernet.generate_key().decode())
-    listed = client.get("/settings/llm", headers=_auth())
+    listed = client.get("/settings/llm")
     assert listed.status_code == 200
     body = listed.json()
     assert body["configured"] is False
@@ -483,7 +443,7 @@ def test_unreadable_ciphertext_can_be_removed(client: TestClient, monkeypatch):
     assert "MADIRA_SECRET_KEY" in body["warning"]
     assert API_KEY not in listed.text
     assert client.get("/status").json()["demo_mode"] is True
-    deleted = client.delete("/settings/llm", headers=_auth())
+    deleted = client.delete("/settings/llm")
     assert deleted.status_code == 200
     assert read_stored() is None
 

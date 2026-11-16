@@ -6,7 +6,6 @@ from fastapi import APIRouter
 
 from madira.agents.orchestrator import SPECIALIST_NAMES, inspect_subagents
 from madira.config import status_payload
-from madira.fixtures_data import SAMPLE_MENU_TEXT
 
 router = APIRouter()
 status_router = APIRouter()
@@ -22,7 +21,12 @@ def health() -> dict[str, Any]:
 def status() -> dict[str, Any]:
     payload = status_payload()
     payload["specialists"] = list(SPECIALIST_NAMES)
-    payload["sample_menu"] = SAMPLE_MENU_TEXT
+    from madira.tenancy import demo_posture
+
+    if demo_posture():
+        from madira.agents.demo.fixtures import SAMPLE_MENU_TEXT
+
+        payload["sample_menu"] = SAMPLE_MENU_TEXT
     try:
         payload["wiring"] = inspect_subagents()
     except Exception as exc:
@@ -32,4 +36,9 @@ def status() -> dict[str, Any]:
 
 @fixtures_router.get("/fixtures/sample-menu")
 def sample_menu() -> dict[str, str]:
+    from madira.domain.errors import require_demo
+
+    require_demo("The sample menu")
+    from madira.agents.demo.fixtures import SAMPLE_MENU_TEXT
+
     return {"text": SAMPLE_MENU_TEXT}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
@@ -40,7 +41,9 @@ def record_operations(operations: list[dict[str, Any]]) -> None:
     if ops is None:
         ops = []
         _ops.set(ops)
-    ops.extend(operations)
+    # Surfaces are JSON documents. UUID keys and datetimes become strings here
+    # so the recorded operations match what the client receives.
+    ops.extend(json.loads(json.dumps(operations, default=str)))
 
 
 def record_todos(todos: list[dict[str, Any]]) -> None:

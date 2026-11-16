@@ -17,6 +17,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 PROVIDER_DEFAULTS = {
@@ -88,12 +89,23 @@ def _open_session(session):
     return SessionLocal(), True
 
 
-def read_stored(session=None) -> StoredCredential | None:
+def _organization_id(session):
+    from madira.tenancy import current_organization_id
+
+    return current_organization_id()
+
+
+def _credential_row(session):
     from madira.models import LlmCredential
 
+    org_id = _organization_id(session)
+    return session.scalar(select(LlmCredential).where(LlmCredential.organization_id == org_id))
+
+
+def read_stored(session=None) -> StoredCredential | None:
     sess, own = _open_session(session)
     try:
-        row = sess.get(LlmCredential, 1)
+        row = _credential_row(sess)
         if row is None:
             return None
         return StoredCredential(
@@ -116,12 +128,12 @@ def _upsert(provider: str, model: str, ciphertext: str, key_last4: str) -> None:
 
     session = SessionLocal()
     try:
-        row = session.get(LlmCredential, 1)
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        row = _credential_row(session)
+        now = datetime.now(timezone.utc)
         if row is None:
             session.add(
                 LlmCredential(
-                    id=1,
+                    organization_id=_organization_id(session),
                     provider=provider,
                     model=model,
                     ciphertext=ciphertext,
@@ -166,11 +178,10 @@ def restore_stored(previous: StoredCredential | None) -> None:
 
 def delete_credential() -> LlmRuntime:
     from madira.db import SessionLocal
-    from madira.models import LlmCredential
 
     session = SessionLocal()
     try:
-        row = session.get(LlmCredential, 1)
+        row = _credential_row(session)
         if row is not None:
             session.delete(row)
             session.commit()

@@ -10,7 +10,7 @@ The app is aimed at restaurants. It runs in a clearly labeled **DEMO MODE** with
 flowchart TD
   UI["Next.js + Tailwind<br/>CopilotKit AG-UI + A2UI catalog"]
   Runtime["CopilotKit runtime<br/>/api/copilotkit"]
-  REST["FastAPI REST<br/>/agent/run · CRUD"]
+  REST["FastAPI REST<br/>CRUD"]
   AGUI["AG-UI bridge<br/>/ag-ui"]
   Head["Head Sommelier<br/>deepagents.create_deep_agent"]
   Task["task tool"]
@@ -74,7 +74,8 @@ See `.env.example`.
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` / `MADIRA_API_KEY` | empty | If unset, **DEMO MODE** |
 | `MADIRA_DEMO_MODE` | auto | `true` forces fixtures even if a key is saved; `false` requires a key |
 | `MADIRA_SECRET_KEY` | dev file | Fernet key (or any secret) for keys saved in Settings. If unset, `backend/data/.madira_secret` is created. Set this in production. |
-| `MADIRA_ADMIN_PASSWORD` | unset | Unlocks Settings. If unset, settings reads and writes are refused until you set it and restart. |
+| `MADIRA_OWNER_EMAIL` | unset | Google account that becomes Owner of the default venue on sign-in. Settings, billing, and model keys require Owner. |
+| `MADIRA_FRONTEND_ORIGIN` | `http://localhost:3000` | Only this origin is allowed by CORS, with credentials. |
 | `DATABASE_URL` | sqlite file | Postgres URL for dev and prod. Unset keeps SQLite. |
 | `MADIRA_BACKEND_URL` | `http://127.0.0.1:8123` | Used by Next rewrites / CopilotKit HttpAgent |
 | `MADIRA_PORT` | `8123` | Backend |
@@ -89,20 +90,19 @@ Demo mode uses `DemoChatModel`: it inspects the user message, emits `write_todos
 
 Open **Settings** in the nav to leave demo mode without editing a file or restarting.
 
-1. Set `MADIRA_ADMIN_PASSWORD` and restart the backend once. Until that is set, the settings endpoints refuse every read and write with instructions to set it.
-2. Unlock the page with that password. The browser sends it once, then keeps a signed token in `sessionStorage` for this tab (8 hours, or until you lock the page or close the tab). The password is not stored.
-3. Choose OpenAI, Anthropic, or Google, optionally a model, and paste an API key. The backend sends one 1-token request to that model before saving, so a key with no credits, quota, or permission is rejected. A rejected key is not stored. If a later sommelier run still fails (rate limit, billing, auth), the page shows that provider message. The API key is never included.
-4. The key is encrypted with Fernet (`MADIRA_SECRET_KEY`, or the dev fallback file) and the API returns only a hint such as `ends in …abcd`. Saving or removing a key rebuilds the sommelier immediately.
+1. Sign in as the Owner. While the model is in demo mode (no environment key, no saved key, and `MADIRA_DEMO_MODE` is not false) the floor runs as the demo Owner, so Settings opens directly. A saved key, an environment key, or `MADIRA_DEMO_MODE=false` turns that off: a request with no session is 401. Any other role is 403.
+2. Choose OpenAI, Anthropic, or Google, optionally a model, and paste an API key. The backend sends one 1-token request to that model before saving, so a key with no credits, quota, or permission is rejected. A rejected key is not stored. If a later sommelier run still fails (rate limit, billing, auth), the page shows that provider message. The API key is never included.
+3. The key is encrypted with Fernet (`MADIRA_SECRET_KEY`, or the dev fallback file) and stored for the Owner's organization. The API returns only a hint such as `ends in …abcd`. Saving or removing a key rebuilds the sommelier immediately.
 
 Precedence: a saved key overrides `MADIRA_LLM_PROVIDER`, `MADIRA_LLM_MODEL`, and the provider API keys. Removing it falls back to those environment variables, then to demo mode. `MADIRA_DEMO_MODE=true` still forces demo.
 
 `MADIRA_LLM_VALIDATOR=accept` skips the provider check. Use it only for local tests when you do not have a real key. Do not set it in production.
 
-The Settings end-to-end test needs the running backend to have the same `MADIRA_ADMIN_PASSWORD` as the Playwright process, and `MADIRA_LLM_VALIDATOR=accept` if you are not using a real key.
+The Settings end-to-end test runs in demo mode, as the demo Owner. It needs `MADIRA_LLM_VALIDATOR=accept` on the backend if you are not using a real key.
 
 ## Sign in
 
-`/login` offers **Continue with Google**. The rest of the floor, including chat, stays usable while signed out. Google sign-in does not unlock Settings; that still uses `MADIRA_ADMIN_PASSWORD`.
+`/login` offers **Continue with Google**. While the model is in demo mode the floor, including chat and Settings, runs as the demo Owner without a Google session. As soon as the model is live (a saved key, an environment key, or `MADIRA_DEMO_MODE=false`), data routes require a session. When `MADIRA_OWNER_EMAIL` is set, that Google account receives the Owner membership on the default venue at sign-in. Settings, billing, and model keys are Owner only. Production should set `MADIRA_DEMO_MODE=false` and connect to Postgres as a non-superuser table owner so row-level security applies.
 
 The browser only talks to the Next.js origin. `/madira-api/*` is already rewritten to FastAPI, so the authorization code is exchanged there and the session cookie is first-party (`madira_session`, HttpOnly, SameSite=Lax, Secure when `MADIRA_PUBLIC_URL` is https, 14 days). Sign out is `POST /auth/logout`.
 

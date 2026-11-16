@@ -1,21 +1,41 @@
 import { expect, test } from "@playwright/test";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
 
-const password = process.env.MADIRA_ADMIN_PASSWORD || "";
 const apiKey = "sk-test-settings-key-1234";
+const repoRoot = path.resolve(__dirname, "../..");
+
+function removeSavedKey() {
+  const python = path.join(repoRoot, "backend/.venv/bin/python");
+  execFileSync(
+    python,
+    [
+      "-c",
+      "from sqlalchemy import delete\n"
+        + "from madira.db import SessionLocal\n"
+        + "from madira.models import LlmCredential\n"
+        + "session = SessionLocal()\n"
+        + "session.execute(delete(LlmCredential))\n"
+        + "session.commit()\n"
+        + "session.close()\n",
+    ],
+    {
+      cwd: repoRoot,
+      env: {
+        ...Object.fromEntries(
+          Object.entries({ ...process.env, PYTHONPATH: "backend" }).filter(([name]) => name !== "DATABASE_URL"),
+        ),
+        NODE_ENV: process.env.NODE_ENV,
+      },
+    },
+  );
+}
 
 test.describe("settings", () => {
-  test("save a provider key, leave demo mode, then restore it", async ({ page, request }) => {
-    expect(password, "Set MADIRA_ADMIN_PASSWORD to the same value as the backend").not.toBe("");
-
-    const denied = await request.get("/madira-api/settings/llm");
-    expect(denied.status()).toBe(401);
-
-    const session = await request.post("/madira-api/settings/session", { data: { password } });
-    expect(session.ok()).toBeTruthy();
-    const token = (await session.json()).token as string;
-    const headers = { "X-Madira-Admin-Token": token };
-    await request.delete("/madira-api/settings/llm", { headers });
+  test("save a provider key, leave demo mode, then a session is required", async ({ page, request }) => {
+    const before = await request.get("/madira-api/settings/llm");
+    expect(before.ok()).toBeTruthy();
 
     try {
       await page.goto("/");
@@ -23,12 +43,7 @@ test.describe("settings", () => {
 
       await page.getByRole("link", { name: "Settings" }).click();
       await expect(page.getByTestId("settings-page")).toBeVisible();
-      await page.getByTestId("settings-password").fill("not-the-password");
-      await page.getByTestId("settings-unlock").click();
-      await expect(page.getByTestId("settings-error")).toContainText(/incorrect/i);
-
-      await page.getByTestId("settings-password").fill(password);
-      await page.getByTestId("settings-unlock").click();
+      await expect(page.getByTestId("settings-password")).toHaveCount(0);
       await expect(page.getByTestId("settings-key-hint")).toContainText(/No key saved/i);
 
       await page.getByTestId("settings-provider").selectOption("openai");
@@ -47,11 +62,21 @@ test.describe("settings", () => {
         fullPage: true,
       });
 
-      await page.getByTestId("settings-remove").click();
-      await expect(page.getByTestId("settings-key-hint")).toContainText(/No key saved/i);
-      await expect(page.getByTestId("mode-banner")).toContainText(/DEMO MODE/i);
+      const follow = await request.get("/madira-api/settings/llm");
+      expect(follow.status()).toBe(401);
+      const menus = await request.get("/madira-api/menus");
+      expect(menus.status()).toBe(401);
+
+      await page.reload();
+      await expect(page.getByTestId("settings-signed-out")).toBeVisible();
     } finally {
-      await request.delete("/madira-api/settings/llm", { headers });
+      removeSavedKey();
+      // The SQL delete does not rebuild the in-process graph. Ask the server
+      // to drop the key again so the sommelier returns to the demo model.
+      await request.delete("/madira-api/settings/llm");
     }
+
+    await page.goto("/");
+    await expect(page.getByTestId("mode-banner")).toContainText(/DEMO MODE/i);
   });
 });
