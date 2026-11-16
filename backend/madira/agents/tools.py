@@ -11,23 +11,18 @@ from sqlalchemy import select
 
 from madira import a2ui_ops
 from madira.agents import tracker
+from madira.agents.presenters.inventory import with_inventory
 from madira.agents.presenters.lists import with_list
 from madira.agents.presenters.menu import with_dishes, with_pairings
+from madira.agents.presenters.purchasing import with_orders
 from madira.db import SessionLocal
+from madira.domain.errors import NotFound
+from madira.domain.inventory import service as inventory_service
 from madira.domain.lists import service as lists_service
 from madira.domain.menu import service as menu_service
+from madira.domain.purchasing import service as purchasing_service
 from madira.fixtures_data import ROLEPLAY_OPENER, build_ics
-from madira.models import (
-    InventoryItem,
-    Lesson,
-    POLine,
-    PurchaseOrder,
-    Quiz,
-    QuizAttempt,
-    Supplier,
-    Tasting,
-)
-from madira.money import DEFAULT_CURRENCY
+from madira.models import Lesson, Quiz, QuizAttempt, Supplier, Tasting
 from madira.tenancy import active_venue_id
 from madira.timestamps import format_wall, parse_stamp
 
@@ -75,138 +70,29 @@ def curate_beverage_list(budget: float = 12000, target_margin: float = 3.2, name
     return _dumps(body)
 
 
-def _inventory_rows(session) -> list[dict]:
-    rows = session.scalars(
-        select(InventoryItem).where(InventoryItem.venue_id == _vid()).order_by(InventoryItem.sku)
-    ).all()
-    out = []
-    for item in rows:
-        supplier = item.supplier.name if item.supplier else ""
-        low = item.on_hand < item.par
-        out.append(
-            {
-                "id": item.id,
-                "sku": item.sku,
-                "name": item.name,
-                "category": item.category,
-                "supplier": supplier,
-                "supplier_id": item.supplier_id,
-                "on_hand": item.on_hand,
-                "par": item.par,
-                "unit_cost": item.unit_cost,
-                "currency": item.currency,
-                "depletion_30d": item.depletion_30d,
-                "unit": item.unit,
-                "low": low,
-                "reorder_qty": max(item.par - item.on_hand, 0),
-            }
-        )
-    return out
-
-
 def get_inventory() -> str:
     """Return current stock, par levels, 30-day depletion, and low-stock alerts."""
-    session = _session()
-    try:
-        items = _inventory_rows(session)
-        alerts = [
-            {
-                "sku": i["sku"],
-                "name": i["name"],
-                "on_hand": i["on_hand"],
-                "par": i["par"],
-                "message": f"{i['name']} is at {i['on_hand']} {i['unit']} (par {i['par']})",
-            }
-            for i in items
-            if i["low"]
-        ]
-        ops = a2ui_ops.inventory_surface("Cellar inventory", items, alerts)
-        tracker.record_operations(ops)
-        tracker.complete_delegation("inventory-purchasing")
-        return _dumps({"items": items, "alerts": alerts, "a2ui_operations": ops})
-    finally:
-        session.close()
+    body = with_inventory(inventory_service.snapshot(_vid()))
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("inventory-purchasing")
+    return _dumps(body)
 
 
 def update_stock(sku: str, on_hand: int) -> str:
     """Set on-hand quantity for an inventory SKU (for example W-MUS-01)."""
-    session = _session()
     try:
-        item = session.scalar(
-            select(InventoryItem).where(
-                InventoryItem.venue_id == _vid(),
-                InventoryItem.sku == sku.strip().upper(),
-            )
-        )
-        if item is None:
-            return _dumps({"error": f"unknown sku {sku}"})
-        item.on_hand = int(on_hand)
-        session.commit()
-        return get_inventory()
-    finally:
-        session.close()
+        inventory_service.set_on_hand(_vid(), sku, on_hand)
+    except NotFound as exc:
+        return _dumps({"error": exc.message})
+    return get_inventory()
 
 
 def draft_purchase_orders() -> str:
     """Draft reorder purchase orders grouped by supplier for every SKU below par."""
-    session = _session()
-    vid = _vid()
-    try:
-        items = _inventory_rows(session)
-        lows = [i for i in items if i["low"] and i["reorder_qty"] > 0]
-        grouped: dict[uuid.UUID, list[dict]] = {}
-        for i in lows:
-            grouped.setdefault(i["supplier_id"], []).append(i)
-        orders = []
-        for supplier_id, lines in grouped.items():
-            supplier = session.get(Supplier, supplier_id)
-            if supplier is None or supplier.venue_id != vid:
-                continue
-            po = PurchaseOrder(
-                venue_id=vid,
-                supplier_id=supplier_id,
-                status="draft",
-                notes="Draft only — not transmitted to the supplier.",
-            )
-            session.add(po)
-            session.flush()
-            po_lines = []
-            total = 0
-            for line in lines:
-                qty = line["reorder_qty"]
-                unit_cost = int(line["unit_cost"])
-                line_cost = unit_cost * qty
-                session.add(
-                    POLine(
-                        venue_id=vid,
-                        po_id=po.id,
-                        sku=line["sku"],
-                        name=line["name"],
-                        qty=qty,
-                        unit_cost=unit_cost,
-                        currency=line.get("currency") or DEFAULT_CURRENCY,
-                    )
-                )
-                po_lines.append({**line, "qty": qty, "unit_cost": unit_cost, "line_cost": line_cost})
-                total += line_cost
-            orders.append(
-                {
-                    "id": po.id,
-                    "status": "draft",
-                    "supplier": supplier.name if supplier else "",
-                    "currency": DEFAULT_CURRENCY,
-                    "total": total,
-                    "lines": po_lines,
-                    "notes": po.notes,
-                }
-            )
-        session.commit()
-        ops = a2ui_ops.po_surface("Draft purchase orders", orders)
-        tracker.record_operations(ops)
-        tracker.complete_delegation("inventory-purchasing")
-        return _dumps({"orders": orders, "a2ui_operations": ops})
-    finally:
-        session.close()
+    body = with_orders(purchasing_service.draft(_vid()))
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("inventory-purchasing")
+    return _dumps(body)
 
 
 def get_training_briefing() -> str:

@@ -20,24 +20,9 @@ __all__ = [
     "surface",
     "update_components",
     "update_data_model",
-    "inventory_surface",
-    "po_surface",
     "quiz_surface",
     "briefing_surface",
     "tasting_surface",
-]
-
-INVENTORY_SCHEMA = [
-    {"id": "root", "component": "Column", "children": ["title", "alerts", "table"]},
-    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
-    {"id": "alerts", "component": "StockAlerts", "alerts": {"path": "/alerts"}},
-    {"id": "table", "component": "InventoryTable", "items": {"path": "/items"}},
-]
-
-PO_SCHEMA = [
-    {"id": "root", "component": "Column", "children": ["title", "table"]},
-    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
-    {"id": "table", "component": "PurchaseOrderTable", "orders": {"path": "/orders"}},
 ]
 
 QUIZ_SCHEMA = [
@@ -58,14 +43,6 @@ TASTING_SCHEMA = [
     {"id": "form", "component": "ScheduleForm", "draft": {"path": "/draft"}},
     {"id": "cal", "component": "TastingCalendar", "tastings": {"path": "/tastings"}},
 ]
-
-
-def inventory_surface(title: str, items: list[dict], alerts: list[dict]) -> list[dict[str, Any]]:
-    return surface("inventory", INVENTORY_SCHEMA, {"title": title, "items": items, "alerts": alerts})
-
-
-def po_surface(title: str, orders: list[dict]) -> list[dict[str, Any]]:
-    return surface("purchase-orders", PO_SCHEMA, {"title": title, "orders": orders})
 
 
 def quiz_surface(title: str, quiz: dict) -> list[dict[str, Any]]:
