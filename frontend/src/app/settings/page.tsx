@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { HoverArrow } from "@/components/HoverArrow";
 import {
   ApiError,
   deleteLlmSettings,
@@ -169,6 +170,7 @@ export default function SettingsPage() {
           <div className="flex flex-wrap gap-2">
             <button type="submit" data-testid="settings-save" disabled={busy} className="btn btn-primary">
               {busy ? "Saving…" : "Save key"}
+              <HoverArrow />
             </button>
             <button
               type="button"

@@ -94,7 +94,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="panel p-3">
       <div className="kicker">{label}</div>
-      <div className="mt-1 text-lg font-medium tracking-tight">{value}</div>
+      <div className="stat-num">{value}</div>
     </div>
   );
 }

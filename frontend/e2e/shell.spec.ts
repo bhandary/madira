@@ -43,10 +43,12 @@ test("keyboard focus is visible on the first control", async ({ page }) => {
   expect(parseFloat(focus.width)).toBeGreaterThan(0);
 });
 
-test("mobile sections menu reveals navigation", async ({ page }) => {
+test("mobile more menu reveals suppliers and settings", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/inventory");
-  await expect(page.getByRole("link", { name: "Supplier tastings" })).toBeHidden();
-  await page.getByRole("button", { name: "Sections" }).click();
-  await expect(page.getByRole("link", { name: "Supplier tastings" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Floor" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Supplier tastings" })).toHaveCount(0);
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await expect(page.getByTestId("mobile-menu").getByRole("link", { name: "Supplier tastings" })).toBeVisible();
+  await expect(page.getByTestId("mobile-menu").getByRole("link", { name: "Settings" })).toBeVisible();
 });

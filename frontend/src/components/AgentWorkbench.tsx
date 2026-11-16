@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CopilotChatMessageView, useAgent, useCopilotKit } from "@copilotkit/react-core/v2";
 import { DelegationPanel, type DelegationRow } from "@/components/DelegationPanel";
+import { HoverArrow } from "@/components/HoverArrow";
 import { useStoredThreadId } from "@/lib/thread";
 
 const RUNTIME_AGENT = "head_sommelier";
@@ -256,6 +257,7 @@ function WorkbenchFrame({
           </label>
           <button type="submit" data-testid={`${testId}-submit`} disabled={!ready || busy} className="btn btn-primary">
             {busy ? "Delegating…" : "Run specialists"}
+            <HoverArrow />
           </button>
         </form>
         {error && (

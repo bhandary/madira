@@ -11,7 +11,7 @@ List curation asks for a cellar budget and a target multiple, then shows a summa
 ## How to get to it (user POV)
 
 - Choose `List curation` in the sidebar, or open `http://127.0.0.1:3000/list`.
-- On a narrow viewport, choose `Sections`, then `List curation`.
+- On a narrow viewport, choose the `List` tab.
 
 ## Driving it with Playwright and curl
 

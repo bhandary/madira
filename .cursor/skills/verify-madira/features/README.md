@@ -16,7 +16,7 @@ This directory is the maintained source for verifying Madira's user-facing floor
 
 - Start every recipe from a healthy demo instance. Doctor again after a failed drive.
 - Prefer `data-testid` and the accessible names in the feature file. The sidebar nav labels are `Floor`, `Menu & pairings`, `List curation`, `Inventory`, `Staff training`, `Supplier tastings`, and `Settings`.
-- At 390px width the sidebar is hidden. `Sections` opens `[data-testid=mobile-menu]`. Observed on `/inventory`: `Supplier tastings` was hidden until `Sections` was clicked.
+- At 390px width the sidebar is hidden. A bottom tab bar shows `Floor`, `Menu`, `Cellar`, `List`, and `Team`. `More` opens `[data-testid=mobile-menu]` with `Supplier tastings`, `Settings`, and sign-in. Observed on `/inventory`: `Supplier tastings` was absent until `More` was clicked.
 - Wait until the submit button is hydrated (a `__react` property on the node). An early click GETs the same path with a trailing `?` and does not run the specialist.
 - Wait until `[data-testid=mode-banner]` no longer contains `connecting`.
 - A finished specialist run shows `[data-testid=agent-reply]` with `Head Sommelier here. I delegated to … and they posted surfaces in the well. Review the cards and tables — nothing was emailed or purchased.` The delegation rail shows the specialist name and the visible status `COMPLETE`. While the specialist runs, `[data-testid=agent-working]` reads `Working…`.
@@ -42,7 +42,7 @@ Each feature file starts with an H1 and one paragraph of user-visible behavior, 
 
 ## Features
 
-- [Floor chat](./landing.md) — Head Sommelier chat on `/`, demo banner, sidebar, and the narrow `Sections` menu.
+- [Floor chat](./landing.md) — Head Sommelier chat on `/`, demo banner, sidebar, and the narrow `More` menu.
 - [Menu and pairings](./menu.md) — paste or upload a menu, then dish list and pairing cards.
 - [List curation](./list.md) — budget and target multiple, then the list table and summary.
 - [Inventory](./inventory.md) — adjust a SKU, then draft purchase orders that stay unsent.

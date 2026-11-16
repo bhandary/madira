@@ -17,7 +17,7 @@ export function SommelierChat() {
   }, [agent]);
 
   return (
-    <div className="sommelier-chat panel flex h-[32rem] flex-col overflow-hidden" data-testid="copilot-chat">
+    <div className="sommelier-chat panel flex h-[min(32rem,70dvh)] flex-col overflow-hidden md:h-[32rem]" data-testid="copilot-chat">
       {error ? (
         <p className="banner-error shrink-0 rounded-none border-x-0 border-t-0" role="alert" data-testid="copilot-chat-error">
           {error}

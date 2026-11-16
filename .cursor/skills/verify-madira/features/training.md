@@ -12,7 +12,7 @@ Staff training has three mode buttons. Quiz grades the seeded answers and shows 
 ## How to get to it (user POV)
 
 - Choose `Staff training` in the sidebar, or open `http://127.0.0.1:3000/training`.
-- On a narrow viewport, choose `Sections`, then `Staff training`.
+- On a narrow viewport, choose the `Team` tab.
 - The mode group is labelled `Training mode`. The buttons are `[data-testid=training-briefing]`, `[data-testid=training-quiz]`, and `[data-testid=training-roleplay]`.
 
 ## Driving it with Playwright and curl
