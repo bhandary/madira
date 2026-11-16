@@ -132,6 +132,7 @@ def test_save_validates_stores_ciphertext_and_hides_the_key(client: TestClient, 
     assert API_KEY not in stored.ciphertext
     assert decrypt_secret(stored.ciphertext) == API_KEY
 
+    _sign_in_owner(client, monkeypatch)
     listed = client.get("/settings/llm")
     assert listed.status_code == 200
     assert API_KEY not in listed.text
@@ -177,6 +178,7 @@ def test_failed_rebuild_rolls_back_the_new_key(client: TestClient, monkeypatch):
 def test_delete_falls_back_to_demo(client: TestClient, monkeypatch):
     monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: None)
     assert _save(client).status_code == 200
+    _sign_in_owner(client, monkeypatch)
     response = client.delete("/settings/llm")
     assert response.status_code == 200
     body = response.json()
@@ -256,6 +258,7 @@ def test_save_rebuilds_the_agent_with_the_saved_key(client: TestClient, monkeypa
     assert seen
     assert all(api_key == API_KEY for _, api_key in seen)
     assert all(model == "openai:gpt-4.1-mini" for model, _ in seen)
+    _sign_in_owner(client, monkeypatch)
     agent = _agent_slot.get("agent")
     assert agent is not None
     assert agent.graph is not None

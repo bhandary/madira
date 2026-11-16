@@ -90,7 +90,7 @@ Demo mode uses `DemoChatModel`: it inspects the user message, emits `write_todos
 
 Open **Settings** in the nav to leave demo mode without editing a file or restarting.
 
-1. Sign in as the Owner. In demo mode (no provider key in the environment) the floor runs as the demo Owner, so Settings opens directly. Outside demo mode, a request with no session is 401, and any other role is 403.
+1. Sign in as the Owner. While the model is in demo mode (no environment key, no saved key, and `MADIRA_DEMO_MODE` is not false) the floor runs as the demo Owner, so Settings opens directly. A saved key, an environment key, or `MADIRA_DEMO_MODE=false` turns that off: a request with no session is 401. Any other role is 403.
 2. Choose OpenAI, Anthropic, or Google, optionally a model, and paste an API key. The backend sends one 1-token request to that model before saving, so a key with no credits, quota, or permission is rejected. A rejected key is not stored. If a later sommelier run still fails (rate limit, billing, auth), the page shows that provider message. The API key is never included.
 3. The key is encrypted with Fernet (`MADIRA_SECRET_KEY`, or the dev fallback file) and stored for the Owner's organization. The API returns only a hint such as `ends in …abcd`. Saving or removing a key rebuilds the sommelier immediately.
 
@@ -102,7 +102,7 @@ The Settings end-to-end test runs in demo mode, as the demo Owner. It needs `MAD
 
 ## Sign in
 
-`/login` offers **Continue with Google**. In demo mode the floor, including chat and Settings, runs as the demo Owner without a Google session. Outside demo mode, data routes require a session. When `MADIRA_OWNER_EMAIL` is set, that Google account receives the Owner membership on the default venue at sign-in. Settings, billing, and model keys are Owner only.
+`/login` offers **Continue with Google**. While the model is in demo mode the floor, including chat and Settings, runs as the demo Owner without a Google session. As soon as the model is live (a saved key, an environment key, or `MADIRA_DEMO_MODE=false`), data routes require a session. When `MADIRA_OWNER_EMAIL` is set, that Google account receives the Owner membership on the default venue at sign-in. Settings, billing, and model keys are Owner only. Production should set `MADIRA_DEMO_MODE=false` and connect to Postgres as a non-superuser table owner so row-level security applies.
 
 The browser only talks to the Next.js origin. `/madira-api/*` is already rewritten to FastAPI, so the authorization code is exchanged there and the session cookie is first-party (`madira_session`, HttpOnly, SameSite=Lax, Secure when `MADIRA_PUBLIC_URL` is https, 14 days). Sign out is `POST /auth/logout`.
 

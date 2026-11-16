@@ -61,32 +61,18 @@ def reset(token: Token) -> None:
 
 
 def demo_posture() -> bool:
-    """True when this process serves the fixture demo without a Google session.
+    """True only while the model itself is in demo mode.
 
-    A key saved in Settings switches the model to live, but it does not create
-    a Google identity. ``MADIRA_DEMO_MODE=false`` or a provider key in the
-    environment turns the fallback off: a request with no session is then 401.
+    This is ``resolve_runtime().demo_mode``: no environment provider key, no
+    usable saved credential, and ``MADIRA_DEMO_MODE`` is not false.
+    ``MADIRA_DEMO_MODE=true`` still forces the fixture demo. A saved key, an
+    environment key, or ``MADIRA_DEMO_MODE=false`` makes the model live and
+    turns this fallback off, so a request with no session is 401.
     """
 
-    flag = os.environ.get("MADIRA_DEMO_MODE", "").strip().lower()
-    if flag in {"0", "false", "no", "off"}:
-        return False
-    if flag in {"1", "true", "yes", "on"}:
-        return True
-    provider = os.environ.get("MADIRA_LLM_PROVIDER", "openai").strip().lower()
-    generic = os.environ.get("MADIRA_API_KEY", "").strip()
-    if provider in {"openai", "azure"}:
-        return not (os.environ.get("OPENAI_API_KEY", "").strip() or generic)
-    if provider == "anthropic":
-        return not (os.environ.get("ANTHROPIC_API_KEY", "").strip() or generic)
-    if provider in {"google", "google_genai", "gemini"}:
-        return not (os.environ.get("GOOGLE_API_KEY", "").strip() or generic)
-    return not (
-        generic
-        or os.environ.get("OPENAI_API_KEY", "").strip()
-        or os.environ.get("ANTHROPIC_API_KEY", "").strip()
-        or os.environ.get("GOOGLE_API_KEY", "").strip()
-    )
+    from madira.llm_runtime import resolve_runtime
+
+    return resolve_runtime().demo_mode
 
 
 def _context_from(user: User, membership: Membership, venue: Venue) -> RequestContext:

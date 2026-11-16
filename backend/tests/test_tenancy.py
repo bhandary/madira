@@ -588,6 +588,29 @@ def test_postgres_rls_hides_rows_when_the_setting_is_wrong():
             transaction.rollback()
 
 
+def test_saved_key_turns_off_the_demo_owner(client: TestClient, monkeypatch):
+    from madira.llm_validate import set_key_validator
+
+    monkeypatch.setattr("madira.api.settings.refresh_sommelier_agent", lambda: None)
+    set_key_validator(lambda provider, api_key, model="": None)
+    try:
+        assert client.get("/menus").status_code == 200
+        saved = client.post(
+            "/settings/llm",
+            json={"provider": "openai", "model": "gpt-4.1-mini", "api_key": "sk-tenancy-saved-key"},
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["demo_mode"] is False
+        client.cookies.clear()
+        denied = client.get("/menus")
+        assert denied.status_code == 401
+        assert denied.json()["detail"] == "Sign in required."
+        assert client.get("/settings/llm").status_code == 401
+        assert client.post("/agent/run", json={"message": "hello"}).status_code == 401
+    finally:
+        set_key_validator(None)
+
+
 def test_demo_mode_serves_the_floor_without_a_session(client: TestClient):
     assert os.environ.get("MADIRA_DEMO_MODE", "") == ""
     assert client.get("/inventory").status_code == 200
