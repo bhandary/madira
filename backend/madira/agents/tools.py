@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import uuid
 from datetime import datetime, timedelta
 
@@ -15,14 +14,16 @@ from madira.agents.presenters.inventory import with_inventory
 from madira.agents.presenters.lists import with_list
 from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.purchasing import with_orders
+from madira.agents.presenters.training import with_briefing, with_quiz
 from madira.db import SessionLocal
 from madira.domain.errors import NotFound
 from madira.domain.inventory import service as inventory_service
 from madira.domain.lists import service as lists_service
 from madira.domain.menu import service as menu_service
 from madira.domain.purchasing import service as purchasing_service
-from madira.fixtures_data import ROLEPLAY_OPENER, build_ics
-from madira.models import Lesson, Quiz, QuizAttempt, Supplier, Tasting
+from madira.domain.training import service as training_service
+from madira.fixtures_data import build_ics
+from madira.models import Supplier, Tasting
 from madira.tenancy import active_venue_id
 from madira.timestamps import format_wall, parse_stamp
 
@@ -97,93 +98,27 @@ def draft_purchase_orders() -> str:
 
 def get_training_briefing() -> str:
     """Daily menu pairing briefing and wine/service lessons for waitstaff and bartenders."""
-    session = _session()
-    vid = _vid()
-    try:
-        lessons = [
-            {"id": lesson.id, "slug": lesson.slug, "title": lesson.title, "role": lesson.role, "category": lesson.category, "body": lesson.body}
-            for lesson in session.scalars(select(Lesson).where(Lesson.venue_id == vid)).all()
-        ]
-        quiz = session.scalar(select(Quiz).where(Quiz.venue_id == vid).limit(1))
-        quiz_payload = None
-        if quiz:
-            quiz_payload = {
-                "id": quiz.id,
-                "title": quiz.title,
-                "questions": [
-                    {k: v for k, v in q.items() if k != "answer"}
-                    for q in quiz.questions
-                ],
-            }
-        ops = a2ui_ops.briefing_surface("Staff briefing", lessons)
-        if quiz_payload:
-            ops.extend(a2ui_ops.quiz_surface(quiz_payload["title"], quiz_payload))
-        tracker.record_operations(ops)
-        tracker.complete_delegation("staff-trainer")
-        return _dumps({"lessons": lessons, "quiz": quiz_payload, "roleplay": ROLEPLAY_OPENER, "a2ui_operations": ops})
-    finally:
-        session.close()
+    body = with_briefing(training_service.briefing(_vid()))
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
 
 
 def grade_quiz(answers: str, staff_name: str = "Floor") -> str:
     """Grade a training quiz. `answers` is a comma-separated list of choice indexes (0-based), e.g. '1,2,2,1'."""
-    session = _session()
-    vid = _vid()
-    try:
-        quiz = session.scalar(select(Quiz).where(Quiz.venue_id == vid).limit(1))
-        if quiz is None:
-            return _dumps({"error": "no quiz seeded"})
-        parsed = [int(x.strip()) for x in re.split(r"[,\s]+", answers.strip()) if x.strip() != ""]
-        correct = 0
-        review = []
-        for idx, question in enumerate(quiz.questions):
-            choice = parsed[idx] if idx < len(parsed) else -1
-            ok = choice == question["answer"]
-            correct += int(ok)
-            review.append(
-                {
-                    "id": question["id"],
-                    "prompt": question["prompt"],
-                    "selected": choice,
-                    "correct": question["answer"],
-                    "ok": ok,
-                    "explain": question["explain"],
-                }
-            )
-        score = round(100 * correct / max(len(quiz.questions), 1), 1)
-        attempt = QuizAttempt(venue_id=vid, quiz_id=quiz.id, staff_name=staff_name, answers=parsed, score=score)
-        session.add(attempt)
-        session.commit()
-        payload = {
-            "id": quiz.id,
-            "title": quiz.title,
-            "questions": [{k: v for k, v in q.items() if k != "answer"} for q in quiz.questions],
-            "score": score,
-            "correct": correct,
-            "total": len(quiz.questions),
-            "review": review,
-            "staff_name": staff_name,
-        }
-        quiz_view = dict(payload)
-        ops = a2ui_ops.quiz_surface(f"Quiz result · {score}%", quiz_view)
-        tracker.record_operations(ops)
-        tracker.complete_delegation("staff-trainer")
-        payload["a2ui_operations"] = ops
-        return _dumps(payload)
-    finally:
-        session.close()
+    payload = training_service.grade(_vid(), answers, staff_name=staff_name)
+    if "error" in payload:
+        return _dumps({"error": payload["error"]})
+    body = with_quiz(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
 
 
 def start_roleplay() -> str:
     """Start diner roleplay: the agent plays a skeptical guest at Maison Madira."""
-    payload = {
-        "mode": "roleplay",
-        "persona": "Skeptical diner, ordered the dry-aged ribeye",
-        "opener": ROLEPLAY_OPENER,
-        "first_line": "Hi — I ordered the ribeye. I don't really do wine lists. What are you going to try to sell me?",
-    }
     tracker.complete_delegation("staff-trainer")
-    return _dumps(payload)
+    return _dumps(training_service.roleplay())
 
 
 def list_tastings() -> str:
