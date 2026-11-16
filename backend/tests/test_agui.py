@@ -8,7 +8,8 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from madira.main import app, refresh_sommelier_agent
+from madira.api.agent import refresh_sommelier_agent
+from madira.main import app
 
 
 @pytest.fixture
