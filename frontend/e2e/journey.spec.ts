@@ -30,6 +30,9 @@ test("curate a list under a budget", async ({ page }) => {
   await expect(page.getByTestId("delegate-list-curator")).toBeVisible({ timeout: 90_000 });
   await expect(page.getByTestId("beverage-list-table")).toBeVisible();
   await expect(page.getByTestId("list-summary")).toContainText(/Budget/i);
+  await expect(page.getByTestId("list-summary")).toContainText("$12,000");
+  await expect(page.getByTestId("list-summary")).toContainText("$5,198");
+  await expect(page.getByTestId("list-summary")).toContainText("3.2x");
   await expect(page.getByTestId("beverage-list-table")).toContainText(/wine/i);
 });
 
@@ -59,5 +62,7 @@ test("schedule a supplier tasting with ics draft", async ({ page }) => {
   await expect(page.getByTestId("delegate-supplier-scheduler")).toBeVisible({ timeout: 90_000 });
   await expect(page.getByTestId("tasting-calendar")).toBeVisible();
   await expect(page.getByTestId("ics-block")).toContainText("BEGIN:VCALENDAR");
+  await expect(page.getByTestId("ics-block")).toContainText(/DTSTART:\d{8}T1500/);
+  await expect(page.getByTestId("ics-block")).toContainText(/DTEND:\d{8}T1700/);
   await expect(page.getByTestId("schedule-form")).toContainText(/not sent/i);
 });

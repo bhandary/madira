@@ -194,7 +194,7 @@ def invoke_head_sommelier(message: str, thread_id: str | None = None) -> dict[st
             reset(token)
 
 
-def _invoke_head_sommelier(message: str, thread_id: str | None, venue_id: int) -> dict[str, Any]:
+def _invoke_head_sommelier(message: str, thread_id: str | None, venue_id: uuid.UUID) -> dict[str, Any]:
     tracker.start_run()
     runtime = resolve_runtime()
     agent = build_head_sommelier()
@@ -205,7 +205,7 @@ def _invoke_head_sommelier(message: str, thread_id: str | None, venue_id: int) -
         config={
             "configurable": {
                 "thread_id": thread_id or str(uuid.uuid4()),
-                "madira_venue_id": venue_id,
+                "madira_venue_id": str(venue_id),
             }
         },
     )

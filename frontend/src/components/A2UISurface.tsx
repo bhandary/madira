@@ -2,9 +2,10 @@
 
 import { applyOperations, resolveBinding, type A2UIComponent, type A2UIOperation, type SurfaceState } from "@/lib/a2ui";
 
-function money(n: unknown) {
-  const v = Number(n || 0);
-  return v.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+function money(n: unknown, currency?: unknown) {
+  const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
+  const major = Number(n || 0) / 100;
+  return major.toLocaleString(undefined, { style: "currency", currency: code, maximumFractionDigits: 0 });
 }
 
 function Badge({ children, tone = "draft" }: { children: React.ReactNode; tone?: "draft" | "wine" | "ok" | "alert" }) {
@@ -25,7 +26,7 @@ function PairingGrid({ dishes }: { dishes: unknown }) {
           </div>
           <p className="mt-1 text-sm text-muted">
             Flavor profile: {String(dish.flavor_profile || "")}
-            {dish.price ? ` · ${money(dish.price)}` : ""}
+            {dish.price ? ` · ${money(dish.price, dish.currency)}` : ""}
           </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {((dish.pairings as Record<string, unknown>[]) || []).map((p, j) => (
@@ -40,8 +41,8 @@ function PairingGrid({ dishes }: { dishes: unknown }) {
                 </div>
                 <p className="mt-2 text-sm leading-5">{String(p.rationale)}</p>
                 <div className="mt-2 text-xs text-muted">
-                  {p.glass_price ? `Glass ${money(p.glass_price)}` : ""}
-                  {p.bottle_price ? ` · Bottle ${money(p.bottle_price)}` : ""}
+                  {p.glass_price ? `Glass ${money(p.glass_price, p.currency || dish.currency)}` : ""}
+                  {p.bottle_price ? ` · Bottle ${money(p.bottle_price, p.currency || dish.currency)}` : ""}
                 </div>
               </div>
             ))}
@@ -60,7 +61,7 @@ function DishList({ dishes }: { dishes: unknown }) {
         <li key={i} className="px-3 py-2.5">
           <div className="text-sm font-medium">{String(d.name)}</div>
           <div className="text-sm text-muted">
-            {String(d.course)} · {String(d.flavor_profile)} {d.price ? `· ${money(d.price)}` : ""}
+            {String(d.course)} · {String(d.flavor_profile)} {d.price ? `· ${money(d.price, d.currency)}` : ""}
           </div>
         </li>
       ))}
@@ -73,15 +74,15 @@ function ListSummary(props: Record<string, unknown>) {
   const gaps = Array.isArray(props.gaps) ? props.gaps : [];
   return (
     <div className="mb-4 grid gap-2 sm:grid-cols-4" data-testid="list-summary">
-      <Stat label="Budget" value={money(props.budget)} />
-      <Stat label="Spent" value={money(props.spent)} />
-      <Stat label="Remaining" value={money(props.remaining)} />
+      <Stat label="Budget" value={money(props.budget, props.currency)} />
+      <Stat label="Spent" value={money(props.spent, props.currency)} />
+      <Stat label="Remaining" value={money(props.remaining, props.currency)} />
       <Stat label="Target multiple" value={`${props.targetMargin || props.target_margin || ""}x`} />
       <div className="panel p-3 text-sm sm:col-span-4">
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(coverage).map(([k, v]) => (
             <Badge key={k}>
-              {k} {v.count} · {money(v.spend)}
+              {k} {v.count} · {money(v.spend, props.currency)}
             </Badge>
           ))}
         </div>
@@ -124,9 +125,9 @@ function BeverageListTable({ items }: { items: unknown }) {
                 {String(row.region)}
                 <div className="text-xs text-muted">{String(row.style)}</div>
               </td>
-              <td>{money(row.cost)}</td>
-              <td>{row.pour_price ? money(row.pour_price) : "—"}</td>
-              <td>{row.bottle_price ? money(row.bottle_price) : "—"}</td>
+              <td>{money(row.cost, row.currency)}</td>
+              <td>{row.pour_price ? money(row.pour_price, row.currency) : "—"}</td>
+              <td>{row.bottle_price ? money(row.bottle_price, row.currency) : "—"}</td>
               <td>{row.margin_pct ? `${row.margin_pct}%` : `${row.pour_multiple || ""}x`}</td>
             </tr>
           ))}
@@ -191,11 +192,11 @@ function PurchaseOrderTable({ orders }: { orders: unknown }) {
             <h3 className="text-sm font-medium">{String(po.supplier)}</h3>
             <Badge>DRAFT · not sent</Badge>
           </div>
-          <div className="mt-1 text-sm text-muted">Total {money(po.total)}</div>
+          <div className="mt-1 text-sm text-muted">Total {money(po.total, po.currency)}</div>
           <ul className="mt-2 space-y-1 text-sm">
             {((po.lines as Record<string, unknown>[]) || []).map((line, i) => (
               <li key={i}>
-                {String(line.sku)} · {String(line.name)} × {String(line.qty)} @ {money(line.unit_cost)}
+                {String(line.sku)} · {String(line.name)} × {String(line.qty)} @ {money(line.unit_cost, line.currency || po.currency)}
               </li>
             ))}
           </ul>

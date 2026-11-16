@@ -10,6 +10,7 @@ still filter on ``venue_id``.
 from __future__ import annotations
 
 import os
+import uuid
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 
@@ -39,11 +40,11 @@ _request: ContextVar[RequestContext | None] = ContextVar("madira_request_context
 
 @dataclass(frozen=True)
 class RequestContext:
-    user_id: int
+    user_id: uuid.UUID
     email: str
     name: str
-    venue_id: int
-    organization_id: int
+    venue_id: uuid.UUID
+    organization_id: uuid.UUID
     role: str
 
 
@@ -180,7 +181,13 @@ def grant_configured_owner(session: Session, user: User) -> None:
         membership.role = OWNER
 
 
-def active_venue_id() -> int:
+def _as_uuid(value) -> uuid.UUID:
+    if isinstance(value, uuid.UUID):
+        return value
+    return uuid.UUID(str(value))
+
+
+def active_venue_id() -> uuid.UUID:
     ctx = _request.get()
     if ctx is not None:
         return ctx.venue_id
@@ -193,13 +200,13 @@ def active_venue_id() -> int:
     if isinstance(config, dict):
         raw = (config.get("configurable") or {}).get("madira_venue_id")
         if raw:
-            return int(raw)
+            return _as_uuid(raw)
     if demo_posture():
         return ensure_demo_tenant().venue_id
     raise RuntimeError("No venue in the run context.")
 
 
-def current_organization_id() -> int:
+def current_organization_id() -> uuid.UUID:
     ctx = _request.get()
     if ctx is not None:
         return ctx.organization_id
@@ -208,7 +215,7 @@ def current_organization_id() -> int:
     return ensure_demo_tenant().organization_id
 
 
-def scoped_get(session: Session, model, pk: int):
+def scoped_get(session: Session, model, pk: uuid.UUID):
     row = session.get(model, pk)
     if row is None or getattr(row, "venue_id", None) != active_venue_id():
         return None

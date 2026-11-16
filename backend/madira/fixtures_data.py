@@ -498,30 +498,56 @@ CURATED_LIST_ITEMS = [
 
 
 def curate_list(budget: float = 12000, target_margin: float = 3.2) -> dict:
+    from decimal import Decimal
+
+    from madira.money import (
+        DEFAULT_CURRENCY,
+        bottle_multiple,
+        format_whole,
+        margin_percent,
+        pour_multiple,
+        to_minor,
+        within_buying_room,
+    )
+
+    budget_minor = to_minor(budget)
     items = []
-    spent = 0.0
+    spent = 0
     # Assume 12 bottles (or case-equivalent) per wine/sake SKU, 24 for beer, 2 for spirits.
     pack = {"wine": 12, "beer": 24, "spirit": 2, "sake": 12}
     for row in CURATED_LIST_ITEMS:
         qty = pack.get(row["category"], 6)
-        line_cost = row["cost"] * qty
-        if spent + line_cost > budget * 1.02 and spent > budget * 0.6:
+        cost = to_minor(row["cost"])
+        pour = to_minor(row["pour_price"])
+        bottle = to_minor(row["bottle_price"])
+        line_cost = cost * qty
+        if not within_buying_room(spent, line_cost, budget_minor):
             continue
-        pour = row["pour_price"]
-        bottle = row["bottle_price"]
-        cost = row["cost"]
         if pour:
-            margin = round(pour / max(cost / 5, 0.01), 2)  # ~5oz pour from 750
+            multiple = pour_multiple(pour, cost)
         elif bottle:
-            margin = round(bottle / max(cost, 0.01), 2)
+            multiple = bottle_multiple(bottle, cost)
         else:
-            margin = target_margin
-        items.append({**row, "qty": qty, "line_cost": round(line_cost, 2), "margin_pct": round((1 - 1 / max(margin, 0.01)) * 100, 1), "pour_multiple": margin})
+            multiple = Decimal(str(target_margin))
+        copied = {key: value for key, value in row.items() if key not in {"cost", "pour_price", "bottle_price"}}
+        items.append(
+            {
+                **copied,
+                "cost": cost,
+                "pour_price": pour,
+                "bottle_price": bottle,
+                "currency": DEFAULT_CURRENCY,
+                "qty": qty,
+                "line_cost": line_cost,
+                "margin_pct": float(margin_percent(multiple)),
+                "pour_multiple": float(multiple),
+            }
+        )
         spent += line_cost
 
     coverage = {}
     for item in items:
-        coverage.setdefault(item["category"], {"count": 0, "regions": set(), "styles": set(), "spend": 0.0})
+        coverage.setdefault(item["category"], {"count": 0, "regions": set(), "styles": set(), "spend": 0})
         coverage[item["category"]]["count"] += 1
         coverage[item["category"]]["regions"].add(item["region"])
         coverage[item["category"]]["styles"].add(item["style"])
@@ -531,7 +557,7 @@ def curate_list(budget: float = 12000, target_margin: float = 3.2) -> dict:
             "count": v["count"],
             "regions": sorted(v["regions"]),
             "styles": sorted(v["styles"]),
-            "spend": round(v["spend"], 2),
+            "spend": v["spend"],
         }
         for k, v in coverage.items()
     }
@@ -539,17 +565,21 @@ def curate_list(budget: float = 12000, target_margin: float = 3.2) -> dict:
     gaps = sorted(expected - set(coverage_out))
     if coverage_out.get("wine", {}).get("count", 0) < 6:
         gaps.append("more still wine breadth (need 6+)")
-    remaining = round(budget - spent, 2)
+    remaining = budget_minor - spent
     return {
         "name": "Maison Madira autumn list",
-        "budget": budget,
+        "budget": budget_minor,
+        "currency": DEFAULT_CURRENCY,
         "target_margin": target_margin,
-        "spent": round(spent, 2),
+        "spent": spent,
         "remaining": remaining,
         "items": items,
         "coverage": coverage_out,
         "gaps": gaps or ["none — categories covered"],
-        "notes": f"Buys stay at ${spent:,.0f} of ${budget:,.0f}. Target pour/bottle multiple {target_margin}x.",
+        "notes": (
+            f"Buys stay at ${format_whole(spent)} of ${format_whole(budget_minor)}. "
+            f"Target pour/bottle multiple {target_margin}x."
+        ),
     }
 
 

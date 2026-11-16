@@ -155,6 +155,7 @@ def list_surface(payload: dict) -> list[dict[str, Any]]:
             "budget": payload.get("budget"),
             "spent": payload.get("spent"),
             "remaining": payload.get("remaining"),
+            "currency": payload.get("currency") or "USD",
             "target_margin": payload.get("target_margin"),
             "coverage": payload.get("coverage"),
             "gaps": payload.get("gaps"),

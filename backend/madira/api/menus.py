@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -59,7 +60,7 @@ def list_menus() -> dict[str, Any]:
     session = SessionLocal()
     try:
         menus = session.scalars(
-            select(Menu).where(Menu.venue_id == active_venue_id()).order_by(Menu.id.desc())
+            select(Menu).where(Menu.venue_id == active_venue_id()).order_by(Menu.created_at.desc(), Menu.id.desc())
         ).all()
         return {
             "menus": [
@@ -78,7 +79,7 @@ def list_menus() -> dict[str, Any]:
 
 
 @router.get("/menus/{menu_id}", dependencies=[require(Capability.FLOOR)])
-def get_menu(menu_id: int) -> dict[str, Any]:
+def get_menu(menu_id: uuid.UUID) -> dict[str, Any]:
     session = SessionLocal()
     try:
         menu = scoped_get(session, Menu, menu_id)
@@ -93,6 +94,7 @@ def get_menu(menu_id: int) -> dict[str, Any]:
                     "course": dish.course,
                     "flavor_profile": dish.flavor_profile,
                     "price": dish.price,
+                    "currency": dish.currency,
                     "pairings": [
                         {
                             "category": p.category,
@@ -104,6 +106,7 @@ def get_menu(menu_id: int) -> dict[str, Any]:
                             "price_tier": p.price_tier,
                             "glass_price": p.glass_price,
                             "bottle_price": p.bottle_price,
+                            "currency": p.currency,
                         }
                         for p in dish.pairings
                     ],
@@ -122,11 +125,11 @@ def get_menu(menu_id: int) -> dict[str, Any]:
 
 
 @router.post("/menus/{menu_id}/pair", dependencies=[require(Capability.EDIT)])
-def pair_menu(menu_id: int) -> dict[str, Any]:
+def pair_menu(menu_id: uuid.UUID) -> dict[str, Any]:
     session = SessionLocal()
     try:
         if scoped_get(session, Menu, menu_id) is None:
             raise HTTPException(404, "menu not found")
     finally:
         session.close()
-    return json.loads(recommend_pairings(menu_id))
+    return json.loads(recommend_pairings(str(menu_id)))

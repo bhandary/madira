@@ -89,7 +89,7 @@ def _open_session(session):
     return SessionLocal(), True
 
 
-def _organization_id(session) -> int:
+def _organization_id(session):
     from madira.tenancy import current_organization_id
 
     return current_organization_id()
@@ -129,7 +129,7 @@ def _upsert(provider: str, model: str, ciphertext: str, key_last4: str) -> None:
     session = SessionLocal()
     try:
         row = _credential_row(session)
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(timezone.utc)
         if row is None:
             session.add(
                 LlmCredential(

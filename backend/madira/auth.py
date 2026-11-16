@@ -69,7 +69,7 @@ def _now() -> int:
 
 
 def utcnow() -> datetime:
-    return datetime.fromtimestamp(_now(), timezone.utc).replace(tzinfo=None)
+    return datetime.fromtimestamp(_now(), timezone.utc)
 
 
 def _env(name: str) -> str:

@@ -25,7 +25,9 @@ def po_list() -> dict[str, Any]:
     session = SessionLocal()
     try:
         rows = session.scalars(
-            select(PurchaseOrder).where(PurchaseOrder.venue_id == active_venue_id()).order_by(PurchaseOrder.id.desc())
+            select(PurchaseOrder)
+            .where(PurchaseOrder.venue_id == active_venue_id())
+            .order_by(PurchaseOrder.created_at.desc(), PurchaseOrder.id.desc())
         ).all()
         return {
             "orders": [
@@ -35,7 +37,13 @@ def po_list() -> dict[str, Any]:
                     "supplier": po.supplier.name if po.supplier else "",
                     "notes": po.notes,
                     "lines": [
-                        {"sku": line.sku, "name": line.name, "qty": line.qty, "unit_cost": line.unit_cost}
+                        {
+                            "sku": line.sku,
+                            "name": line.name,
+                            "qty": line.qty,
+                            "unit_cost": line.unit_cost,
+                            "currency": line.currency,
+                        }
                         for line in po.lines
                     ],
                 }

@@ -41,7 +41,9 @@ def training_progress() -> dict[str, Any]:
     session = SessionLocal()
     try:
         attempts = session.scalars(
-            select(QuizAttempt).where(QuizAttempt.venue_id == active_venue_id()).order_by(QuizAttempt.id.desc())
+            select(QuizAttempt)
+            .where(QuizAttempt.venue_id == active_venue_id())
+            .order_by(QuizAttempt.created_at.desc(), QuizAttempt.id.desc())
         ).all()
         return {
             "attempts": [

@@ -32,7 +32,9 @@ def lists() -> dict[str, Any]:
     session = SessionLocal()
     try:
         rows = session.scalars(
-            select(BeverageList).where(BeverageList.venue_id == active_venue_id()).order_by(BeverageList.id.desc())
+            select(BeverageList)
+            .where(BeverageList.venue_id == active_venue_id())
+            .order_by(BeverageList.created_at.desc(), BeverageList.id.desc())
         ).all()
         return {
             "lists": [
@@ -40,6 +42,7 @@ def lists() -> dict[str, Any]:
                     "id": row.id,
                     "name": row.name,
                     "budget": row.budget,
+                    "currency": row.currency,
                     "target_margin": row.target_margin,
                     "item_count": len(row.items),
                     "notes": row.notes,
@@ -53,6 +56,7 @@ def lists() -> dict[str, Any]:
                             "cost": i.cost,
                             "pour_price": i.pour_price,
                             "bottle_price": i.bottle_price,
+                            "currency": i.currency,
                             "margin_pct": i.margin_pct,
                         }
                         for i in row.items

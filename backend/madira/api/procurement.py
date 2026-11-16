@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -46,7 +47,7 @@ def tastings_create(body: TastingBody) -> dict[str, Any]:
 
 
 @router.get("/tastings/{tasting_id}/ics", dependencies=[require(Capability.RECORDS)])
-def tasting_ics(tasting_id: int) -> PlainTextResponse:
+def tasting_ics(tasting_id: uuid.UUID) -> PlainTextResponse:
     session = SessionLocal()
     try:
         tasting = scoped_get(session, Tasting, tasting_id)

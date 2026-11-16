@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, select
@@ -11,7 +12,9 @@ from sqlalchemy import delete, select
 from madira import a2ui_ops
 from madira.agents import tracker
 from madira.db import SessionLocal
+from madira.money import DEFAULT_CURRENCY, to_minor
 from madira.tenancy import active_venue_id
+from madira.timestamps import format_wall, parse_stamp
 from madira.fixtures_data import (
     QUIZ,
     ROLEPLAY_OPENER,
@@ -45,8 +48,24 @@ def _dumps(payload: dict) -> str:
     return json.dumps(payload, default=str)
 
 
-def _vid() -> int:
+def _vid() -> uuid.UUID:
     return active_venue_id()
+
+
+def _menu_key(menu_id: str | uuid.UUID | None) -> uuid.UUID | None:
+    if menu_id is None or menu_id == "":
+        return None
+    if isinstance(menu_id, uuid.UUID):
+        return menu_id
+    return uuid.UUID(str(menu_id))
+
+
+def _priced(row: dict, *fields: str) -> dict:
+    copied = dict(row)
+    for field in fields:
+        copied[field] = to_minor(copied.get(field) or 0)
+    copied["currency"] = DEFAULT_CURRENCY
+    return copied
 
 
 def parse_menu(text: str, source_name: str = "pasted") -> str:
@@ -67,7 +86,7 @@ def parse_menu(text: str, source_name: str = "pasted") -> str:
         session.flush()
         dishes_out = []
         for row in parsed["dishes"]:
-            dish = Dish(venue_id=vid, menu_id=menu.id, **row)
+            dish = Dish(venue_id=vid, menu_id=menu.id, **_priced(row, "price"))
             session.add(dish)
             session.flush()
             dishes_out.append(
@@ -78,6 +97,7 @@ def parse_menu(text: str, source_name: str = "pasted") -> str:
                     "description": dish.description,
                     "flavor_profile": dish.flavor_profile,
                     "price": dish.price,
+                    "currency": dish.currency,
                 }
             )
         session.commit()
@@ -103,44 +123,52 @@ def parse_menu(text: str, source_name: str = "pasted") -> str:
         session.close()
 
 
-def recommend_pairings(menu_id: int = 0) -> str:
+def recommend_pairings(menu_id: str = "") -> str:
     """Recommend wine, beer, spirit, and sake pairings for each dish on a menu, with rationale and price-tier fit."""
     session = _session()
     vid = _vid()
     try:
         menu = None
-        if menu_id:
-            menu = session.get(Menu, menu_id)
+        key = _menu_key(menu_id)
+        if key is not None:
+            menu = session.get(Menu, key)
             if menu is None or menu.venue_id != vid:
                 return _dumps({"error": "menu not found"})
         else:
-            menu = session.scalar(select(Menu).where(Menu.venue_id == vid).order_by(Menu.id.desc()))
+            menu = session.scalar(
+                select(Menu).where(Menu.venue_id == vid).order_by(Menu.created_at.desc(), Menu.id.desc())
+            )
         if menu is None:
             parse_menu("", "demo")
             session.expire_all()
-            menu = session.scalar(select(Menu).where(Menu.venue_id == vid).order_by(Menu.id.desc()))
+            menu = session.scalar(
+                select(Menu).where(Menu.venue_id == vid).order_by(Menu.created_at.desc(), Menu.id.desc())
+            )
         dishes = list(menu.dishes)
         dish_payload = [
             {"name": d.name, "flavor_profile": d.flavor_profile, "price": d.price, "course": d.course}
             for d in dishes
         ]
         planned = pairings_for_dishes(dish_payload)
-        for dish, block in zip(dishes, planned):
-            session.execute(delete(Pairing).where(Pairing.dish_id == dish.id, Pairing.venue_id == vid))
-            for p in block["pairings"]:
-                session.add(Pairing(venue_id=vid, dish_id=dish.id, **p))
-        session.commit()
         cards = []
         for dish, block in zip(dishes, planned):
+            session.execute(delete(Pairing).where(Pairing.dish_id == dish.id, Pairing.venue_id == vid))
+            stored = []
+            for raw in block["pairings"]:
+                priced = _priced(raw, "glass_price", "bottle_price")
+                session.add(Pairing(venue_id=vid, dish_id=dish.id, **priced))
+                stored.append(priced)
             cards.append(
                 {
                     "dish": dish.name,
                     "course": dish.course,
                     "flavor_profile": dish.flavor_profile,
                     "price": dish.price,
-                    "pairings": block["pairings"],
+                    "currency": dish.currency,
+                    "pairings": stored,
                 }
             )
+        session.commit()
         ops = a2ui_ops.pairings_surface(f"Pairings · {menu.name}", cards)
         tracker.record_operations(ops)
         tracker.complete_delegation("pairing-sommelier")
@@ -156,7 +184,14 @@ def curate_beverage_list(budget: float = 12000, target_margin: float = 3.2, name
     session = _session()
     vid = _vid()
     try:
-        bl = BeverageList(venue_id=vid, name=name, budget=budget, target_margin=target_margin, notes=payload["notes"])
+        bl = BeverageList(
+            venue_id=vid,
+            name=name,
+            budget=payload["budget"],
+            currency=payload["currency"],
+            target_margin=target_margin,
+            notes=payload["notes"],
+        )
         session.add(bl)
         session.flush()
         for item in payload["items"]:
@@ -173,6 +208,7 @@ def curate_beverage_list(budget: float = 12000, target_margin: float = 3.2, name
                     cost=item["cost"],
                     pour_price=item["pour_price"],
                     bottle_price=item["bottle_price"],
+                    currency=item["currency"],
                     margin_pct=item["margin_pct"],
                 )
             )
@@ -206,6 +242,7 @@ def _inventory_rows(session) -> list[dict]:
                 "on_hand": item.on_hand,
                 "par": item.par,
                 "unit_cost": item.unit_cost,
+                "currency": item.currency,
                 "depletion_30d": item.depletion_30d,
                 "unit": item.unit,
                 "low": low,
@@ -265,7 +302,7 @@ def draft_purchase_orders() -> str:
     try:
         items = _inventory_rows(session)
         lows = [i for i in items if i["low"] and i["reorder_qty"] > 0]
-        grouped: dict[int, list[dict]] = {}
+        grouped: dict[uuid.UUID, list[dict]] = {}
         for i in lows:
             grouped.setdefault(i["supplier_id"], []).append(i)
         orders = []
@@ -282,9 +319,11 @@ def draft_purchase_orders() -> str:
             session.add(po)
             session.flush()
             po_lines = []
-            total = 0.0
+            total = 0
             for line in lines:
                 qty = line["reorder_qty"]
+                unit_cost = int(line["unit_cost"])
+                line_cost = unit_cost * qty
                 session.add(
                     POLine(
                         venue_id=vid,
@@ -292,17 +331,19 @@ def draft_purchase_orders() -> str:
                         sku=line["sku"],
                         name=line["name"],
                         qty=qty,
-                        unit_cost=line["unit_cost"],
+                        unit_cost=unit_cost,
+                        currency=line.get("currency") or DEFAULT_CURRENCY,
                     )
                 )
-                po_lines.append({**line, "qty": qty, "line_cost": round(qty * line["unit_cost"], 2)})
-                total += qty * line["unit_cost"]
+                po_lines.append({**line, "qty": qty, "unit_cost": unit_cost, "line_cost": line_cost})
+                total += line_cost
             orders.append(
                 {
                     "id": po.id,
                     "status": "draft",
                     "supplier": supplier.name if supplier else "",
-                    "total": round(total, 2),
+                    "currency": DEFAULT_CURRENCY,
+                    "total": total,
                     "lines": po_lines,
                     "notes": po.notes,
                 }
@@ -417,8 +458,8 @@ def list_tastings() -> str:
             {
                 "id": t.id,
                 "title": t.title,
-                "starts_at": t.starts_at,
-                "ends_at": t.ends_at,
+                "starts_at": format_wall(t.starts_at),
+                "ends_at": format_wall(t.ends_at),
                 "location": t.location,
                 "notes": t.notes,
                 "supplier": t.supplier.name if t.supplier else "",
@@ -458,6 +499,8 @@ def schedule_tasting(
         if not ends_at:
             ends_at = starts_at
         ics = build_ics(title, starts_at, ends_at, location, notes)
+        start_at = parse_stamp(starts_at)
+        end_at = parse_stamp(ends_at)
         tasting = session.scalar(
             select(Tasting).where(
                 Tasting.venue_id == vid,
@@ -470,16 +513,16 @@ def schedule_tasting(
                 venue_id=vid,
                 supplier_id=supplier.id,
                 title=title,
-                starts_at=starts_at,
-                ends_at=ends_at,
+                starts_at=start_at,
+                ends_at=end_at,
                 location=location,
                 notes=notes,
                 ics=ics,
             )
             session.add(tasting)
         else:
-            tasting.starts_at = starts_at
-            tasting.ends_at = ends_at
+            tasting.starts_at = start_at
+            tasting.ends_at = end_at
             tasting.location = location
             tasting.notes = notes
             tasting.ics = ics
@@ -500,8 +543,8 @@ def schedule_tasting(
             {
                 "id": t.id,
                 "title": t.title,
-                "starts_at": t.starts_at,
-                "ends_at": t.ends_at,
+                "starts_at": format_wall(t.starts_at),
+                "ends_at": format_wall(t.ends_at),
                 "location": t.location,
                 "notes": t.notes,
                 "supplier": t.supplier.name if t.supplier else "",

@@ -570,7 +570,10 @@ def test_postgres_rls_hides_rows_when_the_setting_is_wrong():
         transaction = conn.begin()
         try:
             conn.execute(text("SET LOCAL ROLE madira_app"))
-            conn.execute(text("SELECT set_config('app.venue_id', :venue_id, true)"), {"venue_id": "999999"})
+            conn.execute(
+                text("SELECT set_config('app.venue_id', :venue_id, true)"),
+                {"venue_id": "00000000-0000-0000-0000-000000000001"},
+            )
             hidden = conn.execute(text("SELECT count(*) FROM menus")).scalar()
             print(f"RLS wrong app.venue_id count={hidden}")
             assert hidden == 0
