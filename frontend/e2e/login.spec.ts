@@ -97,7 +97,7 @@ test("shell shows sign-in when signed out and the account when signed in", async
   await expect(aside.getByTestId("account-name")).toHaveText("Ada <img src=x onerror=alert(1)>");
   await expect(aside.getByTestId("account-avatar")).toHaveText("A");
   await expect(aside.locator("img")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "The floor program, delegated." })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Ask the Head Sommelier" })).toBeVisible();
 
   await unmockAuth(page);
   await mockAuth(page, {
