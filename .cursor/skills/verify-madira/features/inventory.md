@@ -12,7 +12,7 @@ Inventory shows the seeded cellar, lets the floor change a SKU's on-hand count i
 ## How to get to it (user POV)
 
 - Choose `Inventory` in the sidebar, or open `http://127.0.0.1:3000/inventory`.
-- On a narrow viewport, choose `Sections`, then `Inventory`. Opening `Sections` on this page is what showed `Supplier tastings`.
+- On a narrow viewport, choose the `Cellar` tab (`/inventory`). Opening `More` on this page shows `Supplier tastings`.
 
 ## Driving it with Playwright and curl
 

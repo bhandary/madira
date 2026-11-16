@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AccountMenu, useAccount } from "@/components/AccountMenu";
+import { HoverArrow } from "@/components/HoverArrow";
 import { getAuthConfig } from "@/lib/api";
 
 const ERRORS: Record<string, string> = {
@@ -69,9 +70,10 @@ export function LoginPanel({ error }: { error: string }) {
       {user ? (
         <div className="panel px-3 py-2">
           <AccountMenu user={user} onSignOut={() => void signOut()} />
-          <p className="px-1 pb-2 text-sm text-muted">
-            <Link href="/" className="underline-offset-2 hover:underline">
+          <p className="px-1 pb-2 text-sm">
+            <Link href="/" className="text-link inline-flex items-center">
               Back to the floor
+              <HoverArrow />
             </Link>
           </p>
         </div>
@@ -84,9 +86,10 @@ export function LoginPanel({ error }: { error: string }) {
         </p>
       ) : configured ? (
         <div className="panel p-4">
-          <a href="/madira-api/auth/google" className="btn btn-secondary w-full gap-2" data-testid="google-sign-in">
+          <a href="/madira-api/auth/google" className="btn btn-secondary w-full" data-testid="google-sign-in">
             <GoogleMark />
             Continue with Google
+            <HoverArrow />
           </a>
         </div>
       ) : (

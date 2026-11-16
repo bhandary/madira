@@ -1,13 +1,79 @@
 .sommelier-chat {
   min-width: 0;
   max-width: 100%;
+  color: var(--md-ink);
+  background: var(--md-surface);
+  --background: var(--md-surface);
+  --foreground: var(--md-ink);
+  --card: var(--md-surface);
+  --card-foreground: var(--md-ink);
+  --popover: var(--md-surface);
+  --popover-foreground: var(--md-ink);
+  --primary: var(--md-action);
+  --primary-foreground: #fff;
+  --secondary: var(--md-surface-2);
+  --secondary-foreground: var(--md-ink);
+  --muted: var(--md-brand-quiet);
+  --muted-foreground: var(--md-text);
+  --accent: var(--md-brand-quiet);
+  --accent-foreground: var(--md-ink);
+  --destructive: var(--md-alert);
+  --border: var(--md-border);
+  --input: var(--md-input-border);
+  --ring: var(--md-focus);
+  --radius: 6px;
+  --cpk-default-font-family: var(--font-inter-tight), "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+  --cpk-font-sans: var(--font-inter-tight), "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+  --cpk-font-weight-normal: 300;
+  --cpk-font-weight-medium: 400;
+  --cpk-font-weight-semibold: 400;
+  --cpk-font-weight-bold: 400;
+}
+
+.sommelier-chat [data-copilotkit] {
+  color: var(--md-ink);
+  --background: var(--md-surface);
+  --foreground: var(--md-ink);
+  --card: var(--md-surface);
+  --card-foreground: var(--md-ink);
+  --popover: var(--md-surface);
+  --popover-foreground: var(--md-ink);
+  --primary: var(--md-action);
+  --primary-foreground: #fff;
+  --secondary: var(--md-surface-2);
+  --secondary-foreground: var(--md-ink);
+  --muted: var(--md-brand-quiet);
+  --muted-foreground: var(--md-text);
+  --accent: var(--md-brand-quiet);
+  --accent-foreground: var(--md-ink);
+  --destructive: var(--md-alert);
+  --border: var(--md-border);
+  --input: var(--md-input-border);
+  --ring: var(--md-focus);
+}
+
+.sommelier-chat h1 {
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--md-ink);
 }
 
 .sommelier-chat .copilotKitInput {
-  border: 1px solid #2c2e36 !important;
-  border-radius: 8px !important;
-  background: #121318 !important;
-  box-shadow: none !important;
+  border: 1px solid var(--md-border) !important;
+  border-radius: 6px !important;
+  background: var(--md-input-bg) !important;
+  box-shadow: var(--md-shadow-xs) !important;
+  color: var(--md-ink);
+}
+
+.sommelier-chat .copilotKitInput textarea {
+  color: var(--md-ink);
+  font-weight: 300;
+}
+
+.sommelier-chat .copilotKitInput textarea::placeholder {
+  color: var(--md-subdued) !important;
+  opacity: 1;
 }
 
 .sommelier-chat .copilotKitMessages,
@@ -17,10 +83,40 @@
 .sommelier-chat [data-copilotkit] {
   max-width: 100%;
   min-width: 0;
-  color: #f4f4f5;
+  color: var(--md-ink);
 }
 
 .sommelier-chat .copilotKitAssistantMessage,
 .sommelier-chat .copilotKitUserMessage {
   overflow-wrap: anywhere;
+}
+
+.sommelier-chat [data-testid="copilot-send-button"],
+.sommelier-chat [data-testid="copilot-add-menu-button"] {
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.sommelier-chat [data-testid="copilot-send-button"] {
+  border-radius: 4px !important;
+  background: var(--md-action) !important;
+  color: #fff !important;
+}
+
+.sommelier-chat [data-testid="copilot-send-button"]:hover:not(:disabled) {
+  background: var(--md-action-hover) !important;
+  opacity: 1 !important;
+}
+
+.sommelier-chat [data-testid="copilot-add-menu-button"] {
+  color: var(--md-text) !important;
+}
+
+.sommelier-chat [data-testid="copilot-send-button"]:focus-visible,
+.sommelier-chat [data-testid="copilot-add-menu-button"]:focus-visible,
+.sommelier-chat .copilotKitInput textarea:focus-visible {
+  outline: 3px solid var(--md-focus) !important;
+  outline-offset: 1px !important;
 }

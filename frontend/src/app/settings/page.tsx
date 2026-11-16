@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { HoverArrow } from "@/components/HoverArrow";
 import {
   clearAdminToken,
   deleteLlmSettings,
@@ -153,6 +154,7 @@ export default function SettingsPage() {
           </label>
           <button type="submit" data-testid="settings-unlock" disabled={busy} className="btn btn-primary">
             {busy ? "Checking…" : "Unlock"}
+            <HoverArrow />
           </button>
           {error && (
             <p className="banner-error" role="alert" data-testid="settings-error">
@@ -223,6 +225,7 @@ export default function SettingsPage() {
           <div className="flex flex-wrap gap-2">
             <button type="submit" data-testid="settings-save" disabled={busy} className="btn btn-primary">
               {busy ? "Saving…" : "Save key"}
+              <HoverArrow />
             </button>
             <button
               type="button"

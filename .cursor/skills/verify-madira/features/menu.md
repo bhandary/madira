@@ -12,7 +12,7 @@ Menu & pairings takes a pasted or uploaded menu and shows a parsed dish list plu
 ## How to get to it (user POV)
 
 - Choose `Menu & pairings` in the sidebar, or open `http://127.0.0.1:3000/menu`.
-- On a narrow viewport, choose `Sections`, then `Menu & pairings`.
+- On a narrow viewport, choose the `Menu` tab.
 
 ## Driving it with Playwright and curl
 

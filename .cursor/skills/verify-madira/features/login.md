@@ -13,7 +13,7 @@ Sign in explains that the floor works without an account. With Google unset, the
 
 - Choose `Sign in` in the sidebar (`[data-testid=sign-in-link]`), or open `http://127.0.0.1:3000/login`.
 - The sidebar link is not one of the seven section links. It sits in `[data-testid=account-menu]`.
-- On a narrow viewport, choose `Sections`. The account block is inside `[data-testid=mobile-menu]`.
+- On a narrow viewport, choose `More`. The account block is inside `[data-testid=mobile-menu]`.
 
 ## Driving it with Playwright and curl
 

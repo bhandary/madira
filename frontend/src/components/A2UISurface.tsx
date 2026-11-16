@@ -1,5 +1,6 @@
 "use client";
 
+import { HoverArrow } from "@/components/HoverArrow";
 import { applyOperations, resolveBinding, type A2UIComponent, type A2UIOperation, type SurfaceState } from "@/lib/a2ui";
 
 function money(n: unknown) {
@@ -95,7 +96,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="panel p-3">
       <div className="kicker">{label}</div>
-      <div className="mt-1 text-lg font-medium tracking-tight">{value}</div>
+      <div className="stat-num">{value}</div>
     </div>
   );
 }
@@ -368,7 +369,12 @@ function RenderNode({ id, surface }: { id: string; surface: SurfaceState }) {
     return <div className="panel p-3">{child ? <RenderNode id={child} surface={surface} /> : null}</div>;
   }
   if (type === "Button") {
-    return <button className="btn btn-primary">{String(props.child || "OK")}</button>;
+    return (
+      <button className="btn btn-primary" type="button">
+        {String(props.child || "OK")}
+        <HoverArrow />
+      </button>
+    );
   }
   if (type === "Divider") return <hr className="border-line" />;
   return (

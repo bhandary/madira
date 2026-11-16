@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { A2UISurface } from "@/components/A2UISurface";
 import { DelegationPanel } from "@/components/DelegationPanel";
+import { HoverArrow } from "@/components/HoverArrow";
 import { runAgent, type AgentResult } from "@/lib/api";
 import type { A2UIOperation } from "@/lib/a2ui";
 
@@ -70,6 +71,7 @@ export function AgentWorkbench({
           </label>
           <button type="submit" data-testid={`${testId}-submit`} disabled={busy} className="btn btn-primary">
             {busy ? "Delegating…" : "Run specialists"}
+            <HoverArrow />
           </button>
         </form>
         {error && (

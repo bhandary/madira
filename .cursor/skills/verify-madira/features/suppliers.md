@@ -12,7 +12,7 @@ Supplier tastings drafts a cellar hold with an importer, shows it on a calendar,
 ## How to get to it (user POV)
 
 - Choose `Supplier tastings` in the sidebar, or open `http://127.0.0.1:3000/suppliers`.
-- On a narrow viewport, choose `Sections`, then `Supplier tastings`.
+- On a narrow viewport, choose `More`, then `Supplier tastings`.
 
 ## Driving it with Playwright and curl
 

@@ -97,7 +97,7 @@ test("shell shows sign-in when signed out and the account when signed in", async
   await expect(aside.getByTestId("account-name")).toHaveText("Ada <img src=x onerror=alert(1)>");
   await expect(aside.getByTestId("account-avatar")).toHaveText("A");
   await expect(aside.locator("img")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "The floor program, delegated." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ask the Head Sommelier" })).toBeVisible();
 
   await unmockAuth(page);
   await mockAuth(page, {
@@ -122,7 +122,7 @@ test("shell shows sign-in when signed out and the account when signed in", async
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(page.getByTestId("mobile-menu")).toHaveCount(0);
-  await page.getByRole("button", { name: "Sections" }).click();
+  await page.getByRole("button", { name: "More", exact: true }).click();
   const menu = page.getByTestId("mobile-menu");
   await expect(menu.getByTestId("sign-in-link")).toBeVisible();
 
@@ -132,7 +132,7 @@ test("shell shows sign-in when signed out and the account when signed in", async
     user: { name: "Ada Lovelace", email: "ada@example.com", picture: AVATAR },
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Sections" }).click();
+  await page.getByRole("button", { name: "More", exact: true }).click();
   await expect(page.getByTestId("mobile-menu").getByTestId("account-name")).toHaveText("Ada Lovelace");
   await expect(page.getByTestId("mobile-menu").getByTestId("sign-out")).toBeVisible();
   await expect(page.getByTestId("mode-banner")).not.toContainText("connecting");

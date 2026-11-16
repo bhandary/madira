@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { AccountMenu, useAccount } from "@/components/AccountMenu";
 import { getStatus } from "@/lib/api";
 
-const NAV = [
+const SIDEBAR = [
   { href: "/", label: "Floor" },
   { href: "/menu", label: "Menu & pairings" },
   { href: "/list", label: "List curation" },
@@ -16,26 +16,101 @@ const NAV = [
   { href: "/settings", label: "Settings" },
 ];
 
+const TABS = [
+  { href: "/", label: "Floor", icon: "floor" },
+  { href: "/menu", label: "Menu", icon: "menu" },
+  { href: "/inventory", label: "Cellar", icon: "cellar" },
+  { href: "/list", label: "List", icon: "list" },
+  { href: "/training", label: "Team", icon: "team" },
+] as const;
+
+const MORE = [
+  { href: "/suppliers", label: "Supplier tastings" },
+  { href: "/settings", label: "Settings" },
+];
+
+function Brand() {
+  return (
+    <Link href="/" className="brand">
+      <span className="brand-mark" aria-hidden="true">
+        M
+      </span>
+      Madira
+    </Link>
+  );
+}
+
+function TabIcon({ name }: { name: (typeof TABS)[number]["icon"] | "more" }) {
+  const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (name === "floor") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path {...common} d="M6 7.5h12v8.2a2 2 0 0 1-2 2H9.2L6 20.2V7.5Z" />
+      </svg>
+    );
+  }
+  if (name === "menu") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path {...common} d="M7 6.5h10M7 12h10M7 17.5h6" />
+      </svg>
+    );
+  }
+  if (name === "cellar") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path {...common} d="M9 4.5h6v3.2c1.8.7 3 2.3 3 4.3v7H6v-7c0-2 1.2-3.6 3-4.3V4.5Z" />
+        <path {...common} d="M9 4.5h6M8 15.5h8" />
+      </svg>
+    );
+  }
+  if (name === "list") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path {...common} d="M8 5.5h10v14H8a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2Z" />
+        <path {...common} d="M10 10h6M10 13.5h6M10 17h4" />
+      </svg>
+    );
+  }
+  if (name === "team") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path {...common} d="M8.5 11a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8ZM15.8 11.2a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+        <path {...common} d="M4.8 18.2c.5-2.2 2.1-3.4 3.7-3.4s3.2 1.2 3.7 3.4M13.2 15c1.3-.3 2.6.2 3.4 1.4.6.9 1 1.8 1.2 2.8" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path {...common} d="M6.5 12h.01M12 12h.01M17.5 12h.01" />
+      <path {...common} d="M6.5 12a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8ZM12 12a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8ZM17.5 12a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8Z" />
+    </svg>
+  );
+}
+
 function ModeBanner({ status }: { status: { demo_mode?: boolean; label?: string } | null }) {
   const demo = status?.demo_mode !== false;
   const detail = (status?.label || "connecting").replace(/^DEMO MODE\s*[—-]\s*/i, "");
   return (
-    <span className="mode-pill" data-testid="mode-banner">
+    <div className="announce sticky top-0 z-30" data-testid="mode-banner">
       <span className={demo ? "mode-dot" : "mode-dot mode-dot-live"} aria-hidden="true" />
       <span className="min-w-0">
         <span className="mode-word">{status?.demo_mode === false ? "LIVE" : "DEMO MODE"}</span>
         <span className="mode-detail">{detail}</span>
       </span>
-    </span>
+    </div>
   );
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const moreId = useId();
+  const moreButton = useRef<HTMLButtonElement>(null);
   const [openPath, setOpenPath] = useState<string | null>(null);
-  const open = openPath === pathname;
+  const moreOpen = openPath === pathname;
   const [status, setStatus] = useState<{ demo_mode?: boolean; label?: string; llm_model?: string } | null>(null);
   const { user, signOut } = useAccount();
+  const moreCurrent = pathname === "/suppliers" || pathname === "/settings" || pathname === "/login";
 
   useEffect(() => {
     let cancelled = false;
@@ -56,67 +131,93 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [pathname]);
 
-  const links = (id: string) => (
-    <nav id={id} className="flex flex-col gap-0.5" aria-label="Sections">
-      {NAV.map((item) => {
-        const active = pathname === item.href;
-        return (
-          <Link key={item.href} href={item.href} className="nav-link" aria-current={active ? "page" : undefined}>
-            {item.label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenPath(null);
+        moreButton.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [moreOpen]);
 
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="min-h-dvh bg-canvas md:flex">
       <a className="skip-link" href="#content">
         Skip to content
       </a>
-      <div className="md:flex">
-        <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col border-r border-line bg-panel md:flex">
-          <div className="px-3 pb-3 pt-4">
-            <Link href="/" className="block text-[15px] font-medium tracking-tight">
-              Madira
+      <aside className="sidebar sticky top-0 hidden h-dvh w-60 shrink-0 flex-col md:flex">
+        <div className="px-4 pb-4 pt-5">
+          <Brand />
+          <p className="mt-2 text-xs leading-5 text-muted">Maison Madira</p>
+          <p className="text-xs leading-5 text-muted">Beverage program</p>
+        </div>
+        <nav id="app-nav" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3" aria-label="Sections">
+          {SIDEBAR.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link key={item.href} href={item.href} className="nav-link" aria-current={active ? "page" : undefined}>
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="px-2 pb-4">
+          <AccountMenu user={user} onSignOut={() => void signOut()} />
+        </div>
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <ModeBanner status={status} />
+        <header className="flex items-center border-b border-line bg-panel px-4 py-3 md:hidden">
+          <Brand />
+        </header>
+        <main id="content" className="shell-main">
+          {children}
+        </main>
+      </div>
+      <nav className="tabbar md:hidden" aria-label="Sections">
+        {TABS.map((item) => {
+          const active = pathname === item.href;
+          return (
+            <Link key={item.href} href={item.href} className="tab" aria-current={active ? "page" : undefined}>
+              <TabIcon name={item.icon} />
+              {item.label}
             </Link>
-            <p className="mt-1 text-[11px] leading-4 text-muted">Maison Madira</p>
-            <p className="text-[11px] leading-4 text-muted">Beverage program</p>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">{links("app-nav")}</div>
-          <div className="px-2 pb-3">
+          );
+        })}
+        <button
+          ref={moreButton}
+          type="button"
+          className="tab"
+          aria-expanded={moreOpen}
+          aria-controls={moreId}
+          aria-current={moreCurrent && !moreOpen ? "page" : undefined}
+          onClick={() => setOpenPath(moreOpen ? null : pathname)}
+        >
+          <TabIcon name="more" />
+          More
+        </button>
+      </nav>
+      {moreOpen ? (
+        <>
+          <div className="more-backdrop md:hidden" onClick={() => setOpenPath(null)} />
+          <div id={moreId} className="more-sheet md:hidden" data-testid="mobile-menu">
+            <nav className="flex flex-col gap-0.5" aria-label="More">
+              {MORE.map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <Link key={item.href} href={item.href} className="nav-link" aria-current={active ? "page" : undefined}>
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
             <AccountMenu user={user} onSignOut={() => void signOut()} />
           </div>
-        </aside>
-        <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-30 border-b border-line bg-canvas/95 backdrop-blur">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 md:px-6">
-              <button
-                type="button"
-                className="btn btn-secondary md:hidden"
-                aria-expanded={open}
-                aria-controls="app-nav-mobile"
-                onClick={() => setOpenPath(open ? null : pathname)}
-              >
-                Sections
-              </button>
-              <Link href="/" className="text-sm font-medium tracking-tight md:hidden">
-                Madira
-              </Link>
-              <ModeBanner status={status} />
-            </div>
-            {open ? (
-              <div className="border-t border-line px-2 py-2 md:hidden" data-testid="mobile-menu">
-                {links("app-nav-mobile")}
-                <AccountMenu user={user} onSignOut={() => void signOut()} />
-              </div>
-            ) : null}
-          </header>
-          <main id="content" className="mx-auto w-full max-w-6xl px-3 py-5 md:px-6 md:py-6">
-            {children}
-          </main>
-        </div>
-      </div>
+        </>
+      ) : null}
     </div>
   );
 }

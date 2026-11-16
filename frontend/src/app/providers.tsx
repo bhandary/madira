@@ -10,9 +10,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <CopilotKit
       runtimeUrl="/api/copilotkit"
       agent="head_sommelier"
+      enableInspector={false}
       a2ui={{
         theme: {
-          colors: { primary: "#8d3846" },
+          colors: { primary: "#533afd" },
         },
         catalog: beverageCatalog,
       }}

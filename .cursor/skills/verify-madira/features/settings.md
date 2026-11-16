@@ -11,7 +11,7 @@ Settings is where a provider key would leave demo mode. With `MADIRA_ADMIN_PASSW
 ## How to get to it (user POV)
 
 - Choose `Settings` in the sidebar, or open `http://127.0.0.1:3000/settings`.
-- On a narrow viewport, choose `Sections`, then `Settings`.
+- On a narrow viewport, choose `More`, then `Settings`.
 
 ## Driving it with Playwright and curl
 
