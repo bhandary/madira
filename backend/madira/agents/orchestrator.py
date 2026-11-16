@@ -182,13 +182,32 @@ def extract_a2ui(messages: list[Any]) -> list[dict[str, Any]]:
 
 
 def invoke_head_sommelier(message: str, thread_id: str | None = None) -> dict[str, Any]:
+    from madira.tenancy import active_venue_id, bind, current_request, demo_posture, ensure_demo_tenant, reset
+
+    token = None
+    if current_request() is None and demo_posture():
+        token = bind(ensure_demo_tenant())
+    try:
+        return _invoke_head_sommelier(message, thread_id, active_venue_id())
+    finally:
+        if token is not None:
+            reset(token)
+
+
+def _invoke_head_sommelier(message: str, thread_id: str | None, venue_id: int) -> dict[str, Any]:
     tracker.start_run()
     runtime = resolve_runtime()
     agent = build_head_sommelier()
     # A checkpointer refuses invoke unless the run names a thread.
+    # madira_venue_id is read by tools if the context variable does not cross a worker thread.
     result = agent.invoke(
         {"messages": [{"role": "user", "content": message}]},
-        config={"configurable": {"thread_id": thread_id or str(uuid.uuid4())}},
+        config={
+            "configurable": {
+                "thread_id": thread_id or str(uuid.uuid4()),
+                "madira_venue_id": venue_id,
+            }
+        },
     )
     messages = result.get("messages", []) if isinstance(result, dict) else []
     snap = tracker.snapshot()

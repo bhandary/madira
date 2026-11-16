@@ -2,16 +2,55 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, CheckConstraint, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from madira.db import Base
+
+ROLES = ("Owner", "Sommelier", "Manager", "Staff", "Auditor")
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    slug: Mapped[str] = mapped_column(String(80), unique=True)
+
+
+class Venue(Base):
+    __tablename__ = "venues"
+    __table_args__ = (UniqueConstraint("organization_id", "slug", name="uq_venues_org_slug"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    slug: Mapped[str] = mapped_column(String(80))
+
+
+class Membership(Base):
+    """A user's role at one venue. The same person can belong to several venues."""
+
+    __tablename__ = "memberships"
+    __table_args__ = (
+        UniqueConstraint("user_id", "venue_id", name="uq_memberships_user_venue"),
+        CheckConstraint(
+            "role IN ('Owner', 'Sommelier', 'Manager', 'Staff', 'Auditor')",
+            name="ck_memberships_role",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
+    role: Mapped[str] = mapped_column(String(32))
 
 
 class Menu(Base):
     __tablename__ = "menus"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     name: Mapped[str] = mapped_column(String(200), default="Untitled menu")
     source_type: Mapped[str] = mapped_column(String(32), default="text")
     raw_text: Mapped[str] = mapped_column(Text, default="")
@@ -25,6 +64,7 @@ class Dish(Base):
     __tablename__ = "dishes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     menu_id: Mapped[int] = mapped_column(ForeignKey("menus.id"))
     name: Mapped[str] = mapped_column(String(200))
     course: Mapped[str] = mapped_column(String(80), default="")
@@ -39,6 +79,7 @@ class Pairing(Base):
     __tablename__ = "pairings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     dish_id: Mapped[int] = mapped_column(ForeignKey("dishes.id"))
     category: Mapped[str] = mapped_column(String(32))
     name: Mapped[str] = mapped_column(String(200))
@@ -57,6 +98,7 @@ class BeverageList(Base):
     __tablename__ = "beverage_lists"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     name: Mapped[str] = mapped_column(String(200), default="House list")
     budget: Mapped[float] = mapped_column(Float, default=0)
     target_margin: Mapped[float] = mapped_column(Float, default=3.0)
@@ -69,6 +111,7 @@ class ListItem(Base):
     __tablename__ = "list_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     list_id: Mapped[int] = mapped_column(ForeignKey("beverage_lists.id"))
     category: Mapped[str] = mapped_column(String(32))
     name: Mapped[str] = mapped_column(String(200))
@@ -87,6 +130,7 @@ class Supplier(Base):
     __tablename__ = "suppliers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     name: Mapped[str] = mapped_column(String(200))
     kind: Mapped[str] = mapped_column(String(64), default="distributor")
     contact_email: Mapped[str] = mapped_column(String(200), default="")
@@ -98,9 +142,11 @@ class Supplier(Base):
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"
+    __table_args__ = (UniqueConstraint("venue_id", "sku", name="uq_inventory_items_venue_sku"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    sku: Mapped[str] = mapped_column(String(64), unique=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
+    sku: Mapped[str] = mapped_column(String(64))
     name: Mapped[str] = mapped_column(String(200))
     category: Mapped[str] = mapped_column(String(32))
     supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"), nullable=True)
@@ -116,6 +162,7 @@ class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"))
     status: Mapped[str] = mapped_column(String(32), default="draft")
     notes: Mapped[str] = mapped_column(Text, default="")
@@ -128,6 +175,7 @@ class POLine(Base):
     __tablename__ = "po_lines"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     po_id: Mapped[int] = mapped_column(ForeignKey("purchase_orders.id"))
     sku: Mapped[str] = mapped_column(String(64))
     name: Mapped[str] = mapped_column(String(200))
@@ -138,9 +186,11 @@ class POLine(Base):
 
 class Lesson(Base):
     __tablename__ = "lessons"
+    __table_args__ = (UniqueConstraint("venue_id", "slug", name="uq_lessons_venue_slug"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    slug: Mapped[str] = mapped_column(String(64), unique=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
+    slug: Mapped[str] = mapped_column(String(64))
     title: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(64), default="waitstaff")
     category: Mapped[str] = mapped_column(String(64), default="wine")
@@ -151,6 +201,7 @@ class Quiz(Base):
     __tablename__ = "quizzes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     lesson_id: Mapped[int] = mapped_column(ForeignKey("lessons.id"))
     title: Mapped[str] = mapped_column(String(200))
     questions: Mapped[list] = mapped_column(JSON, default=list)
@@ -160,6 +211,7 @@ class QuizAttempt(Base):
     __tablename__ = "quiz_attempts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"))
     staff_name: Mapped[str] = mapped_column(String(120), default="Floor")
     answers: Mapped[list] = mapped_column(JSON, default=list)
@@ -171,6 +223,7 @@ class Tasting(Base):
     __tablename__ = "tastings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"))
     title: Mapped[str] = mapped_column(String(200))
     starts_at: Mapped[str] = mapped_column(String(40))
@@ -188,6 +241,7 @@ class LlmCredential(Base):
     __tablename__ = "llm_credentials"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
     provider: Mapped[str] = mapped_column(String(32))
     model: Mapped[str] = mapped_column(String(120), default="")
     ciphertext: Mapped[str] = mapped_column(Text)
@@ -199,6 +253,7 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), index=True)
     message: Mapped[str] = mapped_column(Text, default="")
     reply: Mapped[str] = mapped_column(Text, default="")
     delegated: Mapped[list] = mapped_column(JSON, default=list)

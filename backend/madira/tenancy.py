@@ -1,0 +1,286 @@
+"""Request tenancy: the signed-in user, their venue, and their role.
+
+The venue is stored on a context variable before a handler or tool runs. It is
+not a tool argument. On Postgres, the same value is applied as
+``SELECT set_config('app.venue_id', ..., true)`` (SET LOCAL) at the start of
+each transaction so row-level security can see it. SQLite has no RLS; queries
+still filter on ``venue_id``.
+"""
+
+from __future__ import annotations
+
+import os
+from contextvars import ContextVar, Token
+from dataclasses import dataclass
+
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from madira.auth import SESSION_COOKIE, session_subject, utcnow
+from madira.db import SessionLocal
+from madira.models import ROLES, Membership, Organization, User, Venue
+
+DEMO_ORG_SLUG = "maison-madira"
+DEMO_VENUE_SLUG = "maison-madira"
+DEMO_USER_SUB = "madira-demo-owner"
+DEMO_USER_EMAIL = "owner@maison-madira.demo"
+DEMO_USER_NAME = "Demo Owner"
+
+OWNER = "Owner"
+SOMMELIER = "Sommelier"
+MANAGER = "Manager"
+STAFF = "Staff"
+AUDITOR = "Auditor"
+
+_request: ContextVar[RequestContext | None] = ContextVar("madira_request_context", default=None)
+
+
+@dataclass(frozen=True)
+class RequestContext:
+    user_id: int
+    email: str
+    name: str
+    venue_id: int
+    organization_id: int
+    role: str
+
+
+def current_request() -> RequestContext | None:
+    return _request.get()
+
+
+def bind(ctx: RequestContext) -> Token:
+    return _request.set(ctx)
+
+
+def reset(token: Token) -> None:
+    _request.reset(token)
+
+
+def demo_posture() -> bool:
+    """True when this process serves the fixture demo without a Google session.
+
+    A key saved in Settings switches the model to live, but it does not create
+    a Google identity. ``MADIRA_DEMO_MODE=false`` or a provider key in the
+    environment turns the fallback off: a request with no session is then 401.
+    """
+
+    flag = os.environ.get("MADIRA_DEMO_MODE", "").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return False
+    if flag in {"1", "true", "yes", "on"}:
+        return True
+    provider = os.environ.get("MADIRA_LLM_PROVIDER", "openai").strip().lower()
+    generic = os.environ.get("MADIRA_API_KEY", "").strip()
+    if provider in {"openai", "azure"}:
+        return not (os.environ.get("OPENAI_API_KEY", "").strip() or generic)
+    if provider == "anthropic":
+        return not (os.environ.get("ANTHROPIC_API_KEY", "").strip() or generic)
+    if provider in {"google", "google_genai", "gemini"}:
+        return not (os.environ.get("GOOGLE_API_KEY", "").strip() or generic)
+    return not (
+        generic
+        or os.environ.get("OPENAI_API_KEY", "").strip()
+        or os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        or os.environ.get("GOOGLE_API_KEY", "").strip()
+    )
+
+
+def _context_from(user: User, membership: Membership, venue: Venue) -> RequestContext:
+    if membership.role not in ROLES:
+        raise HTTPException(status_code=403, detail="This role cannot do that.")
+    return RequestContext(
+        user_id=user.id,
+        email=user.email,
+        name=user.name,
+        venue_id=venue.id,
+        organization_id=venue.organization_id,
+        role=membership.role,
+    )
+
+
+def ensure_demo_tenant(session: Session | None = None) -> RequestContext:
+    """Create the demo organization, venue, and Owner if they are missing."""
+
+    own = session is None
+    if session is None:
+        session = SessionLocal()
+    try:
+        org = session.scalar(select(Organization).where(Organization.slug == DEMO_ORG_SLUG))
+        if org is None:
+            org = Organization(name="Maison Madira", slug=DEMO_ORG_SLUG)
+            session.add(org)
+            session.flush()
+        venue = session.scalar(
+            select(Venue).where(Venue.organization_id == org.id, Venue.slug == DEMO_VENUE_SLUG)
+        )
+        if venue is None:
+            venue = Venue(organization_id=org.id, name="Maison Madira", slug=DEMO_VENUE_SLUG)
+            session.add(venue)
+            session.flush()
+        user = session.scalar(select(User).where(User.google_sub == DEMO_USER_SUB))
+        now = utcnow()
+        if user is None:
+            user = User(
+                google_sub=DEMO_USER_SUB,
+                email=DEMO_USER_EMAIL,
+                name=DEMO_USER_NAME,
+                picture="",
+                created_at=now,
+                last_login_at=now,
+            )
+            session.add(user)
+            session.flush()
+        membership = session.scalar(
+            select(Membership).where(Membership.user_id == user.id, Membership.venue_id == venue.id)
+        )
+        if membership is None:
+            membership = Membership(user_id=user.id, venue_id=venue.id, role=OWNER)
+            session.add(membership)
+            session.flush()
+        elif membership.role != OWNER:
+            membership.role = OWNER
+        session.commit()
+        return _context_from(user, membership, venue)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        if own:
+            session.close()
+
+
+def default_venue(session: Session) -> Venue | None:
+    venue = session.scalar(select(Venue).where(Venue.slug == DEMO_VENUE_SLUG).order_by(Venue.id))
+    if venue is not None:
+        return venue
+    return session.scalar(select(Venue).order_by(Venue.id))
+
+
+def grant_configured_owner(session: Session, user: User) -> None:
+    """Give ``MADIRA_OWNER_EMAIL`` the Owner role on the default venue."""
+
+    expected = os.environ.get("MADIRA_OWNER_EMAIL", "").strip().lower()
+    email = (user.email or "").strip().lower()
+    if not expected or email != expected:
+        return
+    venue = default_venue(session)
+    if venue is None:
+        return
+    if user.id is None:
+        session.flush()
+    membership = session.scalar(
+        select(Membership).where(Membership.user_id == user.id, Membership.venue_id == venue.id)
+    )
+    if membership is None:
+        session.add(Membership(user_id=user.id, venue_id=venue.id, role=OWNER))
+    else:
+        membership.role = OWNER
+
+
+def active_venue_id() -> int:
+    ctx = _request.get()
+    if ctx is not None:
+        return ctx.venue_id
+    try:
+        from langchain_core.runnables.config import var_child_runnable_config
+
+        config = var_child_runnable_config.get(None)
+    except Exception:
+        config = None
+    if isinstance(config, dict):
+        raw = (config.get("configurable") or {}).get("madira_venue_id")
+        if raw:
+            return int(raw)
+    if demo_posture():
+        return ensure_demo_tenant().venue_id
+    raise RuntimeError("No venue in the run context.")
+
+
+def current_organization_id() -> int:
+    ctx = _request.get()
+    if ctx is not None:
+        return ctx.organization_id
+    # Health and startup resolve a saved key with no request. That row belongs
+    # to the default organization. Data routes never reach here: they bind first.
+    return ensure_demo_tenant().organization_id
+
+
+def scoped_get(session: Session, model, pk: int):
+    row = session.get(model, pk)
+    if row is None or getattr(row, "venue_id", None) != active_venue_id():
+        return None
+    return row
+
+
+def resolve_request(request: Request) -> RequestContext:
+    sub = session_subject(request.cookies.get(SESSION_COOKIE))
+    session = SessionLocal()
+    try:
+        if sub:
+            user = session.scalar(select(User).where(User.google_sub == sub))
+            if user is None:
+                raise HTTPException(status_code=401, detail="Sign in required.")
+            membership = session.scalar(
+                select(Membership).where(Membership.user_id == user.id).order_by(Membership.id)
+            )
+            if membership is None:
+                raise HTTPException(status_code=403, detail="No venue membership.")
+            venue = session.get(Venue, membership.venue_id)
+            if venue is None:
+                raise HTTPException(status_code=403, detail="No venue membership.")
+            return _context_from(user, membership, venue)
+        if demo_posture():
+            return ensure_demo_tenant(session)
+        raise HTTPException(status_code=401, detail="Sign in required.")
+    finally:
+        session.close()
+
+
+_EXEMPT = {"/health", "/status", "/fixtures/sample-menu", "/docs", "/redoc", "/openapi.json"}
+
+
+def _exempt(path: str) -> bool:
+    if path != "/" and path.endswith("/"):
+        path = path.rstrip("/")
+    if path in _EXEMPT or path.startswith("/auth"):
+        return True
+    return False
+
+
+class TenancyMiddleware:
+    """Resolve the caller before the handler. Health, auth, and the sample menu stay open."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        request = Request(scope, receive)
+        path = request.url.path
+        if _exempt(path):
+            await self.app(scope, receive, send)
+            return
+        try:
+            ctx = resolve_request(request)
+        except HTTPException as exc:
+            response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+            await response(scope, receive, send)
+            return
+        if path == "/ag-ui" or path.startswith("/ag-ui/"):
+            from madira.rbac import MATRIX, Capability
+
+            if ctx.role not in MATRIX[Capability.AGENT]:
+                response = JSONResponse({"detail": "This role cannot do that."}, status_code=403)
+                await response(scope, receive, send)
+                return
+        request.state.context = ctx
+        token = bind(ctx)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            reset(token)

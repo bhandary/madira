@@ -11,6 +11,8 @@ from sqlalchemy import select
 from madira.agents.tools import list_tastings, schedule_tasting
 from madira.db import SessionLocal
 from madira.models import Supplier, Tasting
+from madira.rbac import Capability, require
+from madira.tenancy import active_venue_id, scoped_get
 
 router = APIRouter()
 
@@ -24,12 +26,12 @@ class TastingBody(BaseModel):
     notes: str = "Draft hold — export .ics, do not send invites."
 
 
-@router.get("/tastings")
+@router.get("/tastings", dependencies=[require(Capability.RECORDS)])
 def tastings() -> dict[str, Any]:
     return json.loads(list_tastings())
 
 
-@router.post("/tastings")
+@router.post("/tastings", dependencies=[require(Capability.EDIT)])
 def tastings_create(body: TastingBody) -> dict[str, Any]:
     return json.loads(
         schedule_tasting(
@@ -43,11 +45,11 @@ def tastings_create(body: TastingBody) -> dict[str, Any]:
     )
 
 
-@router.get("/tastings/{tasting_id}/ics")
+@router.get("/tastings/{tasting_id}/ics", dependencies=[require(Capability.RECORDS)])
 def tasting_ics(tasting_id: int) -> PlainTextResponse:
     session = SessionLocal()
     try:
-        tasting = session.get(Tasting, tasting_id)
+        tasting = scoped_get(session, Tasting, tasting_id)
         if not tasting:
             raise HTTPException(404, "tasting not found")
         return PlainTextResponse(tasting.ics, media_type="text/calendar")
@@ -55,11 +57,11 @@ def tasting_ics(tasting_id: int) -> PlainTextResponse:
         session.close()
 
 
-@router.get("/suppliers")
+@router.get("/suppliers", dependencies=[require(Capability.RECORDS)])
 def suppliers() -> dict[str, Any]:
     session = SessionLocal()
     try:
-        rows = session.scalars(select(Supplier)).all()
+        rows = session.scalars(select(Supplier).where(Supplier.venue_id == active_venue_id())).all()
         return {
             "suppliers": [
                 {"id": s.id, "name": s.name, "kind": s.kind, "contact_email": s.contact_email, "notes": s.notes}

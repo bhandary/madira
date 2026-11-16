@@ -11,6 +11,7 @@ from sqlalchemy import delete, select
 from madira import a2ui_ops
 from madira.agents import tracker
 from madira.db import SessionLocal
+from madira.tenancy import active_venue_id
 from madira.fixtures_data import (
     QUIZ,
     ROLEPLAY_OPENER,
@@ -44,12 +45,18 @@ def _dumps(payload: dict) -> str:
     return json.dumps(payload, default=str)
 
 
+def _vid() -> int:
+    return active_venue_id()
+
+
 def parse_menu(text: str, source_name: str = "pasted") -> str:
     """Parse a restaurant menu into dishes, flavor profiles, cuisine, and price tier. Persist the menu."""
     parsed = parse_menu_text(text, source_name=source_name)
     session = _session()
+    vid = _vid()
     try:
         menu = Menu(
+            venue_id=vid,
             name=parsed["name"],
             source_type=parsed["source_type"],
             raw_text=parsed["raw_text"],
@@ -60,7 +67,7 @@ def parse_menu(text: str, source_name: str = "pasted") -> str:
         session.flush()
         dishes_out = []
         for row in parsed["dishes"]:
-            dish = Dish(menu_id=menu.id, **row)
+            dish = Dish(venue_id=vid, menu_id=menu.id, **row)
             session.add(dish)
             session.flush()
             dishes_out.append(
@@ -99,12 +106,19 @@ def parse_menu(text: str, source_name: str = "pasted") -> str:
 def recommend_pairings(menu_id: int = 0) -> str:
     """Recommend wine, beer, spirit, and sake pairings for each dish on a menu, with rationale and price-tier fit."""
     session = _session()
+    vid = _vid()
     try:
-        menu = session.get(Menu, menu_id) if menu_id else session.scalar(select(Menu).order_by(Menu.id.desc()))
+        menu = None
+        if menu_id:
+            menu = session.get(Menu, menu_id)
+            if menu is None or menu.venue_id != vid:
+                return _dumps({"error": "menu not found"})
+        else:
+            menu = session.scalar(select(Menu).where(Menu.venue_id == vid).order_by(Menu.id.desc()))
         if menu is None:
             parse_menu("", "demo")
             session.expire_all()
-            menu = session.scalar(select(Menu).order_by(Menu.id.desc()))
+            menu = session.scalar(select(Menu).where(Menu.venue_id == vid).order_by(Menu.id.desc()))
         dishes = list(menu.dishes)
         dish_payload = [
             {"name": d.name, "flavor_profile": d.flavor_profile, "price": d.price, "course": d.course}
@@ -112,9 +126,9 @@ def recommend_pairings(menu_id: int = 0) -> str:
         ]
         planned = pairings_for_dishes(dish_payload)
         for dish, block in zip(dishes, planned):
-            session.execute(delete(Pairing).where(Pairing.dish_id == dish.id))
+            session.execute(delete(Pairing).where(Pairing.dish_id == dish.id, Pairing.venue_id == vid))
             for p in block["pairings"]:
-                session.add(Pairing(dish_id=dish.id, **p))
+                session.add(Pairing(venue_id=vid, dish_id=dish.id, **p))
         session.commit()
         cards = []
         for dish, block in zip(dishes, planned):
@@ -140,13 +154,15 @@ def curate_beverage_list(budget: float = 12000, target_margin: float = 3.2, name
     payload = curate_list_fixture(budget=budget, target_margin=target_margin)
     payload["name"] = name
     session = _session()
+    vid = _vid()
     try:
-        bl = BeverageList(name=name, budget=budget, target_margin=target_margin, notes=payload["notes"])
+        bl = BeverageList(venue_id=vid, name=name, budget=budget, target_margin=target_margin, notes=payload["notes"])
         session.add(bl)
         session.flush()
         for item in payload["items"]:
             session.add(
                 ListItem(
+                    venue_id=vid,
                     list_id=bl.id,
                     category=item["category"],
                     name=item["name"],
@@ -172,7 +188,9 @@ def curate_beverage_list(budget: float = 12000, target_margin: float = 3.2, name
 
 
 def _inventory_rows(session) -> list[dict]:
-    rows = session.scalars(select(InventoryItem).order_by(InventoryItem.sku)).all()
+    rows = session.scalars(
+        select(InventoryItem).where(InventoryItem.venue_id == _vid()).order_by(InventoryItem.sku)
+    ).all()
     out = []
     for item in rows:
         supplier = item.supplier.name if item.supplier else ""
@@ -225,7 +243,12 @@ def update_stock(sku: str, on_hand: int) -> str:
     """Set on-hand quantity for an inventory SKU (for example W-MUS-01)."""
     session = _session()
     try:
-        item = session.scalar(select(InventoryItem).where(InventoryItem.sku == sku.strip().upper()))
+        item = session.scalar(
+            select(InventoryItem).where(
+                InventoryItem.venue_id == _vid(),
+                InventoryItem.sku == sku.strip().upper(),
+            )
+        )
         if item is None:
             return _dumps({"error": f"unknown sku {sku}"})
         item.on_hand = int(on_hand)
@@ -238,6 +261,7 @@ def update_stock(sku: str, on_hand: int) -> str:
 def draft_purchase_orders() -> str:
     """Draft reorder purchase orders grouped by supplier for every SKU below par."""
     session = _session()
+    vid = _vid()
     try:
         items = _inventory_rows(session)
         lows = [i for i in items if i["low"] and i["reorder_qty"] > 0]
@@ -247,7 +271,10 @@ def draft_purchase_orders() -> str:
         orders = []
         for supplier_id, lines in grouped.items():
             supplier = session.get(Supplier, supplier_id)
+            if supplier is None or supplier.venue_id != vid:
+                continue
             po = PurchaseOrder(
+                venue_id=vid,
                 supplier_id=supplier_id,
                 status="draft",
                 notes="Draft only — not transmitted to the supplier.",
@@ -260,6 +287,7 @@ def draft_purchase_orders() -> str:
                 qty = line["reorder_qty"]
                 session.add(
                     POLine(
+                        venue_id=vid,
                         po_id=po.id,
                         sku=line["sku"],
                         name=line["name"],
@@ -291,12 +319,13 @@ def draft_purchase_orders() -> str:
 def get_training_briefing() -> str:
     """Daily menu pairing briefing and wine/service lessons for waitstaff and bartenders."""
     session = _session()
+    vid = _vid()
     try:
         lessons = [
             {"id": lesson.id, "slug": lesson.slug, "title": lesson.title, "role": lesson.role, "category": lesson.category, "body": lesson.body}
-            for lesson in session.scalars(select(Lesson)).all()
+            for lesson in session.scalars(select(Lesson).where(Lesson.venue_id == vid)).all()
         ]
-        quiz = session.scalar(select(Quiz).limit(1))
+        quiz = session.scalar(select(Quiz).where(Quiz.venue_id == vid).limit(1))
         quiz_payload = None
         if quiz:
             quiz_payload = {
@@ -320,8 +349,9 @@ def get_training_briefing() -> str:
 def grade_quiz(answers: str, staff_name: str = "Floor") -> str:
     """Grade a training quiz. `answers` is a comma-separated list of choice indexes (0-based), e.g. '1,2,2,1'."""
     session = _session()
+    vid = _vid()
     try:
-        quiz = session.scalar(select(Quiz).limit(1))
+        quiz = session.scalar(select(Quiz).where(Quiz.venue_id == vid).limit(1))
         if quiz is None:
             return _dumps({"error": "no quiz seeded"})
         parsed = [int(x.strip()) for x in re.split(r"[,\s]+", answers.strip()) if x.strip() != ""]
@@ -342,7 +372,7 @@ def grade_quiz(answers: str, staff_name: str = "Floor") -> str:
                 }
             )
         score = round(100 * correct / max(len(quiz.questions), 1), 1)
-        attempt = QuizAttempt(quiz_id=quiz.id, staff_name=staff_name, answers=parsed, score=score)
+        attempt = QuizAttempt(venue_id=vid, quiz_id=quiz.id, staff_name=staff_name, answers=parsed, score=score)
         session.add(attempt)
         session.commit()
         payload = {
@@ -380,8 +410,9 @@ def start_roleplay() -> str:
 def list_tastings() -> str:
     """List scheduled supplier tastings (drafts only; nothing is sent)."""
     session = _session()
+    vid = _vid()
     try:
-        rows = session.scalars(select(Tasting).order_by(Tasting.starts_at)).all()
+        rows = session.scalars(select(Tasting).where(Tasting.venue_id == vid).order_by(Tasting.starts_at)).all()
         tastings = [
             {
                 "id": t.id,
@@ -413,10 +444,13 @@ def schedule_tasting(
 ) -> str:
     """Schedule a tasting with an importer or distributor. Produces a draft .ics only — never sends email or calendar invites."""
     session = _session()
+    vid = _vid()
     try:
-        supplier = session.scalar(select(Supplier).where(Supplier.name == supplier_name))
+        supplier = session.scalar(select(Supplier).where(Supplier.venue_id == vid, Supplier.name == supplier_name))
         if supplier is None:
-            supplier = session.scalar(select(Supplier).limit(1))
+            supplier = session.scalar(select(Supplier).where(Supplier.venue_id == vid).limit(1))
+        if supplier is None:
+            return _dumps({"error": "no supplier"})
         if not starts_at:
             start = datetime.now().replace(hour=15, minute=0, second=0, microsecond=0) + timedelta(days=7)
             starts_at = start.strftime("%Y-%m-%dT%H:%M")
@@ -425,10 +459,15 @@ def schedule_tasting(
             ends_at = starts_at
         ics = build_ics(title, starts_at, ends_at, location, notes)
         tasting = session.scalar(
-            select(Tasting).where(Tasting.title == title, Tasting.supplier_id == supplier.id)
+            select(Tasting).where(
+                Tasting.venue_id == vid,
+                Tasting.title == title,
+                Tasting.supplier_id == supplier.id,
+            )
         )
         if tasting is None:
             tasting = Tasting(
+                venue_id=vid,
                 supplier_id=supplier.id,
                 title=title,
                 starts_at=starts_at,
@@ -456,7 +495,7 @@ def schedule_tasting(
             "ics": ics,
             "sent": False,
         }
-        rows = session.scalars(select(Tasting).order_by(Tasting.starts_at)).all()
+        rows = session.scalars(select(Tasting).where(Tasting.venue_id == vid).order_by(Tasting.starts_at)).all()
         tastings = [
             {
                 "id": t.id,

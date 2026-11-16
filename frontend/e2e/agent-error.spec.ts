@@ -31,14 +31,6 @@ test("settings save shows a quota rejection", async ({ page }) => {
   await page.route("**/madira-api/settings/**", async (route) => {
     const request = route.request();
     const url = request.url();
-    if (request.method() === "POST" && url.endsWith("/settings/session")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ token: "session-token", expires_in: 28800 }),
-      });
-      return;
-    }
     if (request.method() === "GET" && url.endsWith("/settings/llm")) {
       await route.fulfill({
         status: 200,
@@ -75,8 +67,6 @@ test("settings save shows a quota rejection", async ({ page }) => {
   });
 
   await page.goto("/settings");
-  await page.getByTestId("settings-password").fill("anything");
-  await page.getByTestId("settings-unlock").click();
   await page.getByTestId("settings-api-key").fill(secret);
   await page.getByTestId("settings-save").click();
   const error = page.getByTestId("settings-error");

@@ -2,16 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from madira.api.agent import refresh_sommelier_agent
+from madira.rbac import Capability, require
 
 router = APIRouter()
-
-
-class SettingsLoginBody(BaseModel):
-    password: str = ""
 
 
 class SettingsSaveBody(BaseModel):
@@ -20,53 +17,20 @@ class SettingsSaveBody(BaseModel):
     api_key: str = ""
 
 
-def _bearer(authorization: str | None) -> str:
-    if not authorization:
-        return ""
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() == "bearer" and token.strip():
-        return token.strip()
-    return ""
-
-
-def require_admin(
-    x_madira_admin_token: str | None = Header(default=None),
-    authorization: str | None = Header(default=None),
-) -> None:
-    from madira.admin_auth import UNSET_MESSAGE, admin_configured, verify_admin_token
-
-    if not admin_configured():
-        raise HTTPException(status_code=403, detail=UNSET_MESSAGE)
-    token = (x_madira_admin_token or "").strip() or _bearer(authorization)
-    if not verify_admin_token(token):
-        raise HTTPException(status_code=401, detail="Admin sign-in required.")
-
-
 def _public_error(message: str, secret: str) -> str:
     if secret:
         message = message.replace(secret, "")
     return " ".join(message.split()) or "The API key was rejected."
 
 
-@router.post("/settings/session")
-def settings_session(body: SettingsLoginBody) -> dict[str, Any]:
-    from madira.admin_auth import TOKEN_TTL_SECONDS, UNSET_MESSAGE, admin_configured, check_password, issue_admin_token
-
-    if not admin_configured():
-        raise HTTPException(status_code=403, detail=UNSET_MESSAGE)
-    if not check_password(body.password):
-        raise HTTPException(status_code=401, detail="Incorrect admin password.")
-    return {"token": issue_admin_token(), "expires_in": TOKEN_TTL_SECONDS}
-
-
-@router.get("/settings/llm", dependencies=[Depends(require_admin)])
+@router.get("/settings/llm", dependencies=[require(Capability.SETTINGS)])
 def settings_get() -> dict[str, Any]:
     from madira.llm_runtime import resolve_runtime, settings_payload
 
     return settings_payload(resolve_runtime())
 
 
-@router.post("/settings/llm", dependencies=[Depends(require_admin)])
+@router.post("/settings/llm", dependencies=[require(Capability.SETTINGS)])
 def settings_save(body: SettingsSaveBody) -> dict[str, Any]:
     from madira.llm_runtime import (
         ALLOWED_PROVIDERS,
@@ -111,7 +75,7 @@ def settings_save(body: SettingsSaveBody) -> dict[str, Any]:
     return settings_payload(runtime)
 
 
-@router.delete("/settings/llm", dependencies=[Depends(require_admin)])
+@router.delete("/settings/llm", dependencies=[require(Capability.SETTINGS)])
 def settings_delete() -> dict[str, Any]:
     from madira.llm_runtime import delete_credential, settings_payload
 

@@ -6,6 +6,7 @@ from fastapi import APIRouter, FastAPI, HTTPException
 from pydantic import BaseModel
 
 from madira.agents.orchestrator import invoke_head_sommelier
+from madira.rbac import Capability, require
 
 router = APIRouter()
 
@@ -58,7 +59,7 @@ def mount_agui(app: FastAPI) -> None:
         app.state.agui_error = str(exc)
 
 
-@router.post("/agent/run")
+@router.post("/agent/run", dependencies=[require(Capability.AGENT)])
 def agent_run(body: AgentRunBody) -> dict[str, Any]:
     from madira.provider_errors import describe_provider_failure
 

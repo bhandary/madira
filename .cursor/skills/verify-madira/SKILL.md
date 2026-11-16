@@ -19,7 +19,7 @@ mkdir -p /tmp/madira-verify
 # Backend. Record the process id (the tmux pane pid after exec, or $! if backgrounded).
 env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u GOOGLE_API_KEY -u MADIRA_API_KEY \
   -u GOOGLE_CLIENT_ID -u GOOGLE_CLIENT_SECRET -u MADIRA_AUTH_SECRET \
-  -u MADIRA_PUBLIC_URL -u MADIRA_ADMIN_PASSWORD -u MADIRA_DEMO_MODE \
+  -u MADIRA_PUBLIC_URL -u MADIRA_OWNER_EMAIL -u MADIRA_DEMO_MODE \
   PYTHONPATH=backend backend/.venv/bin/python -m madira.main
 # Frontend, in a second session. Playwright and the doctor use 127.0.0.1.
 cd frontend && npm run dev -- --hostname 127.0.0.1 --port 3000

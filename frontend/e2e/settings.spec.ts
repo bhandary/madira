@@ -1,21 +1,14 @@
 import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 
-const password = process.env.MADIRA_ADMIN_PASSWORD || "";
 const apiKey = "sk-test-settings-key-1234";
 
 test.describe("settings", () => {
   test("save a provider key, leave demo mode, then restore it", async ({ page, request }) => {
-    expect(password, "Set MADIRA_ADMIN_PASSWORD to the same value as the backend").not.toBe("");
+    const before = await request.get("/madira-api/settings/llm");
+    expect(before.ok()).toBeTruthy();
 
-    const denied = await request.get("/madira-api/settings/llm");
-    expect(denied.status()).toBe(401);
-
-    const session = await request.post("/madira-api/settings/session", { data: { password } });
-    expect(session.ok()).toBeTruthy();
-    const token = (await session.json()).token as string;
-    const headers = { "X-Madira-Admin-Token": token };
-    await request.delete("/madira-api/settings/llm", { headers });
+    await request.delete("/madira-api/settings/llm");
 
     try {
       await page.goto("/");
@@ -23,12 +16,7 @@ test.describe("settings", () => {
 
       await page.getByRole("link", { name: "Settings" }).click();
       await expect(page.getByTestId("settings-page")).toBeVisible();
-      await page.getByTestId("settings-password").fill("not-the-password");
-      await page.getByTestId("settings-unlock").click();
-      await expect(page.getByTestId("settings-error")).toContainText(/incorrect/i);
-
-      await page.getByTestId("settings-password").fill(password);
-      await page.getByTestId("settings-unlock").click();
+      await expect(page.getByTestId("settings-password")).toHaveCount(0);
       await expect(page.getByTestId("settings-key-hint")).toContainText(/No key saved/i);
 
       await page.getByTestId("settings-provider").selectOption("openai");
@@ -51,7 +39,7 @@ test.describe("settings", () => {
       await expect(page.getByTestId("settings-key-hint")).toContainText(/No key saved/i);
       await expect(page.getByTestId("mode-banner")).toContainText(/DEMO MODE/i);
     } finally {
-      await request.delete("/madira-api/settings/llm", { headers });
+      await request.delete("/madira-api/settings/llm");
     }
   });
 });

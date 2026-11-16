@@ -21,6 +21,7 @@ def hermetic_llm_env(monkeypatch):
     monkeypatch.setenv("MADIRA_LLM_MODEL", "gpt-4.1-mini")
     monkeypatch.delenv("MADIRA_DEMO_MODE", raising=False)
     monkeypatch.delenv("MADIRA_LLM_VALIDATOR", raising=False)
+    monkeypatch.delenv("MADIRA_OWNER_EMAIL", raising=False)
     _clear_saved_key()
 
 
@@ -28,12 +29,12 @@ def _clear_saved_key() -> None:
     from madira.db import SessionLocal, init_db
     from madira.models import LlmCredential
 
+    from sqlalchemy import delete
+
     init_db()
     session = SessionLocal()
     try:
-        row = session.get(LlmCredential, 1)
-        if row is not None:
-            session.delete(row)
-            session.commit()
+        session.execute(delete(LlmCredential))
+        session.commit()
     finally:
         session.close()

@@ -33,6 +33,28 @@ if DATABASE_URL.startswith("sqlite"):
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
+@event.listens_for(SessionLocal, "after_begin")
+def _postgres_venue_setting(session, transaction, connection):
+    """Apply SET LOCAL app.venue_id for Postgres row-level security.
+
+    ``set_config(..., true)`` is local to the transaction. SQLite ignores it.
+    The login role still has to be subject to RLS (a non-superuser, or a table
+    owner with FORCE). Superusers bypass the policies.
+    """
+
+    if connection.dialect.name != "postgresql":
+        return
+    from madira.tenancy import current_request
+
+    ctx = current_request()
+    if ctx is None:
+        return
+    connection.execute(
+        text("SELECT set_config('app.venue_id', :venue_id, true)"),
+        {"venue_id": str(ctx.venue_id)},
+    )
+
+
 def get_session():
     session = SessionLocal()
     try:

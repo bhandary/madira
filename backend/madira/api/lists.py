@@ -10,6 +10,8 @@ from sqlalchemy import select
 from madira.agents.tools import curate_beverage_list
 from madira.db import SessionLocal
 from madira.models import BeverageList
+from madira.rbac import Capability, require
+from madira.tenancy import active_venue_id
 
 router = APIRouter()
 
@@ -20,16 +22,18 @@ class ListBody(BaseModel):
     name: str = "Maison Madira autumn list"
 
 
-@router.post("/lists/curate")
+@router.post("/lists/curate", dependencies=[require(Capability.EDIT)])
 def lists_curate(body: ListBody) -> dict[str, Any]:
     return json.loads(curate_beverage_list(budget=body.budget, target_margin=body.target_margin, name=body.name))
 
 
-@router.get("/lists")
+@router.get("/lists", dependencies=[require(Capability.FLOOR)])
 def lists() -> dict[str, Any]:
     session = SessionLocal()
     try:
-        rows = session.scalars(select(BeverageList).order_by(BeverageList.id.desc())).all()
+        rows = session.scalars(
+            select(BeverageList).where(BeverageList.venue_id == active_venue_id()).order_by(BeverageList.id.desc())
+        ).all()
         return {
             "lists": [
                 {

@@ -19,7 +19,8 @@ from sqlalchemy import delete, func, select
 from madira.auth import GOOGLE_JWKS, GOOGLE_TOKEN, clear_jwks_cache
 from madira.db import SessionLocal, init_db
 from madira.main import app
-from madira.models import User
+from madira.models import Membership, User
+from madira.tenancy import DEMO_USER_SUB
 
 CLIENT_ID = "client-id"
 CLIENT_SECRET = "client-secret"
@@ -75,6 +76,7 @@ def configured(monkeypatch):
 def _wipe() -> None:
     session = SessionLocal()
     try:
+        session.execute(delete(Membership))
         session.execute(delete(User))
         session.commit()
     finally:
@@ -102,7 +104,9 @@ def _load(sub: str = "google-sub-1"):
 def _count() -> int:
     session = SessionLocal()
     try:
-        return int(session.scalar(select(func.count()).select_from(User)) or 0)
+        return int(
+            session.scalar(select(func.count()).select_from(User).where(User.google_sub != DEMO_USER_SUB)) or 0
+        )
     finally:
         session.close()
 

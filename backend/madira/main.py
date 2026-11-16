@@ -16,11 +16,14 @@ from madira.auth import router as auth_router
 from madira.config import FRONTEND_ORIGIN, HOST, PORT
 from madira.db import init_db
 from madira.seed import seed
+from madira.tenancy import TenancyMiddleware
 
 app = FastAPI(title="Madira", version="0.1.0")
+# Added last so CORS wraps tenancy and 401 responses still carry the allow-origin header.
+app.add_middleware(TenancyMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000", "*"],
+    allow_origins=[FRONTEND_ORIGIN.rstrip("/")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
