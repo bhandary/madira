@@ -61,7 +61,7 @@ Delegation is visible in the right-hand rail (active subagent, status, todo list
 
 - **Frontend:** Next.js, TypeScript, Tailwind, CopilotKit (`@copilotkit/react-core`, `@copilotkit/runtime`) over AG-UI, A2UI v0.9 catalog + renderer.
 - **Backend:** Python FastAPI, LangChain **Deep Agents** (`deepagents.create_deep_agent`, `subagents=` → `task` tool).
-- **Data:** SQLAlchemy. Default `sqlite:///backend/data/madira.db`. Set `DATABASE_URL=postgresql+psycopg://…` for Postgres (same models, no code change).
+- **Data:** SQLAlchemy. Schema is managed by Alembic (`backend/madira/migrations`). Unset `DATABASE_URL` uses `sqlite:///backend/data/madira.db` (tests and CI). Dev and prod set `DATABASE_URL=postgresql+psycopg://…`.
 
 ## Environment
 
@@ -75,7 +75,7 @@ See `.env.example`.
 | `MADIRA_DEMO_MODE` | auto | `true` forces fixtures even if a key is saved; `false` requires a key |
 | `MADIRA_SECRET_KEY` | dev file | Fernet key (or any secret) for keys saved in Settings. If unset, `backend/data/.madira_secret` is created. Set this in production. |
 | `MADIRA_ADMIN_PASSWORD` | unset | Unlocks Settings. If unset, settings reads and writes are refused until you set it and restart. |
-| `DATABASE_URL` | sqlite file | Switch to Postgres here |
+| `DATABASE_URL` | sqlite file | Postgres URL for dev and prod. Unset keeps SQLite. |
 | `MADIRA_BACKEND_URL` | `http://127.0.0.1:8123` | Used by Next rewrites / CopilotKit HttpAgent |
 | `MADIRA_PORT` | `8123` | Backend |
 | `GOOGLE_CLIENT_ID` | unset | Google OAuth client id. Sign-in stays disabled until this is set. |
@@ -106,7 +106,7 @@ The Settings end-to-end test needs the running backend to have the same `MADIRA_
 
 The browser only talks to the Next.js origin. `/madira-api/*` is already rewritten to FastAPI, so the authorization code is exchanged there and the session cookie is first-party (`madira_session`, HttpOnly, SameSite=Lax, Secure when `MADIRA_PUBLIC_URL` is https, 14 days). Sign out is `POST /auth/logout`.
 
-On the first successful sign-in the backend inserts a `users` row (`google_sub` unique, email, name, picture, `created_at`, `last_login_at`). Later sign-ins update that row. The table is created on startup with the other tables (`Base.metadata.create_all`). There is no separate migration tool.
+On the first successful sign-in the backend inserts a `users` row (`google_sub` unique, email, name, picture, `created_at`, `last_login_at`). Later sign-ins update that row. Alembic creates that table with the rest of the schema (`make migrate`, or automatically when the backend starts).
 
 Set these on the **backend** service (Railway's API service, not only `madira-web`):
 
@@ -146,7 +146,16 @@ Or separately: `make backend` and `make frontend`.
 
 One-shot doctor: `make doctor` (expects both processes).
 
-Docker: `docker compose up --build` (backend image + frontend bind-mount).
+`make dev` leaves `DATABASE_URL` unset, so it uses the SQLite file. Postgres for local dev:
+
+```bash
+docker compose up -d postgres
+export DATABASE_URL=postgresql+psycopg://madira:madira@localhost:5432/madira
+make migrate       # optional; backend startup applies migrations too
+make dev
+```
+
+`docker compose up --build` starts Postgres and points the backend at it. A SQLite file created before Alembic has tables and no revision row. Remove it with `make clean` before starting again.
 
 ## Tests
 

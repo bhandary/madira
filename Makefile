@@ -5,7 +5,9 @@ PY := $(VENV)/bin/python
 PYTEST := $(VENV)/bin/pytest
 export PYTHONPATH := backend
 
-.PHONY: install backend frontend dev test e2e doctor verify clean
+ALEMBIC := $(VENV)/bin/alembic
+
+.PHONY: install backend frontend dev test e2e doctor verify clean migrate
 
 install:
 	$(PYTHON) -m venv $(VENV)
@@ -25,6 +27,9 @@ dev:
 
 test:
 	PYTHONPATH=backend $(PYTEST) -q backend/tests
+
+migrate:
+	PYTHONPATH=backend $(ALEMBIC) -c backend/alembic.ini upgrade head
 
 e2e:
 	cd frontend && npx playwright test
