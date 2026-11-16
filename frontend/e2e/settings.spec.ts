@@ -71,6 +71,9 @@ test.describe("settings", () => {
       await expect(page.getByTestId("settings-signed-out")).toBeVisible();
     } finally {
       removeSavedKey();
+      // The SQL delete does not rebuild the in-process graph. Ask the server
+      // to drop the key again so the sommelier returns to the demo model.
+      await request.delete("/madira-api/settings/llm");
     }
 
     await page.goto("/");

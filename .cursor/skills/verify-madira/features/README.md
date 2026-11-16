@@ -19,8 +19,8 @@ This directory is the maintained source for verifying Madira's user-facing floor
 - At 390px width the sidebar is hidden. `Sections` opens `[data-testid=mobile-menu]`. Observed on `/inventory`: `Supplier tastings` was hidden until `Sections` was clicked.
 - Wait until the submit button is hydrated (a `__react` property on the node). An early click GETs the same path with a trailing `?` and does not run the specialist.
 - Wait until `[data-testid=mode-banner]` no longer contains `connecting`.
-- A finished specialist run shows `[data-testid=agent-reply]` with `Head Sommelier here. I delegated to … and they posted surfaces in the well. Review the cards and tables — nothing was emailed or purchased.` The delegation rail shows the specialist name and the visible status `COMPLETE`.
-- `POST /madira-api/agent/run` is the call behind `Run specialists`. Assert the surface, then read it back with the GET in the feature file.
+- A finished specialist run shows `[data-testid=agent-reply]` with `Head Sommelier here. I delegated to … and they posted surfaces in the well. Review the cards and tables — nothing was emailed or purchased.` The delegation rail shows the specialist name and the visible status `COMPLETE`. While the specialist runs, `[data-testid=agent-working]` reads `Working…`.
+- `Run specialists` streams through `/api/copilotkit`. Assert the surface, then read it back with the GET in the feature file.
 - Restore `W-MUS-01` on-hand if a recipe changes it. Leave proof files in `MADIRA_EVIDENCE_DIR` (default `/tmp/madira-verify-evidence`).
 
 ## Proof and skip reporting

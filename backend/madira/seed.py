@@ -24,10 +24,10 @@ def seed(session: Session | None = None) -> None:
     try:
         ctx = ensure_demo_tenant(session)
         venue_id = ctx.venue_id
-        if session.scalar(select(Supplier.id).where(Supplier.venue_id == venue_id).limit(1)):
-            return
         token = bind(ctx)
         try:
+            if session.scalar(select(Supplier.id).where(Supplier.venue_id == venue_id).limit(1)):
+                return
             suppliers: dict[str, Supplier] = {}
             for row in SUPPLIERS:
                 supplier = Supplier(**row, venue_id=venue_id)

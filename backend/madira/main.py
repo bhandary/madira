@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from madira.agents.checkpointer import get_checkpointer
 from madira.api.agent import mount_agui, router as agent_router
 from madira.api.health import fixtures_router, router as health_router, status_router
 from madira.api.inventory import router as inventory_router
@@ -53,6 +54,7 @@ def unavailable(_request: Request, exc: Unavailable) -> JSONResponse:
 def _startup() -> None:
     init_db()
     seed()
+    get_checkpointer()
     mount_agui(app)
 
 

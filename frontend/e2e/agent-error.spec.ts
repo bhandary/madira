@@ -2,15 +2,28 @@ import { expect, test } from "@playwright/test";
 
 const quotaMessage = "OpenAI rejected the API key (429). You have no credits remaining";
 
-test("sommelier run shows the provider error", async ({ page }) => {
-  await page.route("**/madira-api/agent/run", (route) =>
+function runError(message: string) {
+  const events = [
+    { type: "RUN_STARTED", threadId: "t", runId: "r" },
+    { type: "RUN_ERROR", message },
+  ];
+  return events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
+}
+
+async function failTheRun(page: import("@playwright/test").Page, message: string) {
+  await page.route("**/api/copilotkit/agent/**/run", (route) =>
     route.fulfill({
-      status: 429,
-      contentType: "application/json",
-      body: JSON.stringify({ detail: "You have no credits remaining" }),
+      status: 200,
+      contentType: "text/event-stream",
+      body: runError(message),
     }),
   );
+}
+
+test("sommelier run shows the provider error", async ({ page }) => {
+  await failTheRun(page, "You have no credits remaining");
   await page.goto("/menu");
+  await expect(page.getByTestId("mode-banner")).not.toContainText("connecting");
   await page.getByTestId("menu-workbench-submit").click();
   const error = page.getByTestId("agent-error");
   await expect(error).toContainText("You have no credits remaining");
@@ -18,12 +31,11 @@ test("sommelier run shows the provider error", async ({ page }) => {
 });
 
 test("an empty provider failure is still visible", async ({ page }) => {
-  await page.route("**/madira-api/agent/run", (route) =>
-    route.fulfill({ status: 500, contentType: "text/plain", body: "" }),
-  );
+  await failTheRun(page, "");
   await page.goto("/menu");
+  await expect(page.getByTestId("mode-banner")).not.toContainText("connecting");
   await page.getByTestId("menu-workbench-submit").click();
-  await expect(page.getByTestId("agent-error")).toContainText("Request failed (500)");
+  await expect(page.getByTestId("agent-error")).toContainText("The sommelier could not complete the request.");
 });
 
 test("settings save shows a quota rejection", async ({ page }) => {

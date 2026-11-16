@@ -1,32 +1,8 @@
 export const API = "/madira-api";
 
-export type Delegation = {
-  subagent: string;
-  description: string;
-  status: string;
-};
-
-export type AgentResult = {
-  reply: string;
-  delegation: Delegation[];
-  todos: { content: string; status: string }[];
-  a2ui_operations: Record<string, unknown>[];
-  demo_mode: boolean;
-};
-
 export async function getStatus() {
   const res = await fetch(`${API}/status`, { cache: "no-store" });
   if (!res.ok) throw new Error("status failed");
-  return res.json();
-}
-
-export async function runAgent(message: string): Promise<AgentResult> {
-  const res = await fetch(`${API}/agent/run`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
-  });
-  if (!res.ok) throw new Error(await errorMessage(res));
   return res.json();
 }
 

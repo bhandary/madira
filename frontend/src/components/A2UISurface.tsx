@@ -1,7 +1,5 @@
 "use client";
 
-import { applyOperations, resolveBinding, type A2UIComponent, type A2UIOperation, type SurfaceState } from "@/lib/a2ui";
-
 function money(n: unknown, currency?: unknown) {
   const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
   const major = Number(n || 0) / 100;
@@ -317,82 +315,4 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
 export function renderMadiraComponent(name: string, props: Record<string, unknown>) {
   const render = CUSTOM[name];
   return render ? render(props) : null;
-}
-
-function boundProps(component: A2UIComponent, data: unknown): Record<string, unknown> {
-  const props: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(component)) {
-    if (k === "id" || k === "component") continue;
-    props[k] = resolveBinding(v, data);
-  }
-  return props;
-}
-
-function RenderNode({ id, surface }: { id: string; surface: SurfaceState }) {
-  const component = surface.components[id];
-  if (!component) return null;
-  const type = component.component;
-  const props = boundProps(component, surface.data);
-  const custom = CUSTOM[type];
-  if (custom) return <>{custom(props)}</>;
-
-  if (type === "Text") {
-    const variant = String(props.variant || "body");
-    const text = String(props.text ?? "");
-    if (variant === "h2") return <h2 className="mb-2 text-base font-medium">{text}</h2>;
-    if (variant === "h3") return <h3 className="text-sm font-medium">{text}</h3>;
-    if (variant === "caption") return <p className="kicker">{text}</p>;
-    return <p className="text-sm">{text}</p>;
-  }
-  if (type === "Column") {
-    const children = (props.children as string[]) || [];
-    return (
-      <div className="flex flex-col gap-3">
-        {children.map((child) => (
-          <RenderNode key={child} id={child} surface={surface} />
-        ))}
-      </div>
-    );
-  }
-  if (type === "Row") {
-    const children = (props.children as string[]) || [];
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        {children.map((child) => (
-          <RenderNode key={child} id={child} surface={surface} />
-        ))}
-      </div>
-    );
-  }
-  if (type === "Card") {
-    const child = String(props.child || "");
-    return <div className="panel p-3">{child ? <RenderNode id={child} surface={surface} /> : null}</div>;
-  }
-  if (type === "Button") {
-    return <button className="btn btn-primary">{String(props.child || "OK")}</button>;
-  }
-  if (type === "Divider") return <hr className="border-line" />;
-  return (
-    <div className="text-xs text-muted">
-      {type} {JSON.stringify(props)}
-    </div>
-  );
-}
-
-export function A2UISurface({ operations }: { operations: A2UIOperation[] }) {
-  const surfaces = applyOperations(operations);
-  if (!surfaces.length) return null;
-  return (
-    <div className="a2ui-surface space-y-5" data-testid="a2ui-surface">
-      {surfaces.map((surface) => (
-        <section key={surface.surfaceId} data-surface={surface.surfaceId}>
-          {surface.components.root ? (
-            <RenderNode id="root" surface={surface} />
-          ) : (
-            <pre className="ics">{JSON.stringify(surface.data, null, 2)}</pre>
-          )}
-        </section>
-      ))}
-    </div>
-  );
 }

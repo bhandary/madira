@@ -347,6 +347,19 @@ def test_two_venues_are_isolated(client: TestClient, monkeypatch):
     assert "Muscadet Domaine de l'Ecu" not in names
 
 
+def _agent_stream_text(client: TestClient, message: str) -> str:
+    import uuid
+
+    payload = {
+        "threadId": str(uuid.uuid4()),
+        "runId": str(uuid.uuid4()),
+        "messages": [{"id": str(uuid.uuid4()), "role": "user", "content": message}],
+    }
+    with client.stream("POST", "/ag-ui", json=payload, timeout=180) as response:
+        assert response.status_code == 200, response.read()
+        return "".join(response.iter_text())
+
+
 def test_agent_tools_cannot_cross_venues(client: TestClient, monkeypatch):
     planted = _plant_other_venue()
     demo = planted["demo"]
@@ -391,15 +404,13 @@ def test_agent_tools_cannot_cross_venues(client: TestClient, monkeypatch):
     finally:
         session.close()
 
-    run = client.post("/agent/run", json={"message": "Draft a purchase order for low stock"})
-    assert run.status_code == 200, run.text
-    assert "B-SECRET-BOTTLE" not in run.text
+    run_text = _agent_stream_text(client, "Draft a purchase order for low stock")
+    assert "B-SECRET-BOTTLE" not in run_text
 
     _as(client, monkeypatch, "venue-b-owner")
-    other_run = client.post("/agent/run", json={"message": "Draft a purchase order for low stock"})
-    assert other_run.status_code == 200, other_run.text
-    assert "B-SECRET-BOTTLE" in other_run.text
-    assert "Muscadet Domaine de l'Ecu" not in other_run.text
+    other_text = _agent_stream_text(client, "Draft a purchase order for low stock")
+    assert "B-SECRET-BOTTLE" in other_text
+    assert "Muscadet Domaine de l'Ecu" not in other_text
 
 
 def test_no_session_outside_demo_mode_is_401(monkeypatch):
@@ -410,7 +421,7 @@ def test_no_session_outside_demo_mode_is_401(monkeypatch):
         assert denied.status_code == 401
         assert denied.json()["detail"] == "Sign in required."
         assert fresh.get("/settings/llm").status_code == 401
-        assert fresh.post("/agent/run", json={"message": "hello"}).status_code == 401
+        assert fresh.post("/ag-ui", json={"threadId": "t", "runId": "r", "messages": []}).status_code == 401
         assert fresh.get("/health").status_code == 200
         assert fresh.get("/status").status_code == 200
         sample = fresh.get("/fixtures/sample-menu")
@@ -608,7 +619,7 @@ def test_saved_key_turns_off_the_demo_owner(client: TestClient, monkeypatch):
         assert denied.status_code == 401
         assert denied.json()["detail"] == "Sign in required."
         assert client.get("/settings/llm").status_code == 401
-        assert client.post("/agent/run", json={"message": "hello"}).status_code == 401
+        assert client.post("/ag-ui", json={"threadId": "t", "runId": "r", "messages": []}).status_code == 401
     finally:
         set_key_validator(None)
 

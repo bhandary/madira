@@ -6,8 +6,7 @@ import json
 import uuid
 from typing import Any
 
-from langgraph.checkpoint.memory import MemorySaver
-
+from madira.agents.checkpointer import get_checkpointer
 from madira.agents.tools import (
     INVENTORY_TOOLS,
     LIST_TOOLS,
@@ -18,10 +17,6 @@ from madira.agents.tools import (
 )
 from madira.agents import tracker
 from madira.llm_runtime import LlmRuntime, resolve_runtime
-
-# One saver for every rebuild. Settings key save/delete calls refresh_sommelier_agent(),
-# which compiles a new graph; the same MemorySaver keeps each thread's checkpoints.
-_checkpointer = MemorySaver()
 
 HEAD_PROMPT = """You are the Head Sommelier of Maison Madira, a California-French dining room.
 
@@ -118,7 +113,7 @@ def build_head_sommelier():
         "tools": [],
         "subagents": specialist_specs(runtime),
         "system_prompt": HEAD_PROMPT,
-        "checkpointer": _checkpointer,
+        "checkpointer": get_checkpointer(),
     }
     try:
         from copilotkit import CopilotKitMiddleware

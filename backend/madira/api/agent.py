@@ -2,20 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, FastAPI
 
-from madira.agents.orchestrator import invoke_head_sommelier
 from madira.rbac import Capability, require
 
 router = APIRouter()
 
 _agent_slot: dict[str, Any] = {"agent": None}
-
-
-class AgentRunBody(BaseModel):
-    message: str
-    thread_id: str | None = None
 
 
 def _sync_agent_graph(agent: Any, graph: Any) -> None:
@@ -45,10 +38,28 @@ def refresh_sommelier_agent() -> Any:
 
 def mount_agui(app: FastAPI) -> None:
     try:
+        from ag_ui.core import EventType
         from ag_ui_langgraph import add_langgraph_fastapi_endpoint
         from copilotkit import LangGraphAGUIAgent
 
-        agent = LangGraphAGUIAgent(
+        from madira.provider_errors import describe_provider_failure
+        from madira.tenancy import active_venue_id
+
+        class VenueScopedAgent(LangGraphAGUIAgent):
+            async def run(self, input):
+                config = dict(self.config or {})
+                configurable = dict(config.get("configurable") or {})
+                configurable["madira_venue_id"] = str(active_venue_id())
+                config["configurable"] = configurable
+                self.config = config
+                async for event in super().run(input):
+                    if getattr(event, "type", None) == EventType.RUN_ERROR:
+                        message = getattr(event, "message", "") or ""
+                        _status, detail = describe_provider_failure(RuntimeError(message))
+                        event = event.model_copy(update={"message": detail})
+                    yield event
+
+        agent = VenueScopedAgent(
             name="head_sommelier",
             description="Maison Madira Head Sommelier. Delegates to menu, pairing, list, inventory, training, and supplier specialists.",
             graph=refresh_sommelier_agent(),
@@ -59,14 +70,8 @@ def mount_agui(app: FastAPI) -> None:
         app.state.agui_error = str(exc)
 
 
-@router.post("/agent/run", dependencies=[require(Capability.AGENT)])
-def agent_run(body: AgentRunBody) -> dict[str, Any]:
-    from madira.provider_errors import describe_provider_failure
+@router.get("/ag-ui/threads/{thread_id}/messages", dependencies=[require(Capability.AGENT)])
+def agui_thread_messages(thread_id: str) -> dict[str, Any]:
+    from madira.agents.checkpointer import checkpoint_messages
 
-    try:
-        return invoke_head_sommelier(body.message, thread_id=body.thread_id)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        status, detail = describe_provider_failure(exc)
-        raise HTTPException(status_code=status, detail=detail) from exc
+    return {"messages": checkpoint_messages(thread_id)}

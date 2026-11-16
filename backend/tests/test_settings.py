@@ -372,8 +372,9 @@ def test_accept_mode_skips_the_network(monkeypatch):
     validate_provider_key("openai", API_KEY, "")
 
 
-def test_agent_run_returns_the_provider_message_without_the_key(client: TestClient, monkeypatch):
-    _sign_in_owner(client, monkeypatch)
+def test_describe_provider_failure_returns_the_message_without_the_key(monkeypatch):
+    from madira.provider_errors import describe_provider_failure
+
     secret = "sk-live-secret-should-not-leak"
 
     class ProviderError(Exception):
@@ -382,31 +383,25 @@ def test_agent_run_returns_the_provider_message_without_the_key(client: TestClie
             self.status_code = status_code
             self.body = body
 
-    def quota(message, thread_id=None):
-        raise ProviderError(429, {"error": {"message": f"You have no credits remaining {secret}"}})
-
-    monkeypatch.setattr("madira.api.agent.invoke_head_sommelier", quota)
     monkeypatch.setenv("OPENAI_API_KEY", secret)
-    response = client.post("/agent/run", json={"message": "pair the duck"})
-    assert response.status_code == 429
-    assert response.json()["detail"] == "You have no credits remaining"
-    assert secret not in response.text
+    status, detail = describe_provider_failure(
+        ProviderError(429, {"error": {"message": f"You have no credits remaining {secret}"}})
+    )
+    assert status == 429
+    assert detail == "You have no credits remaining"
+    assert secret not in detail
 
-    def denied(message, thread_id=None):
-        raise RuntimeError("model call failed") from ProviderError(401, {"error": {"message": "Incorrect API key provided"}})
+    denied = RuntimeError("model call failed")
+    denied.__cause__ = ProviderError(401, {"error": {"message": "Incorrect API key provided"}})
+    auth_status, auth_detail = describe_provider_failure(denied)
+    assert auth_status == 401
+    assert auth_detail == "Incorrect API key provided"
 
-    monkeypatch.setattr("madira.api.agent.invoke_head_sommelier", denied)
-    auth = client.post("/agent/run", json={"message": "pair the duck"})
-    assert auth.status_code == 401
-    assert auth.json()["detail"] == "Incorrect API key provided"
-
-    def outage(message, thread_id=None):
-        raise ProviderError(500, {"error": {"message": "upstream failed"}})
-
-    monkeypatch.setattr("madira.api.agent.invoke_head_sommelier", outage)
-    failed = client.post("/agent/run", json={"message": "pair the duck"})
-    assert failed.status_code == 502
-    assert failed.json()["detail"] == "upstream failed"
+    outage_status, outage_detail = describe_provider_failure(
+        ProviderError(500, {"error": {"message": "upstream failed"}})
+    )
+    assert outage_status == 502
+    assert outage_detail == "upstream failed"
 
 
 def test_secret_roundtrip_and_dev_fallback(monkeypatch, tmp_path):

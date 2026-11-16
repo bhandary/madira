@@ -10,7 +10,7 @@ The app is aimed at restaurants. It runs in a clearly labeled **DEMO MODE** with
 flowchart TD
   UI["Next.js + Tailwind<br/>CopilotKit AG-UI + A2UI catalog"]
   Runtime["CopilotKit runtime<br/>/api/copilotkit"]
-  REST["FastAPI REST<br/>/agent/run · CRUD"]
+  REST["FastAPI REST<br/>CRUD"]
   AGUI["AG-UI bridge<br/>/ag-ui"]
   Head["Head Sommelier<br/>deepagents.create_deep_agent"]
   Task["task tool"]

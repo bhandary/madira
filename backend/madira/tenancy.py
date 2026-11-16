@@ -129,8 +129,9 @@ def ensure_demo_tenant(session: Session | None = None) -> RequestContext:
             session.flush()
         elif membership.role != OWNER:
             membership.role = OWNER
+        ctx = _context_from(user, membership, venue)
         session.commit()
-        return _context_from(user, membership, venue)
+        return ctx
     except Exception:
         session.rollback()
         raise
