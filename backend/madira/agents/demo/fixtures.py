@@ -363,108 +363,31 @@ def _pairings_for(dish_name: str) -> list[dict]:
 
 def parse_menu_text(text: str, source_name: str = "pasted") -> dict:
     """Parse menu text into dishes. Sample menu maps to rich fixtures; other text is line-parsed."""
+    from madira.domain.menu.parsing import line_parse_menu, matches_sample_menu
+
     raw = (text or "").strip()
     if not raw:
-        dishes = [dict(d) for d in SAMPLE_DISHES]
         return {
             "name": "Maison Madira — Autumn Tasting",
             "cuisine": "California-French",
             "price_tier": "$$$",
             "source_type": source_name,
             "raw_text": SAMPLE_MENU_TEXT,
-            "dishes": dishes,
+            "dishes": [dict(dish) for dish in SAMPLE_DISHES],
         }
-
-    lowered = raw.lower()
-    if "dungeness" in lowered or "maison madira" in lowered or "ribeye" in lowered and "truffle" in lowered:
+    if matches_sample_menu(raw):
         return {
             "name": "Maison Madira — Autumn Tasting",
             "cuisine": "California-French",
             "price_tier": "$$$",
             "source_type": source_name,
             "raw_text": raw,
-            "dishes": [dict(d) for d in SAMPLE_DISHES],
+            "dishes": [dict(dish) for dish in SAMPLE_DISHES],
         }
-
-    dishes: list[dict] = []
-    course = "course"
-    for line in raw.splitlines():
-        cleaned = line.strip().lstrip("-•*").strip()
-        if not cleaned or len(cleaned) < 4:
-            continue
-        if cleaned.isupper() and len(cleaned) < 40:
-            continue
-        if cleaned.lower().startswith("maison"):
-            continue
-        price = 0.0
-        name = cleaned
-        if "—" in cleaned:
-            left, right = cleaned.rsplit("—", 1)
-            name = left.strip()
-            try:
-                price = float(right.replace("$", "").strip().split()[0])
-            except (ValueError, IndexError):
-                price = 0.0
-        elif "$" in cleaned:
-            try:
-                price = float(cleaned.split("$")[-1].strip().split()[0])
-                name = cleaned.split("$")[0].rstrip(" -—").strip()
-            except ValueError:
-                price = 0.0
-        name = name.lstrip("0123456789.").strip()
-        if len(name) < 4:
-            continue
-        flavor = _guess_flavor(name)
-        dishes.append(
-            {
-                "name": name,
-                "course": course,
-                "description": name,
-                "flavor_profile": flavor,
-                "price": price,
-            }
-        )
-        course = "following"
-    if not dishes:
-        dishes = [dict(d) for d in SAMPLE_DISHES]
-    cuisine = "California-French" if "french" in lowered else "contemporary"
-    return {
-        "name": source_name or "Uploaded menu",
-        "cuisine": cuisine,
-        "price_tier": "$$$",
-        "source_type": source_name,
-        "raw_text": raw,
-        "dishes": dishes[:12],
-    }
-
-
-def _guess_flavor(name: str) -> str:
-    n = name.lower()
-    tags = []
-    mapping = {
-        "crab": "sweet-briny",
-        "fish": "lean ocean",
-        "oyster": "saline",
-        "duck": "rich game",
-        "liver": "umami",
-        "beef": "charred fat",
-        "ribeye": "charred fat",
-        "steak": "charred fat",
-        "truffle": "earthy",
-        "risotto": "creamy",
-        "chocolate": "bitter cocoa",
-        "yuzu": "citrus",
-        "lemon": "citrus",
-        "cherry": "sweet-sour fruit",
-        "mushroom": "woodland",
-        "lamb": "herbal roast",
-        "pork": "sweet-savory",
-        "salad": "green acid",
-    }
-    for key, tag in mapping.items():
-        if key in n:
-            tags.append(tag)
-    return ", ".join(tags) or "savory, balanced"
+    parsed = line_parse_menu(raw, source_name)
+    if not parsed["dishes"]:
+        parsed["dishes"] = [dict(dish) for dish in SAMPLE_DISHES]
+    return parsed
 
 
 def pairings_for_dishes(dishes: list[dict]) -> list[dict]:

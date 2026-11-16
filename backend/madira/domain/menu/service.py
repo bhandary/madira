@@ -28,7 +28,7 @@ def extract_upload_text(filename: str, data: bytes) -> str:
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError:
-        require_demo("Menu text extraction")
+        require_demo("Unreadable menu text")
         from madira.agents.demo.fixtures import SAMPLE_MENU_TEXT
 
         return SAMPLE_MENU_TEXT
@@ -37,7 +37,7 @@ def extract_upload_text(filename: str, data: bytes) -> str:
 def coerce_parse_text(text: str | None) -> str:
     if text:
         return text
-    require_demo("Menu parsing")
+    require_demo("Empty menu text")
     from madira.agents.demo.fixtures import SAMPLE_MENU_TEXT
 
     return SAMPLE_MENU_TEXT
@@ -46,17 +46,35 @@ def coerce_parse_text(text: str | None) -> str:
 def coerce_upload_text(raw: str) -> str:
     if raw.strip():
         return raw
-    require_demo("Menu parsing")
+    require_demo("Empty menu text")
     from madira.agents.demo.fixtures import SAMPLE_MENU_TEXT
 
     return SAMPLE_MENU_TEXT
 
 
-def parse_menu(venue_id: uuid.UUID, text: str, source_name: str = "pasted") -> dict:
-    require_demo("Menu parsing")
-    from madira.agents.demo.fixtures import parse_menu_text
+def _parse_text(text: str, source_name: str) -> dict:
+    from madira.tenancy import demo_posture
 
-    parsed = parse_menu_text(text, source_name=source_name)
+    if demo_posture():
+        from madira.agents.demo.fixtures import parse_menu_text
+
+        return parse_menu_text(text, source_name=source_name)
+    raw = (text or "").strip()
+    if not raw:
+        require_demo("Empty menu text")
+    from madira.domain.menu.parsing import line_parse_menu, matches_sample_menu
+
+    if matches_sample_menu(raw):
+        require_demo("Sample menu substitution")
+
+    parsed = line_parse_menu(raw, source_name)
+    if not parsed["dishes"]:
+        require_demo("Sample menu substitution")
+    return parsed
+
+
+def parse_menu(venue_id: uuid.UUID, text: str, source_name: str = "pasted") -> dict:
+    parsed = _parse_text(text, source_name)
     with session_scope() as session:
         menu = Menu(
             venue_id=venue_id,
