@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from madira.agents.tools import curate_beverage_list, get_inventory, parse_menu, recommend_pairings, start_roleplay
 from madira.auth import SESSION_COOKIE, issue_session
 from madira.db import init_db
-from madira.domain.errors import Unavailable
+from madira.domain.errors import DraftFailed, Unavailable
 from madira.domain.menu.service import extract_upload_text
 from madira.domain.training.service import briefing
 from madira.llm_runtime import resolve_runtime
@@ -51,8 +51,12 @@ def test_live_tools_raise_instead_of_returning_fixtures(monkeypatch):
             start_roleplay()
         assert "Diner roleplay has no live backend yet" in played.value.message
         assert "skeptical of sommeliers" not in played.value.message
-        with pytest.raises(Unavailable):
+        with pytest.raises(DraftFailed) as photo:
             extract_upload_text("plate.png", b"\x89PNG\r\n")
+        assert photo.value.status == 415
+        assert "no live backend" not in photo.value.message
+        for marker in _FIXTURE_MARKERS:
+            assert marker not in photo.value.message
         inventory = json.loads(get_inventory())
         assert any(row["sku"] == "W-MUS-01" for row in inventory["items"])
         opened = briefing(demo.venue_id)

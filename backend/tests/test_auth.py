@@ -14,12 +14,12 @@ import pytest
 from fastapi.testclient import TestClient
 from joserfc import jwt
 from joserfc.jwk import RSAKey
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 
 from madira.auth import GOOGLE_JWKS, GOOGLE_TOKEN, clear_jwks_cache
 from madira.db import SessionLocal, init_db
 from madira.main import app
-from madira.models import Membership, ServiceCard, TastingNote, User
+from madira.models import Membership, MenuVersion, ServiceCard, TastingNote, User
 from madira.tenancy import DEMO_USER_SUB
 
 CLIENT_ID = "client-id"
@@ -79,6 +79,9 @@ def _wipe() -> None:
         session.execute(delete(ServiceCard))
         session.execute(delete(TastingNote))
         session.execute(delete(Membership))
+        session.execute(
+            update(MenuVersion).values(status="draft", confirmed_by=None, confirmed_at=None)
+        )
         session.execute(delete(User))
         session.commit()
     finally:

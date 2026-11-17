@@ -138,6 +138,8 @@ class DemoChatModel(BaseChatModel):
     def _decide(self, messages: list[BaseMessage]) -> AIMessage:
         if self.role == "note-drafter":
             return self._draft_note(messages)
+        if self.role == "menu-extractor":
+            return self._extract_menu(messages)
         if self.role in SPECIALISTS:
             return self._specialist(messages)
         return self._orchestrator(messages)
@@ -146,6 +148,11 @@ class DemoChatModel(BaseChatModel):
         from madira.agents.demo.notes import note_draft_json
 
         return _ai(content=note_draft_json(last_human(messages)))
+
+    def _extract_menu(self, messages: list[BaseMessage]) -> AIMessage:
+        from madira.agents.demo.menu import extraction_json
+
+        return _ai(content=extraction_json(last_human(messages)))
 
     def _has_tool(self, name: str, messages: list[BaseMessage]) -> bool:
         if name in self.bound_tool_names:
