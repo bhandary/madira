@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AgentWorkbench } from "@/components/AgentWorkbench";
+import { ListImport } from "@/components/ListImport";
 
 export default function ListPage() {
   const [budget, setBudget] = useState(12000);
@@ -40,6 +41,7 @@ export default function ListPage() {
           />
         </label>
       </div>
+      <ListImport />
     </AgentWorkbench>
   );
 }
