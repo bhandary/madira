@@ -80,6 +80,7 @@ def item_view(item: ListItem) -> dict:
         "bottle_price": item.bottle_price,
         "currency": item.currency,
         "margin_pct": item.margin_pct,
+        "product_id": item.sku.variant.product_id,
     }
 
 

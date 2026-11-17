@@ -19,7 +19,7 @@ from sqlalchemy import delete, func, select
 from madira.auth import GOOGLE_JWKS, GOOGLE_TOKEN, clear_jwks_cache
 from madira.db import SessionLocal, init_db
 from madira.main import app
-from madira.models import Membership, User
+from madira.models import Membership, ServiceCard, TastingNote, User
 from madira.tenancy import DEMO_USER_SUB
 
 CLIENT_ID = "client-id"
@@ -76,6 +76,8 @@ def configured(monkeypatch):
 def _wipe() -> None:
     session = SessionLocal()
     try:
+        session.execute(delete(ServiceCard))
+        session.execute(delete(TastingNote))
         session.execute(delete(Membership))
         session.execute(delete(User))
         session.commit()
