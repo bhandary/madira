@@ -26,7 +26,7 @@ Preconditions:
 - **Rewrite.** `curl -sS http://127.0.0.1:3000/madira-api/health` returns that same `demo_mode` and `label`.
 - **Status.** `curl -sS http://127.0.0.1:8123/status` repeats the health fields and adds `specialists`: `menu-analyst`, `pairing-sommelier`, `list-curator`, `inventory-purchasing`, `staff-trainer`, `supplier-scheduler`. `wiring.specialists` matches that list and `wiring.has_task_tool` is true. `sample_menu` is present (347 characters on this seed).
 - **Banner.** Open `/` and wait until `[data-testid=mode-banner]` does not contain `connecting`. It reads `DEMO MODE` and `deterministic fixtures, no API key`.
-- **Doctor.** `make doctor` prints the same demo payload, then the live `/health` body, then `frontend ok`.
+- **Doctor.** Run `make doctor` with the provider keys unset, as in [../SKILL.md](../SKILL.md). It prints the same demo payload, then the live `/health` body, then `frontend ok`.
 - **Proof.** Save the three response bodies. A banner screenshot is the user-visible half.
 
 ## Gotchas
@@ -35,3 +35,4 @@ Preconditions:
 - `make doctor` glues `frontend ok` onto the same line as the `/health` JSON. The frontend check still passed when that line ends in `frontend ok`.
 - Status is public. It includes the sample menu text. It does not include a provider key.
 - `database` is `sqlite` for the default file. This run did not set `DATABASE_URL`.
+- The first block of `make doctor` is built in the calling shell. A provider key exported in that shell makes it print `LIVE — openai:gpt-4.1-mini` even when the backend is in demo mode. Trust `/health` for the backend.

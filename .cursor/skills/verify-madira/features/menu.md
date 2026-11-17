@@ -23,13 +23,14 @@ Preconditions:
 
 - **Wait for the sample.** Open `/menu`. The heading is `Menu & pairings`. Wait until `[data-testid=menu-workbench-prompt]` contains `Dungeness`. The prompt starts `Parse this menu (PDF/image/text)`.
 - **Upload.** Set `[data-testid=menu-file]` to `fixtures/sample_menu.txt`. `[data-testid=menu-filename]` reads `sample_menu.txt`. The prompt still contains `Dungeness crab`.
-- **Run.** Choose `[data-testid=menu-workbench-submit]` after it is hydrated. Wait until `[data-testid=delegate-menu-analyst]` and `[data-testid=delegate-pairing-sommelier]` are visible. Both show `COMPLETE`.
-- **Surfaces.** `[data-testid=agent-reply]` says the head delegated to `menu-analyst, pairing-sommelier`. The well shows `Parsed · Maison Madira — Autumn Tasting` with five dishes (crab, mousse, risotto, ribeye, chocolate). `[data-testid=pairing-grid]` is visible. The first `[data-testid=pairing-card]` names `Dungeness crab, yuzu, avocado, cucumber`. The first `[data-testid=pairing-wine]` names `Muscadet Sèvre-et-Maine Sur Lie`. Beer, spirit, and sake cards are on the same grid.
-- **Read back.** `curl -sS http://127.0.0.1:8123/menus` includes a menu named `Maison Madira — Autumn Tasting`, cuisine `California-French`, price tier `$$$`, `dish_count` 5.
+- **Run.** Choose `[data-testid=menu-workbench-submit]` once it is enabled. Wait until `[data-testid=delegate-menu-analyst]` and `[data-testid=delegate-pairing-sommelier]` are visible. Both show `COMPLETE`.
+- **Surfaces.** The assistant message says the head delegated to `menu-analyst, pairing-sommelier`. The well shows `Parsed · Maison Madira — Autumn Tasting` with five dishes (crab, mousse, risotto, ribeye, chocolate). `[data-testid=pairing-grid]` is visible. The first `[data-testid=pairing-card]` names `Dungeness crab, yuzu, avocado, cucumber`. The first `[data-testid=pairing-wine]` names `Muscadet Sèvre-et-Maine Sur Lie`. Beer, spirit, and sake cards are on the same grid (`[data-testid=pairing-beer]`, `pairing-spirit`, `pairing-sake`, five of each). `[data-testid=todo-list]` reads `[in_progress] Delegate to menu-analyst [pending] Delegate to pairing-sommelier`.
+- **Read back.** `curl -sS http://127.0.0.1:8123/menus` includes a menu named `Maison Madira — Autumn Tasting`, cuisine `California-French`, price tier `$$$`, `dish_count` 5, and a UUID `id`.
 - **Proof.** Screenshot the dish list and the pairing cards together.
 
 ## Gotchas
 
-- `[data-testid=todo-list]` was not in the document after this run. Do not require it.
+- The todo list keeps the head's last `write_todos` call, so it still shows `in_progress` and `pending` after both specialists are `COMPLETE`. Do not read it as run status.
+- Each run inserts another menu. `GET /menus` lists the newest first.
 - A text upload keeps the dish text in the prompt. This drive did not upload a PDF or an image.
-- `GET /fixtures/sample-menu` returns the same autumn menu text (`text` is 347 characters) and is what the page loads into the prompt before an upload.
+- `GET /fixtures/sample-menu` returns the same autumn menu text (`text` is 347 characters) and is what the page loads into the prompt before an upload. It is demo-only: with a key saved it returned 501.
