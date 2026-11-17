@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from madira.db import SessionLocal, init_db
+from madira.domain.catalog.service import ensure_sku
 from madira.money import DEFAULT_CURRENCY, to_minor
 from madira.models import InventoryItem, Lesson, Quiz, Supplier
 from madira.tenancy import bind, demo_posture, ensure_demo_tenant, reset
@@ -36,17 +37,22 @@ def seed(session: Session | None = None) -> None:
                 suppliers[supplier.name] = supplier
             for row in INVENTORY:
                 supplier = suppliers[row["supplier"]]
+                stock = ensure_sku(
+                    session,
+                    venue_id,
+                    category=row["category"],
+                    name=row["name"],
+                    barcode=row["sku"],
+                    par=row["par"],
+                    cost=to_minor(row["unit_cost"]),
+                    currency=DEFAULT_CURRENCY,
+                )
                 session.add(
                     InventoryItem(
                         venue_id=venue_id,
-                        sku=row["sku"],
-                        name=row["name"],
-                        category=row["category"],
+                        sku_id=stock.id,
                         supplier_id=supplier.id,
                         on_hand=row["on_hand"],
-                        par=row["par"],
-                        unit_cost=to_minor(row["unit_cost"]),
-                        currency=DEFAULT_CURRENCY,
                         depletion_30d=row["depletion_30d"],
                         unit=row.get("unit", "btl"),
                     )
