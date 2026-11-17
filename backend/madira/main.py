@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 
 from madira.agents.checkpointer import get_checkpointer
 from madira.api.agent import mount_agui, router as agent_router
+from madira.api.catalog import router as catalog_router
 from madira.api.health import fixtures_router, router as health_router, status_router
 from madira.api.inventory import router as inventory_router
 from madira.api.lists import router as lists_router
@@ -38,6 +39,7 @@ app.include_router(status_router)
 app.include_router(agent_router)
 app.include_router(menus_router)
 app.include_router(lists_router)
+app.include_router(catalog_router)
 app.include_router(inventory_router)
 app.include_router(purchasing_router)
 app.include_router(training_router)

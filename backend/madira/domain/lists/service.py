@@ -6,6 +6,7 @@ import uuid
 
 from sqlalchemy import select
 
+from madira.domain.catalog.service import beverage_fields, ensure_sku
 from madira.domain.errors import require_demo
 from madira.domain.session import session_scope
 from madira.models import BeverageList, ListItem
@@ -34,16 +35,21 @@ def curate(
         session.add(beverage_list)
         session.flush()
         for item in payload["items"]:
+            stock = ensure_sku(
+                session,
+                venue_id,
+                category=item["category"],
+                name=item["name"],
+                producer=item["producer"],
+                region=item["region"],
+                style=item["style"],
+                vintage=item["vintage"],
+            )
             session.add(
                 ListItem(
                     venue_id=venue_id,
                     list_id=beverage_list.id,
-                    category=item["category"],
-                    name=item["name"],
-                    producer=item["producer"],
-                    region=item["region"],
-                    style=item["style"],
-                    vintage=item["vintage"],
+                    sku_id=stock.id,
                     cost=item["cost"],
                     pour_price=item["pour_price"],
                     bottle_price=item["bottle_price"],
@@ -54,6 +60,22 @@ def curate(
         payload["list_id"] = beverage_list.id
         session.commit()
         return payload
+
+
+def _item_view(item: ListItem) -> dict:
+    fields = beverage_fields(item.sku)
+    return {
+        "category": fields["category"],
+        "name": fields["name"],
+        "producer": fields["producer"],
+        "region": fields["region"],
+        "style": fields["style"],
+        "cost": item.cost,
+        "pour_price": item.pour_price,
+        "bottle_price": item.bottle_price,
+        "currency": item.currency,
+        "margin_pct": item.margin_pct,
+    }
 
 
 def list_lists(venue_id: uuid.UUID) -> dict:
@@ -73,21 +95,7 @@ def list_lists(venue_id: uuid.UUID) -> dict:
                     "target_margin": row.target_margin,
                     "item_count": len(row.items),
                     "notes": row.notes,
-                    "items": [
-                        {
-                            "category": item.category,
-                            "name": item.name,
-                            "producer": item.producer,
-                            "region": item.region,
-                            "style": item.style,
-                            "cost": item.cost,
-                            "pour_price": item.pour_price,
-                            "bottle_price": item.bottle_price,
-                            "currency": item.currency,
-                            "margin_pct": item.margin_pct,
-                        }
-                        for item in row.items
-                    ],
+                    "items": [_item_view(item) for item in row.items],
                 }
                 for row in rows
             ]

@@ -3,7 +3,20 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, CheckConstraint, Float, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid, func, text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from madira.db import Base
@@ -65,6 +78,86 @@ class Membership(Base):
     role: Mapped[str] = mapped_column(String(32))
 
 
+class Product(Base):
+    """A drink in the organization catalog. Venues stock it as SKUs."""
+
+    __tablename__ = "products"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "category",
+            "producer",
+            "name",
+            "region",
+            "country",
+            "style",
+            "grape",
+            name="uq_products_identity",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    category: Mapped[str] = mapped_column(String(32), default="")
+    producer: Mapped[str] = mapped_column(String(200), default="")
+    name: Mapped[str] = mapped_column(String(200))
+    region: Mapped[str] = mapped_column(String(200), default="")
+    country: Mapped[str] = mapped_column(String(80), default="")
+    style: Mapped[str] = mapped_column(String(200), default="")
+    grape: Mapped[str] = mapped_column(String(200), default="")
+    body: Mapped[str] = mapped_column(String(32), default="")
+    acidity: Mapped[str] = mapped_column(String(32), default="")
+    tannin: Mapped[str] = mapped_column(String(32), default="")
+    sweetness: Mapped[str] = mapped_column(String(32), default="")
+    oak: Mapped[str] = mapped_column(String(32), default="")
+    intensity: Mapped[str] = mapped_column(String(32), default="")
+    aroma_families: Mapped[list] = mapped_column(JSON, default=list)
+    variants: Mapped[list[ProductVariant]] = relationship(back_populates="product")
+
+
+class ProductVariant(Base):
+    """Vintage and bottle size of one product."""
+
+    __tablename__ = "product_variants"
+    __table_args__ = (
+        UniqueConstraint("product_id", "vintage", "bottle_size", name="uq_product_variants_identity"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
+    vintage: Mapped[str] = mapped_column(String(32), default="")
+    bottle_size: Mapped[str] = mapped_column(String(32), default="")
+    product: Mapped[Product] = relationship(back_populates="variants")
+    skus: Mapped[list[Sku]] = relationship(back_populates="variant")
+
+
+class Sku(Base):
+    """One venue's stock identity for a variant: barcode, bin, par, and cost."""
+
+    __tablename__ = "skus"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "product_variant_id", name="uq_skus_venue_variant"),
+        Index(
+            "uq_skus_venue_barcode",
+            "venue_id",
+            "barcode",
+            unique=True,
+            sqlite_where=text("barcode != ''"),
+            postgresql_where=text("barcode <> ''"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    product_variant_id: Mapped[uuid.UUID] = _fk("product_variants.id", index=True)
+    barcode: Mapped[str] = mapped_column(String(64), default="")
+    bin_label: Mapped[str] = mapped_column(String(200), default="")
+    par: Mapped[int] = mapped_column(Integer, default=0)
+    cost: Mapped[int] = mapped_column(Integer, default=0)
+    currency: Mapped[str] = _currency()
+    variant: Mapped[ProductVariant] = relationship(back_populates="skus")
+
+
 class Menu(Base):
     __tablename__ = "menus"
 
@@ -101,18 +194,14 @@ class Pairing(Base):
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     dish_id: Mapped[uuid.UUID] = _fk("dishes.id")
-    category: Mapped[str] = mapped_column(String(32))
-    name: Mapped[str] = mapped_column(String(200))
-    producer: Mapped[str] = mapped_column(String(200), default="")
-    region: Mapped[str] = mapped_column(String(200), default="")
-    style: Mapped[str] = mapped_column(String(200), default="")
-    vintage: Mapped[str] = mapped_column(String(32), default="")
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
     rationale: Mapped[str] = mapped_column(Text, default="")
     price_tier: Mapped[str] = mapped_column(String(32), default="")
     glass_price: Mapped[int] = mapped_column(Integer, default=0)
     bottle_price: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
     dish: Mapped[Dish] = relationship(back_populates="pairings")
+    sku: Mapped[Sku] = relationship()
 
 
 class BeverageList(Base):
@@ -135,18 +224,14 @@ class ListItem(Base):
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     list_id: Mapped[uuid.UUID] = _fk("beverage_lists.id")
-    category: Mapped[str] = mapped_column(String(32))
-    name: Mapped[str] = mapped_column(String(200))
-    producer: Mapped[str] = mapped_column(String(200), default="")
-    region: Mapped[str] = mapped_column(String(200), default="")
-    style: Mapped[str] = mapped_column(String(200), default="")
-    vintage: Mapped[str] = mapped_column(String(32), default="")
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
     cost: Mapped[int] = mapped_column(Integer, default=0)
     pour_price: Mapped[int] = mapped_column(Integer, default=0)
     bottle_price: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
     margin_pct: Mapped[float] = mapped_column(Float, default=0)
     beverage_list: Mapped[BeverageList] = relationship(back_populates="items")
+    sku: Mapped[Sku] = relationship()
 
 
 class Supplier(Base):
@@ -164,22 +249,19 @@ class Supplier(Base):
 
 
 class InventoryItem(Base):
+    """On-hand quantity for a SKU. Par and cost live on the SKU; the ledger is later."""
+
     __tablename__ = "inventory_items"
-    __table_args__ = (UniqueConstraint("venue_id", "sku", name="uq_inventory_items_venue_sku"),)
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
-    sku: Mapped[str] = mapped_column(String(64))
-    name: Mapped[str] = mapped_column(String(200))
-    category: Mapped[str] = mapped_column(String(32))
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
     supplier_id: Mapped[uuid.UUID | None] = _fk("suppliers.id", nullable=True)
     on_hand: Mapped[int] = mapped_column(Integer, default=0)
-    par: Mapped[int] = mapped_column(Integer, default=0)
-    unit_cost: Mapped[int] = mapped_column(Integer, default=0)
-    currency: Mapped[str] = _currency()
     depletion_30d: Mapped[int] = mapped_column(Integer, default=0)
     unit: Mapped[str] = mapped_column(String(32), default="btl")
     supplier: Mapped[Supplier | None] = relationship(back_populates="items")
+    sku: Mapped[Sku] = relationship()
 
 
 class PurchaseOrder(Base):

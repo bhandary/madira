@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from madira.db import SessionLocal, init_db
+from madira.domain.catalog.service import ensure_sku
 from madira.domain.errors import NotFound
 from madira.domain.inventory.service import set_on_hand, snapshot
 from madira.domain.purchasing.service import draft, list_orders
@@ -31,17 +32,22 @@ def _other_venue(organization_id: uuid.UUID) -> uuid.UUID:
             supplier = Supplier(venue_id=venue.id, name="Other House Wines", kind="distributor")
             session.add(supplier)
             session.flush()
+            stock = ensure_sku(
+                session,
+                venue.id,
+                category="wine",
+                name="Other House Bottle",
+                barcode="B-ONLY-01",
+                par=4,
+                cost=500,
+                currency=DEFAULT_CURRENCY,
+            )
             session.add(
                 InventoryItem(
                     venue_id=venue.id,
-                    sku="B-ONLY-01",
-                    name="Other House Bottle",
-                    category="wine",
+                    sku_id=stock.id,
                     supplier_id=supplier.id,
                     on_hand=0,
-                    par=4,
-                    unit_cost=500,
-                    currency=DEFAULT_CURRENCY,
                     depletion_30d=1,
                     unit="btl",
                 )

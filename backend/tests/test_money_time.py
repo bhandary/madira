@@ -126,7 +126,7 @@ import os
 from sqlalchemy import create_engine, func, select, text
 from alembic import command
 from madira.db import _alembic_config
-from madira.models import BeverageList, InventoryItem, Tasting, Venue
+from madira.models import BeverageList, InventoryItem, Sku, Tasting, Venue
 from madira.timestamps import parse_stamp
 
 url = os.environ["DATABASE_URL"]
@@ -194,9 +194,11 @@ try:
         (Tasting, before["tastings"]),
     ):
         assert session.scalar(select(func.count()).select_from(model)) == count
-    item = session.scalar(select(InventoryItem).where(InventoryItem.sku == "B-STT-01"))
-    assert item.unit_cost == 340
-    assert item.currency == "USD"
+    item = session.scalar(
+        select(InventoryItem).join(Sku, InventoryItem.sku_id == Sku.id).where(Sku.barcode == "B-STT-01")
+    )
+    assert item.sku.cost == 340
+    assert item.sku.currency == "USD"
     assert item.venue_id == session.scalar(select(Venue.id).where(Venue.slug == "maison-madira"))
     listing = session.scalar(select(BeverageList))
     assert listing.budget == 1_200_000
@@ -231,7 +233,7 @@ with engine.connect() as conn:
     version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
     orgs = conn.execute(text("SELECT COUNT(*) FROM organizations")).scalar()
     suppliers = conn.execute(text("SELECT COUNT(*) FROM suppliers")).scalar()
-assert version == "0003_uuid_money_time"
+assert version == "0004_catalog"
 assert orgs == 1
 assert suppliers == 0
 """
