@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { DishReview } from "@/components/DishReview";
-import { ApiError, getMenus, ingestMenu, type MenuReview } from "@/lib/api";
+import { PairingGrid } from "@/components/PairingGrid";
+import { ApiError, getMenus, getPairings, ingestMenu, pairMenu, type MenuReview, type PairingDish } from "@/lib/api";
 
 export function MenuIngest() {
   const [camera, setCamera] = useState<File | null>(null);
@@ -12,14 +13,44 @@ export function MenuIngest() {
   const [menuId, setMenuId] = useState("");
   const [menus, setMenus] = useState<{ id: string; name: string }[]>([]);
   const [review, setReview] = useState<MenuReview | null>(null);
+  const [pairMenuId, setPairMenuId] = useState("");
+  const [pairings, setPairings] = useState<PairingDish[] | null>(null);
+  const [gridKey, setGridKey] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     getMenus()
-      .then((payload) => setMenus(payload.menus.map((menu) => ({ id: menu.id, name: menu.name }))))
+      .then(async (payload) => {
+        setMenus(payload.menus.map((menu) => ({ id: menu.id, name: menu.name })));
+        const confirmed = payload.menus.find((menu) => menu.status === "confirmed");
+        if (!confirmed) return;
+        const grid = await getPairings(confirmed.id);
+        if (grid.dishes.some((dish) => dish.pairings.length > 0)) {
+          setPairMenuId(confirmed.id);
+          setPairings(grid.dishes);
+          setGridKey((key) => key + 1);
+        }
+      })
       .catch(() => undefined);
   }, []);
+
+  async function pair() {
+    if (!review || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const grid = await pairMenu(review.menu_id);
+      setPairMenuId(review.menu_id);
+      setPairings(grid.dishes);
+      setGridKey((key) => key + 1);
+    } catch (err) {
+      const detail = err instanceof ApiError ? err.message : "The menu could not be paired.";
+      setError(detail || "The menu could not be paired.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function readMenu() {
     if (busy) return;
@@ -133,6 +164,12 @@ export function MenuIngest() {
         {busy ? "Reading…" : "Read menu"}
       </button>
       {review && <DishReview key={review.version_id} review={review} onChange={setReview} />}
+      {review?.status === "confirmed" && (
+        <button type="button" className="btn btn-primary mt-3 w-full" data-testid="menu-pair" disabled={busy} onClick={() => void pair()}>
+          {busy ? "Pairing…" : "Pair with the list"}
+        </button>
+      )}
+      {pairMenuId && pairings && <PairingGrid key={gridKey} menuId={pairMenuId} dishes={pairings} />}
     </section>
   );
 }

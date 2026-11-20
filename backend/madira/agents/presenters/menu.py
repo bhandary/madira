@@ -9,7 +9,7 @@ from madira.agents.presenters.ops import surface
 PAIRING_SCHEMA = [
     {"id": "root", "component": "Column", "children": ["title", "grid"]},
     {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
-    {"id": "grid", "component": "PairingGrid", "dishes": {"path": "/dishes"}},
+    {"id": "grid", "component": "PairingGrid", "menu_id": {"path": "/menu_id"}, "dishes": {"path": "/dishes"}},
 ]
 
 DISH_SCHEMA = [
@@ -65,8 +65,8 @@ def dishes_surface(title: str, dishes: list[dict], cuisine: str, price_tier: str
     )
 
 
-def pairings_surface(title: str, dishes: list[dict]) -> list[dict[str, Any]]:
-    return surface("pairings", PAIRING_SCHEMA, {"title": title, "dishes": dishes})
+def pairings_surface(title: str, menu_id: str, dishes: list[dict]) -> list[dict[str, Any]]:
+    return surface("pairings", PAIRING_SCHEMA, {"title": title, "menu_id": str(menu_id), "dishes": dishes})
 
 
 def present_review(payload: dict) -> dict:
@@ -117,6 +117,14 @@ def with_dishes(payload: dict) -> dict:
 
 
 def with_pairings(payload: dict) -> dict:
-    body = {"menu_id": payload["menu_id"], "dishes": payload["dishes"]}
-    body["a2ui_operations"] = pairings_surface(f"Pairings · {payload['menu_name']}", payload["dishes"])
+    body = {
+        "menu_id": payload["menu_id"],
+        "menu_name": payload.get("menu_name", ""),
+        "dishes": payload["dishes"],
+    }
+    body["a2ui_operations"] = pairings_surface(
+        f"Pairings · {payload.get('menu_name', '')}",
+        str(payload["menu_id"]),
+        payload["dishes"],
+    )
     return body

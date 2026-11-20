@@ -28,8 +28,24 @@ def _live(monkeypatch) -> None:
     assert resolve_runtime().demo_mode is False
 
 
+def _block_pairing_fixtures(monkeypatch) -> None:
+    def fixtures(*_args, **_kwargs):
+        raise AssertionError("fixture pairings")
+
+    def live_boom(_prompt: str) -> str:
+        raise RuntimeError("connection refused")
+
+    def demo_boom(*_args, **_kwargs):
+        raise AssertionError("demo copy")
+
+    monkeypatch.setattr("madira.agents.demo.fixtures.pairings_for_dishes", fixtures)
+    monkeypatch.setattr("madira.domain.pairing.copy.live_complete", live_boom)
+    monkeypatch.setattr("madira.domain.pairing.copy.demo_lines", demo_boom)
+
+
 def test_live_tools_raise_instead_of_returning_fixtures(monkeypatch):
     _live(monkeypatch)
+    _block_pairing_fixtures(monkeypatch)
     demo = ensure_demo_tenant()
     token = bind(demo)
     try:
@@ -39,11 +55,13 @@ def test_live_tools_raise_instead_of_returning_fixtures(monkeypatch):
         assert "Sample menu substitution has no live backend yet" in message
         for marker in _FIXTURE_MARKERS:
             assert marker not in message
-        with pytest.raises(Unavailable) as paired:
-            recommend_pairings("")
-        assert "Pairing recommendations has no live backend yet" in paired.value.message
+        paired = json.loads(recommend_pairings(""))
+        assert "no live backend" not in json.dumps(paired)
         for marker in _FIXTURE_MARKERS:
-            assert marker not in paired.value.message
+            assert marker not in json.dumps(paired)
+        if paired.get("error"):
+            assert paired["error"] == "menu not found" or "pairing copy" in paired["error"]
+            assert "connection refused" not in paired["error"]
         with pytest.raises(Unavailable) as curated:
             curate_beverage_list()
         assert "List curation has no live backend yet" in curated.value.message
@@ -104,12 +122,20 @@ def test_live_line_parser_keeps_supplied_dishes(monkeypatch):
     for marker in _FIXTURE_MARKERS:
         assert marker not in json.dumps(body)
     token = bind(demo)
+    _block_pairing_fixtures(monkeypatch)
     try:
-        with pytest.raises(Unavailable) as paired:
-            recommend_pairings(str(body["menu_id"]))
-        assert "Pairing recommendations has no live backend yet" in paired.value.message
+        raw = recommend_pairings(str(body["menu_id"]))
     finally:
         reset(token)
+    assert "no live backend" not in raw
+    for marker in _FIXTURE_MARKERS:
+        assert marker not in raw
+    payload = json.loads(raw)
+    if payload.get("error"):
+        assert "RuntimeError" in payload["error"]
+        assert "connection refused" not in payload["error"]
+    else:
+        assert payload["dishes"]
 
 
 def test_live_parse_route_stores_supplied_text(monkeypatch):

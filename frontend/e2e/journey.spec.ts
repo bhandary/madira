@@ -17,9 +17,10 @@ test("upload sample menu and get A2UI pairings", async ({ page }) => {
   await expect(page.getByTestId("delegate-menu-analyst")).toBeVisible({ timeout: 90_000 });
   await expect(page.getByTestId("delegate-pairing-sommelier")).toBeVisible();
   await expect(page.getByTestId("a2ui-surface")).toBeVisible();
-  await expect(page.getByTestId("pairing-grid")).toBeVisible();
-  await expect(page.getByTestId("pairing-card").first()).toContainText(/crab|mousse|risotto|ribeye|chocolate/i);
-  await expect(page.getByTestId("pairing-wine").first()).toBeVisible();
+  const surface = page.getByTestId("agent-reply");
+  await expect(surface.getByTestId("pairing-grid")).toBeVisible();
+  await expect(surface.getByTestId("pairing-card").first()).toContainText(/crab|mousse|risotto|ribeye|chocolate/i);
+  await expect(surface.getByTestId("pairing-slot-best_by_the_glass").first()).toBeVisible();
 });
 
 test("curate a list under a budget", async ({ page }) => {

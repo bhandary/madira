@@ -10,11 +10,10 @@ from __future__ import annotations
 import io
 import uuid
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from madira.auth import utcnow
-from madira.domain.catalog.service import beverage_fields, ensure_sku
 from madira.domain.errors import DraftFailed, NotFound, require_demo
 from madira.domain.menu.extract import (
     classify_upload,
@@ -532,77 +531,11 @@ def latest_menu_id(venue_id: uuid.UUID) -> uuid.UUID | None:
         return None if menu is None else menu.id
 
 
-def recommend_pairings(venue_id: uuid.UUID, menu_id: str = "") -> dict:
-    """Pair the latest confirmed version. An empty id with no confirmed menu stores the sample first."""
-    require_demo("Pairing recommendations")
-    from madira.agents.demo.fixtures import pairings_for_dishes
+def recommend_pairings(venue_id: uuid.UUID, menu_id: str | uuid.UUID | None = "") -> dict:
+    """Pair the latest confirmed version from the venue's own list."""
+    from madira.domain.pairing.service import recommend
 
-    created = None
-    if menu_key(menu_id) is None and latest_menu_id(venue_id) is None:
-        created = parse_menu(venue_id, "", "demo")
-    with session_scope() as session:
-        key = menu_key(menu_id)
-        if key is not None:
-            menu = _owned_menu(session, venue_id, key)
-            if menu is None:
-                return {"error": "menu not found"}
-        else:
-            menu = _latest_confirmed_menu(session, venue_id)
-        if menu is None:
-            return {"error": "menu not found"}
-        version = _confirmed_version(session, menu)
-        if version is None:
-            return {"error": "This menu is not confirmed."}
-        dishes = _version_dishes(session, version)
-        dish_payload = [
-            {"name": dish.name, "flavor_profile": dish.flavor_profile, "price": dish.price, "course": dish.course}
-            for dish in dishes
-        ]
-        planned = pairings_for_dishes(dish_payload)
-        cards = []
-        for dish, block in zip(dishes, planned):
-            session.execute(delete(Pairing).where(Pairing.dish_id == dish.id, Pairing.venue_id == venue_id))
-            stored = []
-            for raw in block["pairings"]:
-                view = _priced(raw, "glass_price", "bottle_price")
-                stock = ensure_sku(
-                    session,
-                    venue_id,
-                    category=view.get("category", ""),
-                    name=view["name"],
-                    producer=view.get("producer", ""),
-                    region=view.get("region", ""),
-                    style=view.get("style", ""),
-                    vintage=view.get("vintage", ""),
-                )
-                session.add(
-                    Pairing(
-                        venue_id=venue_id,
-                        dish_id=dish.id,
-                        sku_id=stock.id,
-                        rationale=view.get("rationale", ""),
-                        price_tier=view.get("price_tier", ""),
-                        glass_price=view["glass_price"],
-                        bottle_price=view["bottle_price"],
-                        currency=view["currency"],
-                    )
-                )
-                stored.append(view)
-            cards.append(
-                {
-                    "dish": dish.name,
-                    "course": dish.course,
-                    "flavor_profile": dish.flavor_profile,
-                    "price": dish.price,
-                    "currency": dish.currency,
-                    "pairings": stored,
-                }
-            )
-        session.commit()
-        payload = {"menu_id": menu.id, "menu_name": menu.name, "dishes": cards}
-        if created is not None:
-            payload["created_menu"] = created
-        return payload
+    return recommend(venue_id, menu_id)
 
 
 def _owned_menu(session: Session, venue_id: uuid.UUID, menu_id: uuid.UUID) -> Menu | None:
@@ -744,24 +677,6 @@ def _agent_dish(row: dict) -> dict:
 
 
 def _pairing_view(pairing: Pairing) -> dict:
-    fields = beverage_fields(pairing.sku)
-    return {
-        "category": fields["category"],
-        "name": fields["name"],
-        "producer": fields["producer"],
-        "region": fields["region"],
-        "style": fields["style"],
-        "rationale": pairing.rationale,
-        "price_tier": pairing.price_tier,
-        "glass_price": pairing.glass_price,
-        "bottle_price": pairing.bottle_price,
-        "currency": pairing.currency,
-    }
+    from madira.domain.pairing.service import pairing_view
 
-
-def _priced(row: dict, *fields: str) -> dict:
-    copied = dict(row)
-    for field in fields:
-        copied[field] = to_minor(copied.get(field) or 0)
-    copied["currency"] = DEFAULT_CURRENCY
-    return copied
+    return pairing_view(pairing)
