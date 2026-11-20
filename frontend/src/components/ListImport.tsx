@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ApiError, importList, type ListImportResult, type ListImportRow } from "@/lib/api";
+import { ProductNotes } from "@/components/TastingNotes";
+import { ApiError, importList, type ListImportItem, type ListImportResult, type ListImportRow } from "@/lib/api";
 
 function money(minor: number, currency: string) {
   const code = /^[A-Z]{3}$/.test(currency) ? currency : "USD";
@@ -32,6 +33,7 @@ export function ListImport() {
   const [imported, setImported] = useState<ListImportResult["list"] | null>(null);
   const [busy, setBusy] = useState<"preview" | "confirm" | null>(null);
   const [error, setError] = useState("");
+  const [notesFor, setNotesFor] = useState<ListImportItem | null>(null);
 
   const importable = preview ? preview.matched + preview.new : 0;
 
@@ -73,6 +75,7 @@ export function ListImport() {
             onChange={(event) => {
               setFile(event.target.files?.[0] ?? null);
               setPreview(null);
+              setNotesFor(null);
               setError("");
             }}
           />
@@ -166,6 +169,26 @@ export function ListImport() {
               </tbody>
             </table>
           </div>
+          <ul className="mt-3 grid gap-2">
+            {imported.items.map((item, index) =>
+              item.product_id ? (
+                <li key={`${item.product_id}-${index}`}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary w-full"
+                    data-testid="list-entry-notes"
+                    aria-pressed={notesFor?.product_id === item.product_id && notesFor.name === item.name}
+                    onClick={() => setNotesFor(item)}
+                  >
+                    Notes for {item.name}
+                  </button>
+                </li>
+              ) : null,
+            )}
+          </ul>
+          {notesFor?.product_id && (
+            <ProductNotes key={`${notesFor.product_id}-${notesFor.name}`} productId={notesFor.product_id} productName={notesFor.name} />
+          )}
         </div>
       )}
     </section>

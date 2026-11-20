@@ -17,6 +17,15 @@ class Unavailable(Exception):
         self.message = message
 
 
+class DraftFailed(Exception):
+    """A structured draft failed validation, or the live model did not answer."""
+
+    def __init__(self, message: str, status: int = 422) -> None:
+        super().__init__(message)
+        self.message = message
+        self.status = status
+
+
 def require_demo(feature: str) -> None:
     """Stop fixture work when a provider key has taken the model out of demo mode."""
     from madira.tenancy import demo_posture

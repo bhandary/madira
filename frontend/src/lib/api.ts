@@ -57,6 +57,121 @@ export type ListImportRow = {
   bottle_size: string;
 };
 
+export type TastingNote = {
+  id: string;
+  product_id: string;
+  product_name: string;
+  producer: string;
+  server_hook: string;
+  guest_description: string;
+  technical_note: string;
+  body: string;
+  acidity: string;
+  tannin: string;
+  sweetness: string;
+  oak: string;
+  intensity: string;
+  aroma_families: string[];
+  source: string;
+  status: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  has_tech_sheet: boolean;
+  created_at: string;
+};
+
+export type ServiceCardRecord = {
+  id: string;
+  product_id: string;
+  product_name: string;
+  tasting_note_id: string;
+  serving_temperature: string;
+  glassware: string;
+  decanting: string;
+  pour_size: string;
+  source: string;
+  status: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+};
+
+export type TastingDraft = {
+  note: TastingNote;
+  service_card: ServiceCardRecord;
+};
+
+async function readJson<T>(res: Response): Promise<T> {
+  if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
+  return res.json();
+}
+
+export async function getTastingNotes(productId: string): Promise<{ notes: TastingNote[] }> {
+  const res = await fetch(`${API}/products/${productId}/notes`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getServiceCards(productId: string): Promise<{ service_cards: ServiceCardRecord[] }> {
+  const res = await fetch(`${API}/products/${productId}/service-cards`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function draftTastingNote(productId: string, techSheet: string, file: File | null): Promise<TastingDraft> {
+  const body = new FormData();
+  body.set("tech_sheet", techSheet);
+  if (file) body.set("file", file);
+  const res = await fetch(`${API}/products/${productId}/notes/draft`, {
+    method: "POST",
+    body,
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function updateTastingNote(
+  productId: string,
+  noteId: string,
+  body: Partial<Pick<TastingNote, "server_hook" | "guest_description" | "technical_note" | "body" | "acidity" | "tannin" | "sweetness" | "oak" | "intensity" | "aroma_families">>,
+): Promise<TastingNote> {
+  const res = await fetch(`${API}/products/${productId}/notes/${noteId}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function approveTastingNote(productId: string, noteId: string): Promise<TastingNote> {
+  const res = await fetch(`${API}/products/${productId}/notes/${noteId}/approve`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function updateServiceCard(
+  productId: string,
+  cardId: string,
+  body: Partial<Pick<ServiceCardRecord, "serving_temperature" | "glassware" | "decanting" | "pour_size">>,
+): Promise<ServiceCardRecord> {
+  const res = await fetch(`${API}/products/${productId}/service-cards/${cardId}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function approveServiceCard(productId: string, cardId: string): Promise<ServiceCardRecord> {
+  const res = await fetch(`${API}/products/${productId}/service-cards/${cardId}/approve`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
 export type ListImportItem = {
   section: string;
   name: string;
@@ -68,6 +183,7 @@ export type ListImportItem = {
   bottle_price: number;
   cost: number;
   currency: string;
+  product_id?: string;
 };
 
 export type ListImportResult = {

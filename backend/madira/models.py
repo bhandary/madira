@@ -159,6 +159,76 @@ class Sku(Base):
     variant: Mapped[ProductVariant] = relationship(back_populates="skus")
 
 
+class TastingNote(Base):
+    """A venue's note for one product: three texts, a proposed profile, and an approval."""
+
+    __tablename__ = "tasting_notes"
+    __table_args__ = (
+        CheckConstraint("source IN ('agent', 'staff')", name="ck_tasting_notes_source"),
+        CheckConstraint("status IN ('draft', 'approved')", name="ck_tasting_notes_status"),
+        CheckConstraint(
+            "(status = 'draft' AND approved_by IS NULL AND approved_at IS NULL) OR "
+            "(status = 'approved' AND approved_by IS NOT NULL AND approved_at IS NOT NULL)",
+            name="ck_tasting_notes_approval",
+        ),
+        Index("ix_tasting_notes_venue_product", "venue_id", "product_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
+    server_hook: Mapped[str] = mapped_column(Text, default="")
+    guest_description: Mapped[str] = mapped_column(Text, default="")
+    technical_note: Mapped[str] = mapped_column(Text, default="")
+    body: Mapped[str] = mapped_column(String(32), default="")
+    acidity: Mapped[str] = mapped_column(String(32), default="")
+    tannin: Mapped[str] = mapped_column(String(32), default="")
+    sweetness: Mapped[str] = mapped_column(String(32), default="")
+    oak: Mapped[str] = mapped_column(String(32), default="")
+    intensity: Mapped[str] = mapped_column(String(32), default="")
+    aroma_families: Mapped[list] = mapped_column(JSON, default=list)
+    source: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16))
+    approved_by: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    approved_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    tech_sheet_key: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = _stamp()
+    product: Mapped[Product] = relationship()
+
+
+class ServiceCard(Base):
+    """How one venue serves a product. Drafted with a tasting note and approved on its own."""
+
+    __tablename__ = "service_cards"
+    __table_args__ = (
+        UniqueConstraint("tasting_note_id", name="uq_service_cards_note"),
+        CheckConstraint("source IN ('agent', 'staff')", name="ck_service_cards_source"),
+        CheckConstraint("status IN ('draft', 'approved')", name="ck_service_cards_status"),
+        CheckConstraint(
+            "(status = 'draft' AND approved_by IS NULL AND approved_at IS NULL) OR "
+            "(status = 'approved' AND approved_by IS NOT NULL AND approved_at IS NOT NULL)",
+            name="ck_service_cards_approval",
+        ),
+        Index("ix_service_cards_venue_product", "venue_id", "product_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
+    tasting_note_id: Mapped[uuid.UUID] = _fk("tasting_notes.id", index=True)
+    serving_temperature: Mapped[str] = mapped_column(String(80), default="")
+    glassware: Mapped[str] = mapped_column(String(80), default="")
+    decanting: Mapped[str] = mapped_column(String(80), default="")
+    pour_size: Mapped[str] = mapped_column(String(80), default="")
+    source: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16))
+    approved_by: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    approved_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    note: Mapped[TastingNote] = relationship()
+    product: Mapped[Product] = relationship()
+
+
 class Menu(Base):
     __tablename__ = "menus"
 

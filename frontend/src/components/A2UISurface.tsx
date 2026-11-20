@@ -1,5 +1,7 @@
 "use client";
 
+import { asCard, asNote, ServiceCard, TastingNoteCard } from "@/components/TastingNotes";
+
 function money(n: unknown, currency?: unknown) {
   const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
   const major = Number(n || 0) / 100;
@@ -298,6 +300,18 @@ function TastingCalendar({ tastings }: { tastings: unknown }) {
   );
 }
 
+function TastingNoteSurface({ note }: { note: unknown }) {
+  const parsed = asNote(note);
+  if (!parsed) return null;
+  return <TastingNoteCard key={parsed.id} note={parsed} />;
+}
+
+function ServiceCardSurface({ card }: { card: unknown }) {
+  const parsed = asCard(card);
+  if (!parsed) return null;
+  return <ServiceCard key={parsed.id} card={parsed} />;
+}
+
 const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode> = {
   PairingGrid: (p) => <PairingGrid dishes={p.dishes} />,
   DishList: (p) => <DishList dishes={p.dishes} />,
@@ -310,6 +324,8 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
   LessonCards: (p) => <LessonCards lessons={p.lessons} />,
   ScheduleForm: (p) => <ScheduleForm draft={p.draft} />,
   TastingCalendar: (p) => <TastingCalendar tastings={p.tastings} />,
+  TastingNoteCard: (p) => <TastingNoteSurface note={p.note} />,
+  ServiceCard: (p) => <ServiceCardSurface card={p.card} />,
 };
 
 export function renderMadiraComponent(name: string, props: Record<string, unknown>) {
