@@ -5,6 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Float,
     ForeignKey,
@@ -240,22 +241,97 @@ class Menu(Base):
     cuisine: Mapped[str] = mapped_column(String(80), default="")
     price_tier: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = _stamp()
-    dishes: Mapped[list[Dish]] = relationship(back_populates="menu", cascade="all, delete-orphan")
+    versions: Mapped[list[MenuVersion]] = relationship(
+        back_populates="menu",
+        cascade="all, delete-orphan",
+        order_by="MenuVersion.number",
+    )
+    dishes: Mapped[list[Dish]] = relationship(
+        back_populates="menu",
+        cascade="all, delete-orphan",
+        foreign_keys="Dish.menu_id",
+        order_by="Dish.position",
+    )
+
+
+class MenuVersion(Base):
+    """One capture of a menu. Pairing reads a confirmed version only."""
+
+    __tablename__ = "menu_versions"
+    __table_args__ = (
+        UniqueConstraint("menu_id", "number", name="uq_menu_versions_menu_number"),
+        CheckConstraint("number >= 1", name="ck_menu_versions_number"),
+        CheckConstraint("source_type IN ('photo', 'pdf', 'url', 'text')", name="ck_menu_versions_source"),
+        CheckConstraint("status IN ('draft', 'confirmed')", name="ck_menu_versions_status"),
+        CheckConstraint(
+            "(status = 'draft' AND confirmed_by IS NULL AND confirmed_at IS NULL) OR "
+            "(status = 'confirmed' AND confirmed_by IS NOT NULL AND confirmed_at IS NOT NULL)",
+            name="ck_menu_versions_confirm",
+        ),
+        Index("ix_menu_versions_venue_menu", "venue_id", "menu_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    menu_id: Mapped[uuid.UUID] = _fk("menus.id", index=True)
+    number: Mapped[int] = mapped_column(Integer)
+    source_type: Mapped[str] = mapped_column(String(16))
+    source_key: Mapped[str] = mapped_column(String(500), default="")
+    source_filename: Mapped[str] = mapped_column(String(300), default="")
+    source_url: Mapped[str] = mapped_column(String(1000), default="")
+    raw_text: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16))
+    confirmed_by: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    menu: Mapped[Menu] = relationship(back_populates="versions")
+    dishes: Mapped[list[Dish]] = relationship(
+        back_populates="version",
+        cascade="all, delete-orphan",
+        foreign_keys="Dish.menu_version_id",
+        order_by="Dish.position",
+    )
 
 
 class Dish(Base):
     __tablename__ = "dishes"
+    __table_args__ = (
+        UniqueConstraint("menu_version_id", "stable_id", name="uq_dishes_version_stable"),
+        CheckConstraint("position >= 0", name="ck_dishes_position"),
+        CheckConstraint("richness >= 0 AND richness <= 5", name="ck_dishes_richness"),
+        CheckConstraint("acidity >= 0 AND acidity <= 5", name="ck_dishes_acidity"),
+        CheckConstraint("sweetness >= 0 AND sweetness <= 5", name="ck_dishes_sweetness"),
+        CheckConstraint("spice >= 0 AND spice <= 5", name="ck_dishes_spice"),
+        CheckConstraint("umami >= 0 AND umami <= 5", name="ck_dishes_umami"),
+        Index("ix_dishes_version_position", "menu_version_id", "position"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     menu_id: Mapped[uuid.UUID] = _fk("menus.id")
+    menu_version_id: Mapped[uuid.UUID] = _fk("menu_versions.id", index=True)
+    stable_id: Mapped[uuid.UUID] = mapped_column(Uuid, default=uuid.uuid4)
+    position: Mapped[int] = mapped_column(Integer, default=0)
     name: Mapped[str] = mapped_column(String(200))
     course: Mapped[str] = mapped_column(String(80), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     flavor_profile: Mapped[str] = mapped_column(Text, default="")
     price: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
-    menu: Mapped[Menu] = relationship(back_populates="dishes")
+    main_component: Mapped[str] = mapped_column(String(200), default="")
+    cooking_method: Mapped[str] = mapped_column(String(200), default="")
+    sauce: Mapped[str] = mapped_column(String(200), default="")
+    richness: Mapped[int] = mapped_column(Integer, default=0)
+    acidity: Mapped[int] = mapped_column(Integer, default=0)
+    sweetness: Mapped[int] = mapped_column(Integer, default=0)
+    spice: Mapped[int] = mapped_column(Integer, default=0)
+    umami: Mapped[int] = mapped_column(Integer, default=0)
+    allergens: Mapped[list] = mapped_column(JSON, default=list)
+    confidence: Mapped[dict] = mapped_column(JSON, default=dict)
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    needs_repairing: Mapped[bool] = mapped_column(Boolean, default=True)
+    menu: Mapped[Menu] = relationship(back_populates="dishes", foreign_keys="Dish.menu_id")
+    version: Mapped[MenuVersion] = relationship(back_populates="dishes", foreign_keys="Dish.menu_version_id")
     pairings: Mapped[list[Pairing]] = relationship(back_populates="dish", cascade="all, delete-orphan")
 
 

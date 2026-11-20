@@ -11,6 +11,12 @@ export const catalogDefinitions = {
     description: "Parsed dishes with flavor profiles.",
     props: { dishes: "array" },
   },
+  DishReview: {
+    description: "Dishes read from a menu, with low-confidence fields flagged. Edit a field and confirm the menu.",
+    props: {
+      review: "menu id, version id, name, status, and dishes with per-field confidence",
+    },
+  },
   BeverageListTable: {
     description: "Curated list with cost, pour, bottle, and margin.",
     props: { items: "array" },

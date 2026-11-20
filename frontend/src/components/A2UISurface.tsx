@@ -1,5 +1,6 @@
 "use client";
 
+import { asReview, DishReview } from "@/components/DishReview";
 import { asCard, asNote, ServiceCard, TastingNoteCard } from "@/components/TastingNotes";
 
 function money(n: unknown, currency?: unknown) {
@@ -300,6 +301,12 @@ function TastingCalendar({ tastings }: { tastings: unknown }) {
   );
 }
 
+function DishReviewSurface({ review }: { review: unknown }) {
+  const parsed = asReview(review);
+  if (!parsed) return null;
+  return <DishReview key={parsed.version_id} review={parsed} />;
+}
+
 function TastingNoteSurface({ note }: { note: unknown }) {
   const parsed = asNote(note);
   if (!parsed) return null;
@@ -315,6 +322,7 @@ function ServiceCardSurface({ card }: { card: unknown }) {
 const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode> = {
   PairingGrid: (p) => <PairingGrid dishes={p.dishes} />,
   DishList: (p) => <DishList dishes={p.dishes} />,
+  DishReview: (p) => <DishReviewSurface review={p.review} />,
   ListSummary: (p) => <ListSummary {...p} />,
   BeverageListTable: (p) => <BeverageListTable items={p.items} />,
   InventoryTable: (p) => <InventoryTable items={p.items} />,

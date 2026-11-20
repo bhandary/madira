@@ -8,7 +8,8 @@ untrusted data.
 The local disk keeps each venue's files under ``{venue_id}/``.
 ``MADIRA_STORAGE_DIR`` is the root (default ``backend/data/storage``).
 ``MADIRA_UPLOAD_MAX_BYTES`` caps one file at 2 MiB unless set, and never
-above 20 MiB.
+above 20 MiB. Text uploads reject null bytes. A caller that stores a photo
+or PDF passes ``binary=True`` so those bytes are kept as-is.
 """
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ class Storage(Protocol):
         filename: str,
         allowed_types: frozenset[str],
         fallback_extension: str = "",
+        binary: bool = False,
     ) -> str: ...
 
     def put(
@@ -62,6 +64,7 @@ class Storage(Protocol):
         filename: str,
         allowed_types: frozenset[str],
         fallback_extension: str = "",
+        binary: bool = False,
     ) -> StoredFile: ...
 
     def read(self, key: str) -> bytes: ...
@@ -108,12 +111,13 @@ class LocalDiskStorage:
         filename: str,
         allowed_types: frozenset[str],
         fallback_extension: str = "",
+        binary: bool = False,
     ) -> str:
         if len(body) > self.max_bytes:
             raise StorageError("This file is larger than the upload limit.", 413)
         if not body:
             raise StorageError("This file is empty.", 400)
-        if b"\x00" in body:
+        if not binary and b"\x00" in body:
             raise StorageError("This file is not text.", 415)
         media = normalize_content_type(content_type)
         if media in allowed_types:
@@ -134,6 +138,7 @@ class LocalDiskStorage:
         filename: str,
         allowed_types: frozenset[str],
         fallback_extension: str = "",
+        binary: bool = False,
     ) -> StoredFile:
         media = self.check(
             body=body,
@@ -141,6 +146,7 @@ class LocalDiskStorage:
             filename=filename,
             allowed_types=allowed_types,
             fallback_extension=fallback_extension,
+            binary=binary,
         )
         if not isinstance(venue_id, uuid.UUID) or not _KIND.match(kind):
             raise StorageError("This file could not be stored.", 400)

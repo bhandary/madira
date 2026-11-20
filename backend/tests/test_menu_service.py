@@ -12,7 +12,7 @@ from sqlalchemy import select
 from madira.agents.tools import parse_menu as parse_menu_tool
 from madira.agents.tools import recommend_pairings as recommend_pairings_tool
 from madira.db import SessionLocal, init_db
-from madira.domain.errors import NotFound
+from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.menu.service import (
     extract_upload_text,
     get_menu,
@@ -86,12 +86,16 @@ def test_pairings_use_service_prices_for_the_owning_venue():
     assert stored["dishes"][0]["pairings"][0]["glass_price"] == 1600
 
 
-def test_image_upload_still_uses_the_sample_menu_text():
-    text = extract_upload_text("plate.png", b"\x89PNG\r\n")
-    assert "Dungeness" in text
-    assert "image upload in demo mode" in text
+def test_photo_and_binary_uploads_are_not_replaced_with_the_sample_menu():
+    with pytest.raises(DraftFailed) as photo:
+        extract_upload_text("plate.png", b"\x89PNG\r\n")
+    assert photo.value.status == 415
+    assert "Dungeness" not in photo.value.message
     assert extract_upload_text("notes.txt", "Crab special — $18\n".encode()) == "Crab special — $18\n"
-    assert extract_upload_text("blob.bin", b"\xff\xfe") == SAMPLE_MENU_TEXT
+    with pytest.raises(DraftFailed) as binary:
+        extract_upload_text("blob.bin", b"\xff\xfe")
+    assert binary.value.status == 415
+    assert "Dungeness" not in binary.value.message
 
 
 def test_tool_wrapper_emits_the_dish_surface():

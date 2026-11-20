@@ -22,6 +22,7 @@ from madira.models import (
     ListItem,
     Membership,
     Menu,
+    MenuVersion,
     POLine,
     Pairing,
     Product,
@@ -121,9 +122,20 @@ def _plant_other_venue() -> dict:
             )
             session.add(menu)
             session.flush()
+            version = MenuVersion(
+                venue_id=venue.id,
+                menu_id=menu.id,
+                number=1,
+                source_type="text",
+                status="draft",
+                raw_text="secret",
+            )
+            session.add(version)
+            session.flush()
             dish = Dish(
                 venue_id=venue.id,
                 menu_id=menu.id,
+                menu_version_id=version.id,
                 name="B secret dish",
                 course="main",
                 description="",

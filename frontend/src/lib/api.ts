@@ -15,6 +15,90 @@ export async function uploadMenu(payload: { text?: string; file?: File }) {
   return res.json();
 }
 
+export type MenuDish = {
+  id: string;
+  stable_id: string;
+  name: string;
+  course: string;
+  price: number;
+  currency: string;
+  main_component: string;
+  cooking_method: string;
+  sauce: string;
+  richness: number;
+  acidity: number;
+  sweetness: number;
+  spice: number;
+  umami: number;
+  allergens: string[];
+  confidence: Record<string, number>;
+  low_confidence: string[];
+  needs_repairing: boolean;
+};
+
+export type MenuReview = {
+  menu_id: string;
+  version_id: string;
+  name: string;
+  number: number;
+  status: string;
+  cuisine: string;
+  price_tier: string;
+  dishes: MenuDish[];
+};
+
+export type MenuIngestResult = {
+  menu_id: string;
+  version_id: string;
+  name: string;
+  status: string;
+  review: MenuReview;
+};
+
+export async function ingestMenu(input: {
+  file?: File | null;
+  url?: string;
+  text?: string;
+  menuId?: string;
+}): Promise<MenuIngestResult> {
+  const body = new FormData();
+  if (input.file) body.set("file", input.file);
+  if (input.url) body.set("url", input.url);
+  if (input.text) body.set("text", input.text);
+  if (input.menuId) body.set("menu_id", input.menuId);
+  const res = await fetch(`${API}/menus/ingest`, { method: "POST", body, credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function updateDishField(
+  menuId: string,
+  versionId: string,
+  dishId: string,
+  field: string,
+  value: string | number | string[],
+): Promise<MenuIngestResult> {
+  const res = await fetch(`${API}/menus/${menuId}/versions/${versionId}/dishes/${dishId}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ field, value }),
+  });
+  return readJson(res);
+}
+
+export async function confirmMenu(menuId: string, versionId: string): Promise<MenuIngestResult> {
+  const res = await fetch(`${API}/menus/${menuId}/versions/${versionId}/confirm`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function getMenus(): Promise<{ menus: { id: string; name: string; status: string }[] }> {
+  const res = await fetch(`${API}/menus`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
 export async function getInventory() {
   const res = await fetch(`${API}/inventory`, { cache: "no-store" });
   return res.json();
