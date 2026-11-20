@@ -26,7 +26,7 @@ Preconditions:
 - **Run.** Choose `[data-testid=inventory-workbench-submit]` once it is enabled. Wait for `[data-testid=delegate-inventory-purchasing]` to show `COMPLETE`.
 - **Surfaces.** `[data-testid=stock-alerts]` lists the low SKUs. `[data-testid=inventory-table]` shows `W-MUS-01` on hand `1` with a `low` badge. `[data-testid=purchase-order-table]` contains `DRAFT · NOT SENT` for Bay Area Craft Beer Collective, World Sake Imports, Skurnik Wines, and Kermit Lynch Wine Merchant.
 - **Read back.** `curl -sS http://127.0.0.1:8123/purchase-orders` returns four orders, each `status` `draft`, suppliers `Kermit Lynch Wine Merchant`, `Skurnik Wines`, `World Sake Imports`, and `Bay Area Craft Beer Collective`.
-- **Restore.** `curl -sS -X PATCH http://127.0.0.1:8123/inventory/W-MUS-01 -H 'Content-Type: application/json' -d '{"on_hand":4}'` returns that SKU at `on_hand` 4 again.
+- **Restore.** `curl -sS -X PATCH http://127.0.0.1:8123/inventory/W-MUS-01 -H 'Content-Type: application/json' -d '{"on_hand":4}'` is 200. The body is the cellar snapshot (`items`, `alerts`, `a2ui_operations`), not that SKU alone. The `W-MUS-01` row inside `items` is `on_hand` 4, `low` true, and `reorder_qty` 8.
 - **Proof.** Screenshot the alerts, the table row for `W-MUS-01`, and the draft orders.
 
 ## Gotchas
