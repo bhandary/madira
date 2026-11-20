@@ -61,7 +61,6 @@ jobs:
           npx tsc --noEmit > /tmp/tsc-before.txt 2>&1
           code=$?
           set -e
-          cat /tmp/tsc-before.txt
           if [ "$code" -ne 0 ]; then
             other=$(grep "error TS" /tmp/tsc-before.txt | grep -v "LayoutProps" || true)
             if grep -q "LayoutProps" /tmp/tsc-before.txt && [ -z "$other" ]; then
@@ -108,7 +107,7 @@ jobs:
           ready=0
           for _ in $(seq 1 40); do
             if curl -sf http://127.0.0.1:8123/health -o /tmp/madira-health.json \
-              && grep -q '"demo_mode": true' /tmp/madira-health.json; then
+              && grep -Eq '"demo_mode"[[:space:]]*:[[:space:]]*true' /tmp/madira-health.json; then
               ready=1
               break
             fi
