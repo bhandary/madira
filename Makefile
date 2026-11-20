@@ -7,7 +7,7 @@ export PYTHONPATH := backend
 
 ALEMBIC := $(VENV)/bin/alembic
 
-.PHONY: install backend frontend dev test e2e doctor verify clean migrate
+.PHONY: install backend frontend dev test eval eval-live e2e doctor verify clean migrate
 
 install:
 	$(PYTHON) -m venv $(VENV)
@@ -27,6 +27,16 @@ dev:
 
 test:
 	PYTHONPATH=backend $(PYTEST) -q backend/tests
+
+eval:
+	env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u GOOGLE_API_KEY -u GEMINI_API_KEY -u MADIRA_API_KEY \
+		-u DATABASE_URL \
+		MADIRA_DEMO_MODE=true \
+		PYTHONPATH=backend $(PY) -m madira.eval
+
+eval-live:
+	env -u DATABASE_URL -u MADIRA_DEMO_MODE \
+		PYTHONPATH=backend $(PY) -m madira.eval --live
 
 migrate:
 	PYTHONPATH=backend $(ALEMBIC) -c backend/alembic.ini upgrade head

@@ -163,8 +163,12 @@ make dev
 
 ```bash
 make test         # Deep Agents wiring: specialists exposed, task delegation, A2UI ops
+make eval         # extraction and pairing evals, demo mode, deterministic
+make eval-live    # same evals on the live model; skips when OPENAI_API_KEY is unset
 cd frontend && npx playwright test
 ```
+
+`make eval` scores the labeled menus in `fixtures/evals` (text, PDF, and photo) and the pairings those dishes get from `fixtures/sample_list.csv`. It exits nonzero when dish recall, precision, or a field accuracy is under its threshold, or when a pairing check fails. Live mode never fills a failed model call from the fixtures.
 
 Project-local verification skill: [`.cursor/skills/verify-madira/SKILL.md`](.cursor/skills/verify-madira/SKILL.md).
 

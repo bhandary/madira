@@ -1,0 +1,65 @@
+{
+  "id": "harbor",
+  "files": [
+    "fixtures/evals/harbor_menu.txt",
+    "fixtures/evals/harbor_menu.pdf",
+    "fixtures/evals/harbor_menu.png"
+  ],
+  "pair_file": "fixtures/evals/harbor_menu.png",
+  "dishes": [
+    {
+      "name": "Grilled octopus, chili, olive oil",
+      "course": "starter",
+      "price": 2400,
+      "main_component": "octopus",
+      "cooking_method": "grilled",
+      "sauce": "chili",
+      "allergens": ["shellfish"],
+      "richness": 2,
+      "acidity": 4,
+      "sweetness": 1,
+      "spice": 3,
+      "umami": 3
+    },
+    {
+      "name": "Lemon tart, meringue",
+      "course": "dessert",
+      "price": 1200,
+      "main_component": "lemon",
+      "cooking_method": "baked",
+      "sauce": "meringue",
+      "allergens": ["egg", "gluten"],
+      "richness": 3,
+      "acidity": 4,
+      "sweetness": 4,
+      "spice": 0,
+      "umami": 1
+    },
+    {
+      "name": "Mushroom toast, thyme butter",
+      "course": "main",
+      "price": 1800,
+      "main_component": "mushroom",
+      "cooking_method": "toasted",
+      "sauce": "thyme butter",
+      "allergens": ["gluten", "milk"],
+      "richness": 3,
+      "acidity": 1,
+      "sweetness": 1,
+      "spice": 0,
+      "umami": 4
+    }
+  ],
+  "pairing": {
+    "list": "fixtures/sample_list.csv",
+    "pins": true,
+    "rejects": true,
+    "rules": [
+      {
+        "when": {"acidity_gte": 4, "richness_lte": 3, "sweetness_lte": 2},
+        "drink": {"sweetness_gte": 4, "acidity_lte": 2},
+        "reason": "high-acid dish paired with a flabby high-sweet wine"
+      }
+    ]
+  }
+}

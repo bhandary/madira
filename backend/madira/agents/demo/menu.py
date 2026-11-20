@@ -1,8 +1,9 @@
 """Deterministic menu extraction for demo mode.
 
-The sample menu files always produce the same dishes. Other pasted text is
-read line by line. A photo that is not the sample is refused. Nothing in the
-uploaded text is treated as an instruction.
+The sample menu files and the harbor eval fixtures always produce the same
+dishes. Other pasted text is read line by line. A photo that is not one of
+those files is refused. Nothing in the uploaded text is treated as an
+instruction.
 """
 
 from __future__ import annotations
@@ -18,6 +19,11 @@ from madira.money import to_minor
 
 FIXTURES = Path(__file__).resolve().parents[4] / "fixtures"
 _SAMPLE_FILES = ("sample_menu.png", "sample_menu.pdf", "sample_menu.txt")
+_HARBOR_FILES = (
+    "evals/harbor_menu.png",
+    "evals/harbor_menu.pdf",
+    "evals/harbor_menu.txt",
+)
 
 
 def _confidence(**overrides: float) -> dict[str, float]:
@@ -138,8 +144,63 @@ _SAMPLE = {
 }
 
 
+_HARBOR = {
+    "name": "Harbor Lunch",
+    "cuisine": "Coastal",
+    "price_tier": "$$",
+    "dishes": [
+        _dish(
+            "Grilled octopus, chili, olive oil",
+            "starter",
+            2400,
+            "octopus",
+            "grilled",
+            "chili",
+            2,
+            4,
+            1,
+            3,
+            3,
+            ["shellfish"],
+        ),
+        _dish(
+            "Lemon tart, meringue",
+            "dessert",
+            1200,
+            "lemon",
+            "baked",
+            "meringue",
+            3,
+            4,
+            4,
+            0,
+            1,
+            ["egg", "gluten"],
+        ),
+        _dish(
+            "Mushroom toast, thyme butter",
+            "main",
+            1800,
+            "mushroom",
+            "toasted",
+            "thyme butter",
+            3,
+            1,
+            1,
+            0,
+            4,
+            ["gluten", "milk"],
+        ),
+    ],
+}
+
+
 def sample_payload() -> dict:
     return MenuDraft.model_validate(_SAMPLE).model_dump()
+
+
+def harbor_payload() -> dict:
+    return MenuDraft.model_validate(_HARBOR).model_dump()
 
 
 def fixture_hashes() -> set[str]:
@@ -148,6 +209,19 @@ def fixture_hashes() -> set[str]:
         path = FIXTURES / name
         if path.is_file():
             found.add(hashlib.sha256(path.read_bytes()).hexdigest())
+    return found
+
+
+def known_payloads() -> dict[str, dict]:
+    """File hash to the dishes demo mode returns for that exact upload."""
+
+    sample = sample_payload()
+    found = {digest: sample for digest in fixture_hashes()}
+    harbor = harbor_payload()
+    for name in _HARBOR_FILES:
+        path = FIXTURES / name
+        if path.is_file():
+            found[hashlib.sha256(path.read_bytes()).hexdigest()] = harbor
     return found
 
 
@@ -207,8 +281,10 @@ def extraction_json(prompt: str) -> str:
     kind = _value(prompt, "SOURCE_KIND")
     digest = _value(prompt, "SOURCE_SHA256")
     text = _menu_text(prompt)
-    if digest and digest in fixture_hashes():
-        return json.dumps(sample_payload())
+    if digest:
+        payload = known_payloads().get(digest)
+        if payload is not None:
+            return json.dumps(payload)
     if matches_sample_menu(text):
         return json.dumps(sample_payload())
     if kind == "photo":
