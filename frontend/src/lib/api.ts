@@ -44,6 +44,60 @@ export async function getLists() {
   return res.json();
 }
 
+export type ListImportRow = {
+  line: number;
+  status: "match" | "new" | "error";
+  action: string;
+  message: string;
+  section: string;
+  name: string;
+  producer: string;
+  category: string;
+  vintage: string;
+  bottle_size: string;
+};
+
+export type ListImportItem = {
+  section: string;
+  name: string;
+  producer: string;
+  vintage: string;
+  bottle_size: string;
+  category: string;
+  pour_price: number;
+  bottle_price: number;
+  cost: number;
+  currency: string;
+};
+
+export type ListImportResult = {
+  mode: "preview" | "confirmed";
+  currency: string;
+  matched: number;
+  new: number;
+  new_products: number;
+  new_variants: number;
+  errors: number;
+  rows: ListImportRow[];
+  list?: {
+    id: string;
+    name: string;
+    currency: string;
+    item_count: number;
+    source_filename: string;
+    items: ListImportItem[];
+  };
+};
+
+export async function importList(file: File, confirm: boolean): Promise<ListImportResult> {
+  const body = new FormData();
+  body.set("file", file);
+  body.set("confirm", confirm ? "true" : "false");
+  const res = await fetch(`${API}/lists/import`, { method: "POST", body, credentials: "same-origin" });
+  if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
+  return res.json();
+}
+
 export async function getSampleMenu() {
   const res = await fetch(`${API}/fixtures/sample-menu`, { cache: "no-store" });
   return res.json();

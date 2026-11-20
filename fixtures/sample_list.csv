@@ -1,0 +1,6 @@
+section,name,producer,vintage,region,country,category,style,grape,bottle size,bottle price,glass price,cost,barcode
+By the glass,Muscadet Domaine de l'Ecu,,,Loire,France,wine,,,,62,16,18,
+White,Chablis Premier Cru Vaillons,Jean-Paul & Benoît Droin,2022,Burgundy,France,wine,Chardonnay,Chardonnay,750ml,96,22,34,W-CHA-22
+Red,Barolo,G.D. Vajra,2019,Piedmont,Italy,wine,Nebbiolo,Nebbiolo,750ml,118,28,42,
+Beer,Kölsch,Gaffel,,Cologne,Germany,beer,Kölsch,,500ml,,9,2.40,B-KOL-CSV
+Sake,Dassai 45,Asahi Shuzo,,Yamaguchi,Japan,sake,Junmai Daiginjo,,720ml,78,19,32,

@@ -58,6 +58,7 @@ class Venue(Base):
     organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
     name: Mapped[str] = mapped_column(String(200))
     slug: Mapped[str] = mapped_column(String(80))
+    currency: Mapped[str] = _currency()
 
 
 class Membership(Base):
@@ -214,6 +215,8 @@ class BeverageList(Base):
     currency: Mapped[str] = _currency()
     target_margin: Mapped[float] = mapped_column(Float, default=3.0)
     notes: Mapped[str] = mapped_column(Text, default="")
+    source_key: Mapped[str] = mapped_column(String(500), default="", server_default=text("''"))
+    source_filename: Mapped[str] = mapped_column(String(300), default="", server_default=text("''"))
     created_at: Mapped[datetime] = _stamp()
     items: Mapped[list[ListItem]] = relationship(back_populates="beverage_list", cascade="all, delete-orphan")
 
@@ -225,6 +228,8 @@ class ListItem(Base):
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     list_id: Mapped[uuid.UUID] = _fk("beverage_lists.id")
     sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
+    section: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     cost: Mapped[int] = mapped_column(Integer, default=0)
     pour_price: Mapped[int] = mapped_column(Integer, default=0)
     bottle_price: Mapped[int] = mapped_column(Integer, default=0)

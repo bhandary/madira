@@ -77,6 +77,8 @@ See `.env.example`.
 | `MADIRA_OWNER_EMAIL` | unset | Google account that becomes Owner of the default venue on sign-in. Settings, billing, and model keys require Owner. |
 | `MADIRA_FRONTEND_ORIGIN` | `http://localhost:3000` | Only this origin is allowed by CORS, with credentials. |
 | `DATABASE_URL` | sqlite file | Postgres URL for dev and prod. Unset keeps SQLite. |
+| `MADIRA_STORAGE_DIR` | `backend/data/storage` | Local files for list, menu, and label uploads, under a per-venue prefix. |
+| `MADIRA_UPLOAD_MAX_BYTES` | `2097152` | Largest accepted upload. Values above 20 MiB are capped. |
 | `MADIRA_BACKEND_URL` | `http://127.0.0.1:8123` | Used by Next rewrites / CopilotKit HttpAgent |
 | `MADIRA_PORT` | `8123` | Backend |
 | `GOOGLE_CLIENT_ID` | unset | Google OAuth client id. Sign-in stays disabled until this is set. |
@@ -169,7 +171,7 @@ Project-local verification skill: [`.cursor/skills/verify-madira/SKILL.md`](.cur
 ## Product
 
 1. **Menu upload** — PDF, image, or paste → dishes → pairings across four beverage types with rationale and price-tier fit.
-2. **List curation** — budget + target margin, coverage, gaps, cost/margin math.
+2. **List curation** — budget + target margin, coverage, gaps, cost/margin math. **Import CSV** on the List page loads `fixtures/sample_list.csv`: preview matches existing bottles, new products, and row errors, then confirm writes the list. Headers (case and spacing ignored): `section, name, producer, vintage, region, country, category, style, grape, bottle size, bottle price, glass price, cost, barcode`. Prices are in the venue's currency. The original file is stored for that venue.
 3. **Inventory** — on-hand, par, depletion, low-stock, draft POs by supplier (seeded cellar).
 4. **Staff training** — wine knowledge, etiquette, daily briefing, scored quiz, diner roleplay.
 5. **Supplier meetings** — draft tastings, calendar, `.ics` export. **Never sends email or invites.**

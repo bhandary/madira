@@ -5,6 +5,7 @@ backend/data/*.db-journal
 backend/data/*.db-wal
 backend/data/*.db-shm
 backend/data/.madira_secret
+backend/data/storage/
 **/__pycache__/
 **/*.pyc
 frontend/node_modules/

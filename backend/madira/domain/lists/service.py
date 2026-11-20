@@ -62,7 +62,9 @@ def curate(
         return payload
 
 
-def _item_view(item: ListItem) -> dict:
+def item_view(item: ListItem) -> dict:
+    """List row text comes from the catalog SKU, not a copy on the row."""
+
     fields = beverage_fields(item.sku)
     return {
         "category": fields["category"],
@@ -70,12 +72,22 @@ def _item_view(item: ListItem) -> dict:
         "producer": fields["producer"],
         "region": fields["region"],
         "style": fields["style"],
+        "vintage": fields["vintage"],
+        "section": item.section,
+        "bottle_size": item.sku.variant.bottle_size,
         "cost": item.cost,
         "pour_price": item.pour_price,
         "bottle_price": item.bottle_price,
         "currency": item.currency,
         "margin_pct": item.margin_pct,
     }
+
+
+def _ordered_items(row: BeverageList) -> list[ListItem]:
+    items = list(row.items)
+    if any(item.position for item in items):
+        items.sort(key=lambda item: (item.position, str(item.id)))
+    return items
 
 
 def list_lists(venue_id: uuid.UUID) -> dict:
@@ -95,7 +107,8 @@ def list_lists(venue_id: uuid.UUID) -> dict:
                     "target_margin": row.target_margin,
                     "item_count": len(row.items),
                     "notes": row.notes,
-                    "items": [_item_view(item) for item in row.items],
+                    "source_filename": row.source_filename,
+                    "items": [item_view(item) for item in _ordered_items(row)],
                 }
                 for row in rows
             ]
