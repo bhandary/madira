@@ -1,0 +1,93 @@
+{
+  "id": "autumn",
+  "files": [
+    "fixtures/sample_menu.txt",
+    "fixtures/sample_menu.pdf",
+    "fixtures/sample_menu.png"
+  ],
+  "pair_file": "fixtures/sample_menu.png",
+  "dishes": [
+    {
+      "name": "Dungeness crab, yuzu, avocado, cucumber",
+      "course": "cold starter",
+      "price": 2400,
+      "main_component": "Dungeness crab",
+      "cooking_method": "raw",
+      "sauce": "yuzu",
+      "allergens": ["shellfish"],
+      "richness": 2,
+      "acidity": 4,
+      "sweetness": 2,
+      "spice": 0,
+      "umami": 3
+    },
+    {
+      "name": "Duck liver mousse, cherry, toasted brioche",
+      "course": "hot starter",
+      "price": 2200,
+      "main_component": "duck liver",
+      "cooking_method": "whipped",
+      "sauce": "cherry",
+      "allergens": ["gluten", "milk"],
+      "richness": 5,
+      "acidity": 2,
+      "sweetness": 3,
+      "spice": 0,
+      "umami": 4
+    },
+    {
+      "name": "Black truffle risotto, aged parmesan, thyme",
+      "course": "pasta",
+      "price": 3600,
+      "main_component": "arborio rice",
+      "cooking_method": "simmered",
+      "sauce": "parmesan",
+      "allergens": ["milk"],
+      "richness": 4,
+      "acidity": 1,
+      "sweetness": 1,
+      "spice": 0,
+      "umami": 5
+    },
+    {
+      "name": "Dry-aged ribeye, bone marrow butter, charred alliums",
+      "course": "main",
+      "price": 5800,
+      "main_component": "ribeye",
+      "cooking_method": "grilled",
+      "sauce": "bone marrow butter",
+      "allergens": ["milk"],
+      "richness": 5,
+      "acidity": 1,
+      "sweetness": 1,
+      "spice": 1,
+      "umami": 5
+    },
+    {
+      "name": "Dark chocolate, smoked salt, Arbequina olive oil",
+      "course": "dessert",
+      "price": 1600,
+      "main_component": "dark chocolate",
+      "cooking_method": "plated",
+      "sauce": "olive oil",
+      "allergens": [],
+      "richness": 4,
+      "acidity": 1,
+      "sweetness": 4,
+      "spice": 0,
+      "umami": 2
+    }
+  ],
+  "pairing": {
+    "list": "fixtures/sample_list.csv",
+    "pins": true,
+    "rejects": true,
+    "rules": [
+      {
+        "when": {"acidity_gte": 4, "richness_lte": 3, "sweetness_lte": 2},
+        "drink": {"sweetness_gte": 4, "acidity_lte": 2},
+        "reason": "high-acid dish paired with a flabby high-sweet wine"
+      }
+    ]
+  }
+}

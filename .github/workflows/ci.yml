@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install backend
+        run: |
+          python3 -m venv backend/.venv
+          backend/.venv/bin/pip install -U pip
+          backend/.venv/bin/pip install -r backend/requirements.txt
+
+      - name: Backend tests
+        run: make test
+
+      - name: Extraction and pairing evals
+        run: make eval
+
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: frontend
+        run: |
+          set +e
+          npx tsc --noEmit > /tmp/tsc-before.txt 2>&1
+          code=$?
+          set -e
+          cat /tmp/tsc-before.txt
+          if [ "$code" -ne 0 ]; then
+            other=$(grep "error TS" /tmp/tsc-before.txt | grep -v "LayoutProps" || true)
+            if grep -q "LayoutProps" /tmp/tsc-before.txt && [ -z "$other" ]; then
+              echo "tsc before the first build reported the expected LayoutProps error"
+            else
+              exit "$code"
+            fi
+          fi
+
+      - name: Build
+        working-directory: frontend
+        run: |
+          set +e
+          npm run build > /tmp/next-build.txt 2>&1
+          code=$?
+          set -e
+          cat /tmp/next-build.txt
+          if [ "$code" -ne 0 ] && grep -Eiq "security advisory|upgrade recommendation|security vulnerability|stopped to show the upgrade" /tmp/next-build.txt; then
+            echo "Retrying the Next.js build once after the security advisory"
+            npm run build
+          elif [ "$code" -ne 0 ]; then
+            exit "$code"
+          fi
+
+      - name: Typecheck after build
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Install Playwright
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright
+        env:
+          MADIRA_LLM_VALIDATOR: accept
+        run: |
+          set -euo pipefail
+          unset OPENAI_API_KEY ANTHROPIC_API_KEY GOOGLE_API_KEY GEMINI_API_KEY MADIRA_API_KEY DATABASE_URL
+          export MADIRA_LLM_VALIDATOR=accept
+          export PYTHONPATH=backend
+          backend/.venv/bin/python -m madira.main > /tmp/madira-backend.log 2>&1 &
+          echo $! > /tmp/madira-backend.pid
+          ready=0
+          for _ in $(seq 1 40); do
+            if curl -sf http://127.0.0.1:8123/health | grep -q '"demo_mode": true'; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat /tmp/madira-backend.log
+            exit 1
+          fi
+
+          cd frontend
+          start_frontend() {
+            npm run dev -- --hostname 127.0.0.1 --port 3000 > /tmp/madira-frontend.log 2>&1 &
+            echo $! > /tmp/madira-frontend.pid
+          }
+          start_frontend
+          retried=0
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:3000/; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$(cat /tmp/madira-frontend.pid)" 2>/dev/null; then
+              if [ "$retried" -eq 0 ] && grep -Eiq "security advisory|upgrade recommendation|security vulnerability|stopped to show the upgrade" /tmp/madira-frontend.log; then
+                echo "Retrying the Next.js dev server once after the security advisory"
+                retried=1
+                start_frontend
+                continue
+              fi
+              cat /tmp/madira-frontend.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat /tmp/madira-frontend.log
+            exit 1
+          fi
+          npx playwright test --reporter=line --reporter=html
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+
+      - name: Stop servers
+        if: always()
+        run: |
+          kill_tree() {
+            local pid="$1" child
+            for child in $(ps -o pid= --ppid "$pid" 2>/dev/null); do
+              kill_tree "$child"
+            done
+            kill "$pid" 2>/dev/null || true
+          }
+          if [ -f /tmp/madira-backend.pid ]; then
+            kill_tree "$(cat /tmp/madira-backend.pid)"
+          fi
+          if [ -f /tmp/madira-frontend.pid ]; then
+            kill_tree "$(cat /tmp/madira-frontend.pid)"
+          fi
