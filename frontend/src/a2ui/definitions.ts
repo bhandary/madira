@@ -4,8 +4,9 @@ export const MADIRA_CATALOG_ID = "madira://beverage-catalog";
 
 export const catalogDefinitions = {
   PairingGrid: {
-    description: "Pairing cards for each dish across wine, beer, spirit, and sake.",
-    props: { dishes: "array of dish pairing objects" },
+    description:
+      "Four pairing slots per dish — best by the glass, best bottle, a value pick, and an adventurous pick — with pin, swap, and reject.",
+    props: { menu_id: "string", dishes: "array of dish pairing objects" },
   },
   DishList: {
     description: "Parsed dishes with flavor profiles.",

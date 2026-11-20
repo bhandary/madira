@@ -18,6 +18,10 @@ from madira.domain.menu.service import (
     parse_menu,
     recommend_pairings,
 )
+from madira.domain.pairing.service import grid as pairing_grid
+from madira.domain.pairing.service import pin as pin_pairing
+from madira.domain.pairing.service import reject as reject_pairing
+from madira.domain.pairing.service import swap as swap_pairing
 from madira.rbac import Capability, require
 from madira.storage import StorageError, upload_max_bytes
 from madira.tenancy import active_venue_id
@@ -28,6 +32,10 @@ router = APIRouter()
 class DishFieldEdit(BaseModel):
     field: str
     value: Any = None
+
+
+class PairingSwap(BaseModel):
+    sku_id: uuid.UUID
 
 
 def _fail(exc: Exception) -> HTTPException:
@@ -131,11 +139,54 @@ def confirm_menu(menu_id: uuid.UUID, version_id: uuid.UUID) -> dict[str, Any]:
     return with_review(payload)
 
 
-@router.post("/menus/{menu_id}/pair", dependencies=[require(Capability.EDIT)])
-def pair_menu(menu_id: uuid.UUID) -> dict[str, Any]:
-    payload = recommend_pairings(active_venue_id(), str(menu_id))
+def _pair_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("error") == "menu not found":
         raise HTTPException(404, "menu not found")
     if payload.get("error"):
         raise HTTPException(409, payload["error"])
+    return with_pairings(payload)
+
+
+@router.get("/menus/{menu_id}/pairings", dependencies=[require(Capability.FLOOR)])
+def get_pairings(menu_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        payload = pairing_grid(active_venue_id(), menu_id)
+    except (NotFound, DraftFailed) as exc:
+        raise _fail(exc) from exc
+    return with_pairings(payload)
+
+
+@router.post("/menus/{menu_id}/pair", dependencies=[require(Capability.EDIT)])
+def pair_menu(menu_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        payload = recommend_pairings(active_venue_id(), menu_id)
+    except DraftFailed as exc:
+        raise _fail(exc) from exc
+    return _pair_payload(payload)
+
+
+@router.post("/menus/{menu_id}/pairings/{pairing_id}/pin", dependencies=[require(Capability.EDIT)])
+def pin_pairing_route(menu_id: uuid.UUID, pairing_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        payload = pin_pairing(active_venue_id(), menu_id, pairing_id)
+    except (NotFound, DraftFailed) as exc:
+        raise _fail(exc) from exc
+    return with_pairings(payload)
+
+
+@router.post("/menus/{menu_id}/pairings/{pairing_id}/reject", dependencies=[require(Capability.EDIT)])
+def reject_pairing_route(menu_id: uuid.UUID, pairing_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        payload = reject_pairing(active_venue_id(), menu_id, pairing_id)
+    except (NotFound, DraftFailed) as exc:
+        raise _fail(exc) from exc
+    return with_pairings(payload)
+
+
+@router.post("/menus/{menu_id}/pairings/{pairing_id}/swap", dependencies=[require(Capability.EDIT)])
+def swap_pairing_route(menu_id: uuid.UUID, pairing_id: uuid.UUID, body: PairingSwap) -> dict[str, Any]:
+    try:
+        payload = swap_pairing(active_venue_id(), menu_id, pairing_id, body.sku_id)
+    except (NotFound, DraftFailed) as exc:
+        raise _fail(exc) from exc
     return with_pairings(payload)

@@ -233,7 +233,7 @@ with engine.connect() as conn:
     version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
     orgs = conn.execute(text("SELECT COUNT(*) FROM organizations")).scalar()
     suppliers = conn.execute(text("SELECT COUNT(*) FROM suppliers")).scalar()
-    assert version == "0007_menu_versions"
+    assert version == "0008_pairings"
 assert orgs == 1
 assert suppliers == 0
 """

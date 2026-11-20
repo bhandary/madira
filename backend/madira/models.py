@@ -337,17 +337,86 @@ class Dish(Base):
 
 class Pairing(Base):
     __tablename__ = "pairings"
+    __table_args__ = (
+        CheckConstraint(
+            "slot IN ('best_by_the_glass', 'best_bottle', 'value', 'adventurous', '')",
+            name="ck_pairings_slot",
+        ),
+        CheckConstraint(
+            "status IN ('suggested', 'pinned', 'swapped', 'rejected', 'gap')",
+            name="ck_pairings_status",
+        ),
+        CheckConstraint("confidence IN ('high', 'medium', 'low', '')", name="ck_pairings_confidence"),
+        CheckConstraint(
+            "(status = 'gap' AND sku_id IS NULL) OR (status <> 'gap' AND sku_id IS NOT NULL)",
+            name="ck_pairings_gap_sku",
+        ),
+        Index(
+            "uq_pairings_dish_slot",
+            "dish_id",
+            "slot",
+            unique=True,
+            sqlite_where=text("slot != ''"),
+            postgresql_where=text("slot <> ''"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     dish_id: Mapped[uuid.UUID] = _fk("dishes.id")
-    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
+    sku_id: Mapped[uuid.UUID | None] = _fk("skus.id", nullable=True, index=True)
+    slot: Mapped[str] = mapped_column(String(32), default="", server_default=text("''"))
+    status: Mapped[str] = mapped_column(String(16), default="suggested", server_default=text("'suggested'"))
     rationale: Mapped[str] = mapped_column(Text, default="")
+    server_script: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    confidence: Mapped[str] = mapped_column(String(16), default="", server_default=text("''"))
+    gap: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
     price_tier: Mapped[str] = mapped_column(String(32), default="")
     glass_price: Mapped[int] = mapped_column(Integer, default=0)
     bottle_price: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
     dish: Mapped[Dish] = relationship(back_populates="pairings")
+    sku: Mapped[Sku | None] = relationship()
+
+
+class PairingPreference(Base):
+    """A pin, swap, or rejection the sommelier made for a dish, across versions."""
+
+    __tablename__ = "pairing_preferences"
+    __table_args__ = (
+        CheckConstraint("kind IN ('pin', 'swap', 'reject')", name="ck_pairing_preferences_kind"),
+        CheckConstraint(
+            "slot IN ('best_by_the_glass', 'best_bottle', 'value', 'adventurous', '')",
+            name="ck_pairing_preferences_slot",
+        ),
+        Index(
+            "uq_pairing_preferences_choice",
+            "venue_id",
+            "dish_stable_id",
+            "slot",
+            unique=True,
+            sqlite_where=text("kind != 'reject'"),
+            postgresql_where=text("kind <> 'reject'"),
+        ),
+        Index(
+            "uq_pairing_preferences_reject",
+            "venue_id",
+            "dish_stable_id",
+            "sku_id",
+            unique=True,
+            sqlite_where=text("kind = 'reject'"),
+            postgresql_where=text("kind = 'reject'"),
+        ),
+        Index("ix_pairing_preferences_venue_dish", "venue_id", "dish_stable_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    dish_stable_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
+    slot: Mapped[str] = mapped_column(String(32), default="")
+    kind: Mapped[str] = mapped_column(String(16))
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
+    created_at: Mapped[datetime] = _stamp()
     sku: Mapped[Sku] = relationship()
 
 

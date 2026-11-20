@@ -59,14 +59,13 @@ def draft_tasting_note(product_id: str, tech_sheet: str = "") -> str:
 
 
 def recommend_pairings(menu_id: str = "") -> str:
-    """Recommend wine, beer, spirit, and sake pairings for each dish on a menu, with rationale and price-tier fit."""
-    payload = menu_service.recommend_pairings(_vid(), menu_id)
-    if "error" in payload:
+    """Pair each confirmed dish from the venue's listed, in-stock bottles."""
+    try:
+        payload = menu_service.recommend_pairings(_vid(), menu_id)
+    except DraftFailed as exc:
+        return _dumps({"error": exc.message})
+    if payload.get("error"):
         return _dumps({"error": payload["error"]})
-    created = payload.get("created_menu")
-    if created:
-        tracker.record_operations(with_dishes(created)["a2ui_operations"])
-        tracker.complete_delegation("menu-analyst")
     body = with_pairings(payload)
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("pairing-sommelier")

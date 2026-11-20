@@ -1,6 +1,7 @@
 "use client";
 
 import { asReview, DishReview } from "@/components/DishReview";
+import { asPairings, PairingGrid } from "@/components/PairingGrid";
 import { asCard, asNote, ServiceCard, TastingNoteCard } from "@/components/TastingNotes";
 
 function money(n: unknown, currency?: unknown) {
@@ -15,43 +16,10 @@ function Badge({ children, tone = "draft" }: { children: React.ReactNode; tone?:
   return <span className={cls}>{children}</span>;
 }
 
-function PairingGrid({ dishes }: { dishes: unknown }) {
-  const list = Array.isArray(dishes) ? dishes : [];
-  return (
-    <div className="grid gap-3" data-testid="pairing-grid">
-      {list.map((dish: Record<string, unknown>, i: number) => (
-        <article key={i} className="panel p-3" data-testid="pairing-card">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-sm font-medium">{String(dish.dish || dish.name)}</h3>
-            <Badge tone="wine">{String(dish.course || "")}</Badge>
-          </div>
-          <p className="mt-1 text-sm text-muted">
-            Flavor profile: {String(dish.flavor_profile || "")}
-            {dish.price ? ` · ${money(dish.price, dish.currency)}` : ""}
-          </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {((dish.pairings as Record<string, unknown>[]) || []).map((p, j) => (
-              <div key={j} className="rounded-md bg-panel-2 p-3" data-testid={`pairing-${p.category}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <Badge>{String(p.category)}</Badge>
-                  <span className="text-xs text-muted">{String(p.price_tier || "")}</span>
-                </div>
-                <div className="mt-1 text-sm font-medium">{String(p.name)}</div>
-                <div className="text-xs text-muted">
-                  {String(p.producer)} · {String(p.region)} · {String(p.style)}
-                </div>
-                <p className="mt-2 text-sm leading-5">{String(p.rationale)}</p>
-                <div className="mt-2 text-xs text-muted">
-                  {p.glass_price ? `Glass ${money(p.glass_price, p.currency || dish.currency)}` : ""}
-                  {p.bottle_price ? ` · Bottle ${money(p.bottle_price, p.currency || dish.currency)}` : ""}
-                </div>
-              </div>
-            ))}
-          </div>
-        </article>
-      ))}
-    </div>
-  );
+function PairingSurface({ menuId, dishes }: { menuId: unknown; dishes: unknown }) {
+  const parsed = asPairings(menuId, dishes);
+  if (!parsed) return null;
+  return <PairingGrid menuId={parsed.menuId} dishes={parsed.dishes} />;
 }
 
 function DishList({ dishes }: { dishes: unknown }) {
@@ -320,7 +288,7 @@ function ServiceCardSurface({ card }: { card: unknown }) {
 }
 
 const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode> = {
-  PairingGrid: (p) => <PairingGrid dishes={p.dishes} />,
+  PairingGrid: (p) => <PairingSurface menuId={p.menu_id} dishes={p.dishes} />,
   DishList: (p) => <DishList dishes={p.dishes} />,
   DishReview: (p) => <DishReviewSurface review={p.review} />,
   ListSummary: (p) => <ListSummary {...p} />,

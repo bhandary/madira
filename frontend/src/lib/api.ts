@@ -99,6 +99,90 @@ export async function getMenus(): Promise<{ menus: { id: string; name: string; s
   return readJson(res);
 }
 
+export type PairingSlot = {
+  id: string;
+  slot: string;
+  status: string;
+  sku_id: string | null;
+  category: string;
+  name: string;
+  producer: string;
+  region: string;
+  style: string;
+  rationale: string;
+  server_script: string;
+  confidence: string;
+  price_tier: string;
+  glass_price: number;
+  bottle_price: number;
+  currency: string;
+  gap: string;
+};
+
+export type PairingOption = {
+  sku_id: string;
+  name: string;
+  producer: string;
+  category: string;
+  style: string;
+};
+
+export type PairingDish = {
+  id: string;
+  stable_id: string;
+  name: string;
+  dish: string;
+  course: string;
+  flavor_profile: string;
+  price: number;
+  currency: string;
+  needs_repairing: boolean;
+  options: PairingOption[];
+  pairings: PairingSlot[];
+};
+
+export type PairingGridResult = {
+  menu_id: string;
+  menu_name: string;
+  dishes: PairingDish[];
+};
+
+export async function pairMenu(menuId: string): Promise<PairingGridResult> {
+  const res = await fetch(`${API}/menus/${menuId}/pair`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getPairings(menuId: string): Promise<PairingGridResult> {
+  const res = await fetch(`${API}/menus/${menuId}/pairings`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function pinPairing(menuId: string, pairingId: string): Promise<PairingGridResult> {
+  const res = await fetch(`${API}/menus/${menuId}/pairings/${pairingId}/pin`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function rejectPairing(menuId: string, pairingId: string): Promise<PairingGridResult> {
+  const res = await fetch(`${API}/menus/${menuId}/pairings/${pairingId}/reject`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function swapPairing(menuId: string, pairingId: string, skuId: string): Promise<PairingGridResult> {
+  const res = await fetch(`${API}/menus/${menuId}/pairings/${pairingId}/swap`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sku_id: skuId }),
+  });
+  return readJson(res);
+}
+
 export async function getInventory() {
   const res = await fetch(`${API}/inventory`, { cache: "no-store" });
   return res.json();
