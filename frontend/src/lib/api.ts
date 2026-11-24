@@ -335,6 +335,156 @@ export async function postTransfer(input: {
   return readJson(res);
 }
 
+export type CountSessionRecord = {
+  id: string;
+  location_id: string;
+  location_name: string;
+  status: string;
+  notes: string;
+};
+
+export type CountReport = {
+  session: CountSessionRecord;
+  lines: {
+    id: string;
+    sku: string;
+    name: string;
+    counted_quantity: number;
+    expected_quantity: number | null;
+    device_id: string;
+    bin_code: string;
+    counted_at: string | null;
+  }[];
+  variance_lines: {
+    sku: string;
+    name: string;
+    counted_quantity: number | null;
+    expected_quantity: number;
+    variance: number | null;
+    variance_value_cents: number | null;
+    unit_cost_cents: number;
+  }[];
+  conflicts: {
+    sku: string;
+    readings: { device_id: string; counted_quantity: number; counted_at: string | null }[];
+    resolved: boolean;
+    resolved_quantity: number | null;
+  }[];
+  movements?: { id: string; sku: string; quantity: number; movement_type: string }[];
+};
+
+export async function listCountSessions(): Promise<{ sessions: CountSessionRecord[] }> {
+  const res = await fetch(`${API}/inventory/counts`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function startCountSession(locationId: string, notes = ""): Promise<CountSessionRecord> {
+  const res = await fetch(`${API}/inventory/counts`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ location_id: locationId, notes }),
+  });
+  return readJson(res);
+}
+
+export async function getCountSession(sessionId: string): Promise<CountReport> {
+  const res = await fetch(`${API}/inventory/counts/${sessionId}`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function syncCountLines(
+  sessionId: string,
+  entries: {
+    client_mutation_id: string;
+    device_id: string;
+    sku: string;
+    counted_quantity: number;
+    counted_at: string;
+    bin_qr?: string;
+    notes?: string;
+  }[],
+) {
+  const res = await fetch(`${API}/inventory/counts/${sessionId}/sync`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entries }),
+  });
+  return readJson(res);
+}
+
+export async function submitCountSession(sessionId: string): Promise<CountReport> {
+  const res = await fetch(`${API}/inventory/counts/${sessionId}/submit`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function resolveCountConflict(sessionId: string, sku: string, resolvedQuantity: number) {
+  const res = await fetch(`${API}/inventory/counts/${sessionId}/conflicts/${encodeURIComponent(sku)}/resolve`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resolved_quantity: resolvedQuantity }),
+  });
+  return readJson<CountReport>(res);
+}
+
+export async function approveCountSession(sessionId: string): Promise<CountReport> {
+  const res = await fetch(`${API}/inventory/counts/${sessionId}/approve`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export type ParProposalRecord = {
+  id: string;
+  sku: string;
+  name: string;
+  current_par: number;
+  proposed_par: number;
+  depletion_30d: number;
+  rationale: string;
+  status: string;
+};
+
+export async function listParProposals(status = "pending"): Promise<{ proposals: ParProposalRecord[] }> {
+  const res = await fetch(`${API}/inventory/par-proposals?status=${encodeURIComponent(status)}`, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function generateParProposals(): Promise<{ proposals: ParProposalRecord[] }> {
+  const res = await fetch(`${API}/inventory/par-proposals/generate`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lead_time_days: 7, safety_days: 4, proposed_by: "cellar-manager" }),
+  });
+  return readJson(res);
+}
+
+export async function acceptParProposal(proposalId: string): Promise<{ proposal: ParProposalRecord }> {
+  const res = await fetch(`${API}/inventory/par-proposals/${proposalId}/accept`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function rejectParProposal(proposalId: string): Promise<{ proposal: ParProposalRecord }> {
+  const res = await fetch(`${API}/inventory/par-proposals/${proposalId}/reject`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
 export async function getTraining() {
   const res = await fetch(`${API}/training`, { cache: "no-store" });
   return res.json();

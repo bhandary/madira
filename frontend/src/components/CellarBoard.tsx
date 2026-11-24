@@ -455,7 +455,8 @@ export function CellarBoard({
                   ))}
                 </div>
                 <p className="mt-2 text-xs text-muted">
-                  30-day depletion {formatQty(item.depletion_30d)} · {money(item.valuation_cents, item.currency)}
+                  Par <span data-testid="sku-par">{item.par}</span> · 30-day depletion {formatQty(item.depletion_30d)} ·{" "}
+                  {money(item.valuation_cents, item.currency)}
                 </p>
               </article>
             ))}

@@ -575,6 +575,103 @@ class StockMovement(Base):
     created_at: Mapped[datetime] = mapped_column(AwareDateTime, server_default=func.now(), index=True)
 
 
+COUNT_STATUSES = ("in_progress", "submitted", "approved", "canceled")
+PAR_STATUSES = ("pending", "accepted", "rejected")
+
+
+class CountSession(Base):
+    """One physical count of a location. Lines can arrive later from offline devices."""
+
+    __tablename__ = "count_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('in_progress', 'submitted', 'approved', 'canceled')",
+            name="ck_count_sessions_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    location_id: Mapped[uuid.UUID] = _fk("locations.id", index=True)
+    status: Mapped[str] = mapped_column(String(32), default="in_progress", server_default=text("'in_progress'"))
+    started_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    submitted_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    approved_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    started_at: Mapped[datetime] = _stamp()
+    submitted_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+
+
+class CountLine(Base):
+    """One device's count of a SKU. Replay of client_mutation_id is a no-op."""
+
+    __tablename__ = "count_lines"
+    __table_args__ = (
+        UniqueConstraint("session_id", "client_mutation_id", name="uq_count_lines_session_mutation"),
+        CheckConstraint("counted_quantity >= 0", name="ck_count_lines_quantity"),
+        CheckConstraint("device_id <> ''", name="ck_count_lines_device"),
+        CheckConstraint("client_mutation_id <> ''", name="ck_count_lines_mutation"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    session_id: Mapped[uuid.UUID] = _fk("count_sessions.id", index=True)
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
+    bin_id: Mapped[uuid.UUID | None] = _fk("bins.id", nullable=True, index=True)
+    counted_quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    expected_quantity: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    device_id: Mapped[str] = mapped_column(String(64), default="web", server_default=text("'web'"))
+    client_mutation_id: Mapped[str] = mapped_column(String(120))
+    counted_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    notes: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+
+
+class CountConflictResolution(Base):
+    """The quantity a person chose when two devices disagreed on a SKU."""
+
+    __tablename__ = "count_conflict_resolutions"
+    __table_args__ = (
+        UniqueConstraint("session_id", "sku_id", name="uq_count_resolutions_session_sku"),
+        CheckConstraint("resolved_quantity >= 0", name="ck_count_resolutions_quantity"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    session_id: Mapped[uuid.UUID] = _fk("count_sessions.id", index=True)
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
+    resolved_quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    notes: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    resolved_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    resolved_at: Mapped[datetime] = _stamp()
+
+
+class ParProposal(Base):
+    """A cellar-manager suggestion. Accepting it writes skus.par."""
+
+    __tablename__ = "par_proposals"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'accepted', 'rejected')", name="ck_par_proposals_status"),
+        CheckConstraint("lead_time_days >= 0", name="ck_par_proposals_lead"),
+        CheckConstraint("safety_days >= 0", name="ck_par_proposals_safety"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
+    current_par: Mapped[int] = mapped_column(Integer)
+    proposed_par: Mapped[int] = mapped_column(Integer)
+    depletion_30d: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    lead_time_days: Mapped[int] = mapped_column(Integer, default=7, server_default=text("7"))
+    safety_days: Mapped[int] = mapped_column(Integer, default=4, server_default=text("4"))
+    rationale: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(32), default="pending", server_default=text("'pending'"))
+    proposed_by: Mapped[str] = mapped_column(String(80), default="cellar-manager", server_default=text("'cellar-manager'"))
+    decided_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+
+
 class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
 

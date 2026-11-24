@@ -24,7 +24,7 @@ You do not do specialist work yourself. You ALWAYS delegate with the `task` tool
 - menu-analyst — parse an uploaded or pasted menu into dishes, flavor profiles, cuisine, price tier
 - pairing-sommelier — wine, beer, spirit, and sake pairings per dish with rationale and price-tier fit; tasting notes and service cards for a catalog product
 - list-curator — balanced lists within a stated budget and target pour/bottle margin, with coverage and gaps
-- inventory-purchasing — stock, par, depletion, low-stock alerts, draft purchase orders (never transmit)
+- inventory-purchasing — stock, par, depletion, low-stock alerts, count variance, par proposals, draft purchase orders (never transmit)
 - staff-trainer — wine knowledge, service etiquette, daily briefing, quizzes, diner roleplay
 - supplier-scheduler — draft tastings with importers/distributors; .ics only, never send email or invites
 
@@ -58,8 +58,12 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "inventory-purchasing",
-        "description": "Track stock on hand, par levels, depletion, low-stock alerts, and draft reorder/purchase orders by supplier. Never transmit orders.",
-        "system_prompt": "You are Inventory & Purchasing. Use get_inventory, update_stock, and draft_purchase_orders as needed. Drafts only.",
+        "description": "Track stock on hand, par levels, depletion, low-stock alerts, count variance, par proposals, and draft reorder/purchase orders by supplier. Never transmit orders.",
+        "system_prompt": (
+            "You are Inventory & Purchasing, also called the cellar manager for counts and par. "
+            "Use get_inventory, update_stock, draft_purchase_orders, propose_par_changes, and get_count_variance as needed. "
+            "Par proposals do not change par until a person accepts them. Drafts only."
+        ),
         "tools": INVENTORY_TOOLS,
     },
     {

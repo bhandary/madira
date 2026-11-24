@@ -46,7 +46,7 @@ def classify_intent(text: str) -> str:
         return "notes"
     if any(k in t for k in ("quiz", "training", "lesson", "etiquette", "roleplay", "briefing", "flashcard", "waitstaff")):
         return "training"
-    if any(k in t for k in ("inventory", "stock", "par level", "reorder", "purchase order", "on-hand", "on hand", "sku")):
+    if any(k in t for k in ("inventory", "stock", "par level", "reorder", "purchase order", "on-hand", "on hand", "sku", "propose par", "par proposal", "count variance", "count session")):
         return "inventory"
     if any(k in t for k in ("budget", "margin", "wine list", "curate", "beverage list", "coverage")):
         return "list"
@@ -225,6 +225,11 @@ class DemoChatModel(BaseChatModel):
             margin = _extract_margin(text)
             return f"Curate a balanced beverage list. Budget ${budget:.0f}. Target pour/bottle margin {margin}x. Complement the current menu."
         if specialist == "inventory-purchasing":
+            lowered = text.lower()
+            if "propose par" in lowered or "par proposal" in lowered:
+                return "Propose par updates from 30-day depletion. Do not change par until a person accepts."
+            if "count variance" in lowered or "variance report" in lowered or "count session" in lowered:
+                return f"Show the count variance report. {text}"
             sku_match = re.search(r"\b([WBSK]-[A-Z]{3}-\d{2})\b", text, re.I)
             qty_match = re.search(r"\b(?:to|at|=)\s*(\d+)\b", text, re.I)
             if sku_match and qty_match:
@@ -302,6 +307,15 @@ class DemoChatModel(BaseChatModel):
             return finish("Beverage list curated with coverage, gaps, and cost/margin math.")
 
         if role == "inventory-purchasing":
+            lowered = text.lower()
+            if ("propose par" in lowered or "par proposal" in lowered or "par update" in lowered) and "propose_par_changes" not in done:
+                return _ai([_call("propose_par_changes", {"lead_time_days": 7, "safety_days": 4})])
+            if ("variance" in lowered or "count sheet" in lowered) and "get_count_variance" not in done:
+                found = re.search(
+                    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+                    text,
+                )
+                return _ai([_call("get_count_variance", {"session_id": found.group(0) if found else ""})])
             sku_match = re.search(r"\b([WBSK]-[A-Z]{3}-\d{2})\b", text, re.I)
             qty_match = re.search(r"\b(?:to|at|=)\s*(\d+)\b", text, re.I)
             if sku_match and qty_match and "update_stock" not in done:

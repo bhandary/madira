@@ -16,7 +16,9 @@ from madira.tenancy import AUDITOR, MANAGER, OWNER, SOMMELIER, STAFF, RequestCon
 class Capability(str, Enum):
     FLOOR = "floor"
     COUNT = "count"
-    # Read the cellar, locations, bins, and the stock ledger. Writes stay on COUNT.
+    # Read the cellar, locations, bins, the stock ledger, counts, and par proposals.
+    # Count writes, variance approval, and par decisions use COUNT (Owner, Sommelier, Manager).
+    # Spend approval stays on APPROVE.
     INVENTORY_READ = "inventory_read"
     EDIT = "edit"
     APPROVE = "approve"

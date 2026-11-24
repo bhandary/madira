@@ -11,6 +11,7 @@ const SIDEBAR = [
   { href: "/menu", label: "Menu & pairings" },
   { href: "/list", label: "List curation" },
   { href: "/inventory", label: "Inventory" },
+  { href: "/inventory/count", label: "Phone count" },
   { href: "/training", label: "Staff training" },
   { href: "/suppliers", label: "Supplier tastings" },
   { href: "/records", label: "Records" },
@@ -26,6 +27,7 @@ const TABS = [
 ] as const;
 
 const MORE = [
+  { href: "/inventory/count", label: "Phone count" },
   { href: "/suppliers", label: "Supplier tastings" },
   { href: "/records", label: "Records" },
   { href: "/settings", label: "Settings" },
