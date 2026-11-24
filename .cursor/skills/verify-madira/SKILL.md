@@ -1,6 +1,6 @@
 ---
 name: verify-madira
-description: Launch, doctor, drive, and clean up the Madira beverage-program app (Next.js floor at :3000, FastAPI at :8123) in demo mode. Use when a change needs proof of the Head Sommelier UI, a specialist surface, sign-in, settings, or /health without an LLM key. Recipes are in features/.
+description: Launch, doctor, drive, and clean up the Madira beverage-program app (Next.js floor at :3000, FastAPI at :8123) in demo mode. Use when a change needs proof of the Head Sommelier UI, a specialist surface, menu ingest, list import, the cellar ledger, phone counts, purchasing, receiving, records, sign-in, settings, or /health without an LLM key. Recipes are in features/.
 ---
 
 # Verify Madira
@@ -61,7 +61,7 @@ curl -sS http://127.0.0.1:8123/status
 
 - The listeners on `8123` and `3000` are the recorded pids or their children.
 - `/health` and `/status` agree: `demo_mode` true, label `DEMO MODE — deterministic fixtures, no API key`, `llm_model` `madira-demo-fixtures`, `database` `sqlite`.
-- `/status` `specialists` is `menu-analyst`, `pairing-sommelier`, `list-curator`, `inventory-purchasing`, `staff-trainer`, `supplier-scheduler`, and `wiring.has_task_tool` is true.
+- `/status` `specialists` is `menu-analyst`, `pairing-sommelier`, `list-curator`, `inventory-purchasing`, `staff-trainer`, `supplier-scheduler`, and `compliance-auditor`, and `wiring.has_task_tool` is true.
 - The floor banner reads `DEMO MODE` and `deterministic fixtures, no API key`, not `connecting`.
 
 `make test` is the suite check (Deep Agents wiring). It is not a substitute for a live drive. Run it from the repo root when you need the suite result. Frontend checks, from `frontend/`: `npm run lint` and `npx tsc --noEmit`.
@@ -74,7 +74,7 @@ Wait until a workbench `Run specialists` button (`[data-testid=<page>-workbench-
 
 The floor banner is `DEMO MODE` plus `connecting` until `GET /status` returns. Wait until `connecting` is gone.
 
-On `/`, the only heading is the level-1 `Ask the Head Sommelier`.
+On `/`, the floor's only heading is the level-1 `Ask the Head Sommelier`. `next dev` also mounts `Upgrade Next.js to a safe version.` as a heading inside the Next.js overlay shadow root (`#nextjs__container_errors_desc`). Playwright locators pierce that root, so a count of every heading on the page is 2. That advisory is not part of the floor.
 
 Conversations persist. Each page keeps its thread id in `localStorage` (`madira-thread:floor`, `madira-thread:<page>-workbench`), and the backend stores the thread in the sqlite checkpoint tables. Reloading a page in the same browser context restores the earlier messages, surfaces, and delegation rows. For a clean page, open it in a new browser context.
 
