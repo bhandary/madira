@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
+    Date,
     Float,
     ForeignKey,
     Index,
@@ -135,6 +136,8 @@ class ProductVariant(Base):
     product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
     vintage: Mapped[str] = mapped_column(String(32), default="")
     bottle_size: Mapped[str] = mapped_column(String(32), default="")
+    drink_from_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    drink_by_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     product: Mapped[Product] = relationship(back_populates="variants")
     skus: Mapped[list[Sku]] = relationship(back_populates="variant")
 
@@ -163,6 +166,7 @@ class Sku(Base):
     par: Mapped[int] = mapped_column(Integer, default=0)
     cost: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
+    best_by: Mapped[date | None] = mapped_column(Date, nullable=True)
     variant: Mapped[ProductVariant] = relationship(back_populates="skus")
 
 
@@ -426,6 +430,41 @@ class PairingPreference(Base):
     sku: Mapped[Sku] = relationship()
 
 
+PRICING_CATEGORIES = ("wine", "beer", "spirits", "sake", "other", "*")
+
+
+class PricingRule(Base):
+    """Markup for one category and wholesale cost band. Margin is not stored here."""
+
+    __tablename__ = "pricing_rules"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "category", "cost_min_cents", name="uq_pricing_rules_band"),
+        CheckConstraint(
+            "category IN ('wine', 'beer', 'spirits', 'sake', 'other', '*')",
+            name="ck_pricing_rules_category",
+        ),
+        CheckConstraint("cost_min_cents >= 0", name="ck_pricing_rules_cost_min"),
+        CheckConstraint(
+            "cost_max_cents IS NULL OR cost_max_cents > cost_min_cents",
+            name="ck_pricing_rules_cost_max",
+        ),
+        CheckConstraint("bottle_multiple > 0", name="ck_pricing_rules_bottle_multiple"),
+        CheckConstraint("glass_pours_per_bottle >= 1", name="ck_pricing_rules_pours"),
+        CheckConstraint("glass_multiple > 0", name="ck_pricing_rules_glass_multiple"),
+        CheckConstraint("round_to_cents >= 1", name="ck_pricing_rules_round"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    category: Mapped[str] = mapped_column(String(32))
+    cost_min_cents: Mapped[int] = mapped_column(Integer)
+    cost_max_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bottle_multiple: Mapped[Decimal] = mapped_column(Numeric(6, 2))
+    glass_pours_per_bottle: Mapped[int] = mapped_column(Integer)
+    glass_multiple: Mapped[Decimal] = mapped_column(Numeric(6, 2))
+    round_to_cents: Mapped[int] = mapped_column(Integer)
+
+
 class BeverageList(Base):
     __tablename__ = "beverage_lists"
 
@@ -435,11 +474,41 @@ class BeverageList(Base):
     budget: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
     target_margin: Mapped[float] = mapped_column(Float, default=3.0)
+    target_beverage_cost_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    concept: Mapped[str] = mapped_column(String(400), default="", server_default=text("''"))
+    price_tier: Mapped[str] = mapped_column(String(32), default="", server_default=text("''"))
     notes: Mapped[str] = mapped_column(Text, default="")
     source_key: Mapped[str] = mapped_column(String(500), default="", server_default=text("''"))
     source_filename: Mapped[str] = mapped_column(String(300), default="", server_default=text("''"))
     created_at: Mapped[datetime] = _stamp()
     items: Mapped[list[ListItem]] = relationship(back_populates="beverage_list", cascade="all, delete-orphan")
+    sections: Mapped[list[ListSection]] = relationship(
+        back_populates="beverage_list",
+        cascade="all, delete-orphan",
+        order_by="ListSection.position",
+    )
+
+
+class ListSection(Base):
+    """A named group on one list, with an optional share of the buying budget."""
+
+    __tablename__ = "list_sections"
+    __table_args__ = (
+        UniqueConstraint("list_id", "name", name="uq_list_sections_list_name"),
+        CheckConstraint(
+            "budget_share_pct IS NULL OR (budget_share_pct >= 0 AND budget_share_pct <= 100)",
+            name="ck_list_sections_share",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    list_id: Mapped[uuid.UUID] = _fk("beverage_lists.id", index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    budget_share_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    beverage_list: Mapped[BeverageList] = relationship(back_populates="sections")
+    items: Mapped[list[ListItem]] = relationship(back_populates="section_row")
 
 
 class ListItem(Base):
@@ -450,6 +519,12 @@ class ListItem(Base):
     list_id: Mapped[uuid.UUID] = _fk("beverage_lists.id")
     sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
     section: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    section_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("list_sections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     cost: Mapped[int] = mapped_column(Integer, default=0)
     pour_price: Mapped[int] = mapped_column(Integer, default=0)
@@ -457,6 +532,7 @@ class ListItem(Base):
     currency: Mapped[str] = _currency()
     margin_pct: Mapped[float] = mapped_column(Float, default=0)
     beverage_list: Mapped[BeverageList] = relationship(back_populates="items")
+    section_row: Mapped[ListSection | None] = relationship(back_populates="items")
     sku: Mapped[Sku] = relationship()
 
 
@@ -1052,6 +1128,7 @@ class StorageZone(Base):
     target_temp_max_c: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     target_humidity_min_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     target_humidity_max_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    capacity_bottles: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = _stamp()
 

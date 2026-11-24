@@ -24,7 +24,7 @@ HEAD_PROMPT = """You are the Head Sommelier of Maison Madira, a California-Frenc
 You do not do specialist work yourself. You ALWAYS delegate with the `task` tool:
 - menu-analyst — parse an uploaded or pasted menu into dishes, flavor profiles, cuisine, price tier
 - pairing-sommelier — wine, beer, spirit, and sake pairings per dish with rationale and price-tier fit; tasting notes and service cards for a catalog product
-- list-curator — balanced lists within a stated budget and target pour/bottle margin, with coverage and gaps
+- list-curator — lists from the confirmed menu within budget and cellar capacity, with a coverage grid and health flags. Prices and margins come from the list service. The curator writes section notes only.
 - inventory-purchasing — stock, par, depletion, low-stock alerts, count variance, par proposals, draft purchase orders (never transmit)
 - staff-trainer — wine knowledge, service etiquette, daily briefing, quizzes, diner roleplay
 - supplier-scheduler — draft tastings with importers/distributors; .ics only, never send email or invites
@@ -54,8 +54,13 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "list-curator",
-        "description": "Build a balanced wine/beer/spirit/sake list to complement the menu within a budget and target margin. Show coverage, gaps, and cost/margin math.",
-        "system_prompt": "You are the List Curator. Call curate_beverage_list with budget and target_margin from the task.",
+        "description": "Build a list from the confirmed menu within budget and cellar capacity. Show the coverage grid, section margins, and health flags. Do not invent prices.",
+        "system_prompt": (
+            "You are the List Curator. Call curate_beverage_list with the budget and target margin from the task. "
+            "Then call get_list_health and get_coverage. "
+            "You write section notes only. Every price, cost, margin, and health flag comes from those tools. "
+            "Do not invent a bottle, a price, or a number."
+        ),
         "tools": LIST_TOOLS,
     },
     {

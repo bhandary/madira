@@ -84,9 +84,57 @@ def recommend_pairings(menu_id: str = "") -> str:
     return _dumps(body)
 
 
-def curate_beverage_list(budget: float = 12000, target_margin: float = 3.2, name: str = "Maison Madira autumn list") -> str:
-    """Build a balanced wine/beer/spirit/sake list within a buying budget and target pour/bottle margin. Show coverage and gaps."""
+def _list_key(list_id: str) -> uuid.UUID:
+    text = (list_id or "").strip()
+    if text:
+        return uuid.UUID(text)
+    rows = lists_service.list_lists(_vid())["lists"]
+    if not rows:
+        raise NotFound("list not found")
+    return rows[0]["id"]
+
+
+def curate_beverage_list(
+    budget: float = 12000,
+    target_margin: float = 3.2,
+    name: str = "Maison Madira autumn list",
+) -> str:
+    """Build a list from the confirmed menu, the budget, the target beverage cost, and cellar capacity. Prices come from the pricing rules."""
     body = with_list(lists_service.curate(_vid(), budget=budget, target_margin=target_margin, name=name))
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("list-curator")
+    return _dumps(body)
+
+
+def get_list_health(list_id: str = "") -> str:
+    """Return list health flags. Every number comes from the list service."""
+    try:
+        payload = lists_service.health_for(_vid(), _list_key(list_id))
+    except (NotFound, DraftFailed, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "list not found")})
+    tracker.complete_delegation("list-curator")
+    return _dumps(payload)
+
+
+def get_coverage(list_id: str = "") -> str:
+    """Return the coverage matrix for a list. Unfilled cells have no product id."""
+    try:
+        payload = lists_service.coverage_for(_vid(), _list_key(list_id))
+    except (NotFound, DraftFailed, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "list not found")})
+    body = with_list(
+        {
+            "name": "Coverage",
+            "list_id": payload.get("list_id"),
+            "cells": payload.get("cells"),
+            "suggestions": payload.get("suggestions"),
+            "gaps": [cell["name"] for cell in payload.get("suggestions") or []] or ["none — categories covered"],
+            "items": [],
+            "sections": [],
+            "candidates": [],
+            "coverage": {},
+        }
+    )
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("list-curator")
     return _dumps(body)
@@ -306,7 +354,7 @@ def get_storage_zones_status() -> str:
 
 MENU_ANALYST_TOOLS = [parse_menu]
 PAIRING_TOOLS = [recommend_pairings, draft_tasting_note]
-LIST_TOOLS = [curate_beverage_list]
+LIST_TOOLS = [curate_beverage_list, get_list_health, get_coverage]
 INVENTORY_TOOLS = [
     get_inventory,
     update_stock,

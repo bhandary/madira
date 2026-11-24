@@ -36,16 +36,18 @@ def test_curate_keeps_money_in_minor_units():
     demo = ensure_demo_tenant()
     payload = curate(demo.venue_id, budget=12000, target_margin=3.2, name="Maison Madira autumn list")
     assert payload["budget"] == 1_200_000
-    assert payload["spent"] == 519_760
-    assert payload["remaining"] == 1_200_000 - 519_760
+    assert payload["spent"] <= payload["budget"]
+    assert payload["remaining"] == payload["budget"] - payload["spent"]
+    assert payload["spent"] == sum(item["line_cost"] for item in payload["items"])
     assert payload["currency"] == "USD"
-    assert payload["items"][0]["cost"] == 1800
-    assert payload["items"][0]["line_cost"] == 1800 * 12
+    assert payload["items"]
+    assert all(item["product_id"] for item in payload["items"])
     assert "a2ui_operations" not in payload
+    assert "Sèvre-et-Maine" not in json.dumps(payload, default=str)
     stored = list_lists(demo.venue_id)["lists"]
     saved = next(row for row in stored if row["id"] == payload["list_id"])
     assert saved["budget"] == 1_200_000
-    assert saved["items"][0]["cost"] == 1800
+    assert saved["spent"] == payload["spent"]
 
 
 def test_lists_are_isolated_by_venue():
@@ -72,12 +74,15 @@ def test_curate_route_and_tool_emit_the_list_surface():
     assert response.status_code == 200
     body = response.json()
     assert body["budget"] == 1_200_000
-    assert body["spent"] == 519_760
-    assert "BeverageListTable" in json.dumps(body["a2ui_operations"])
+    assert body["spent"] <= body["budget"]
+    encoded = json.dumps(body["a2ui_operations"])
+    assert "BeverageListTable" in encoded
+    assert "CoverageGrid" in encoded
+    assert "ListEditor" in encoded
     token = bind(demo)
     try:
         tool_body = json.loads(curate_beverage_list(12000, 3.2, "Maison Madira autumn list"))
     finally:
         reset(token)
-    assert tool_body["spent"] == 519_760
+    assert tool_body["spent"] <= tool_body["budget"]
     assert tool_body["a2ui_operations"][0]["createSurface"]["surfaceId"] == "beverage-list"

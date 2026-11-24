@@ -29,12 +29,13 @@ test("curate a list under a budget", async ({ page }) => {
   await page.getByTestId("list-margin").fill("3.2");
   await page.getByTestId("list-workbench-submit").click();
   await expect(page.getByTestId("delegate-list-curator")).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByTestId("beverage-list-table")).toBeVisible();
-  await expect(page.getByTestId("list-summary")).toContainText(/Budget/i);
-  await expect(page.getByTestId("list-summary")).toContainText("$12,000");
-  await expect(page.getByTestId("list-summary")).toContainText("$5,198");
-  await expect(page.getByTestId("list-summary")).toContainText("3.2x");
-  await expect(page.getByTestId("beverage-list-table")).toContainText(/wine/i);
+  const reply = page.getByTestId("agent-reply");
+  await expect(reply.getByTestId("beverage-list-table")).toBeVisible();
+  await expect(reply.getByTestId("list-summary")).toContainText(/Budget/i);
+  await expect(reply.getByTestId("list-summary")).toContainText("$12,000");
+  await expect(reply.getByTestId("list-summary")).toContainText("3.2x");
+  await expect(reply.getByTestId("coverage-grid")).toBeVisible();
+  await expect(reply.getByTestId("beverage-list-table")).toContainText(/wine/i);
 });
 
 test("adjust inventory and draft a reorder", async ({ page }) => {

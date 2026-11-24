@@ -62,9 +62,15 @@ def test_live_tools_raise_instead_of_returning_fixtures(monkeypatch):
         if paired.get("error"):
             assert paired["error"] == "menu not found" or "pairing copy" in paired["error"]
             assert "connection refused" not in paired["error"]
-        with pytest.raises(Unavailable) as curated:
+        def notes_boom(_prompt: str) -> str:
+            raise RuntimeError("connection refused")
+
+        monkeypatch.setattr("madira.domain.lists.copy.live_complete", notes_boom)
+        with pytest.raises(DraftFailed) as curated:
             curate_beverage_list()
-        assert "List curation has no live backend yet" in curated.value.message
+        assert "The list notes failed (RuntimeError)." in curated.value.message
+        for marker in _FIXTURE_MARKERS:
+            assert marker not in curated.value.message
         with pytest.raises(Unavailable) as played:
             start_roleplay()
         assert "Diner roleplay has no live backend yet" in played.value.message

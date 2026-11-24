@@ -60,12 +60,14 @@ def run(live: bool) -> int:
         listed = _import_list(ctx.venue_id)
         extraction, extract_problems = _score_extraction(ctx.venue_id, cases)
         pairing, pair_problems = _score_pairing(ctx.venue_id, cases, listed)
+        curation, curation_problems = _score_curation(ctx.venue_id)
     finally:
         reset(token)
 
     _print_extraction(extraction)
     _print_pairing(pairing)
-    problems = extract_problems + pair_problems + _threshold_problems(extraction, pairing)
+    _print_curation(curation)
+    problems = extract_problems + pair_problems + curation_problems + _threshold_problems(extraction, pairing)
     if problems:
         print("result: fail")
         for line in problems:
@@ -81,12 +83,14 @@ def _forbid_fixtures() -> None:
 
     import madira.agents.demo.menu as demo_menu
     import madira.domain.menu.extract as extract
+    import madira.domain.lists.copy as list_copy
     import madira.domain.pairing.copy as copy
 
     demo_menu.extraction_json = boom
     demo_menu.known_payloads = boom
     extract.demo_complete = boom
     copy.demo_lines = boom
+    list_copy.demo_complete = boom
 
 
 def _cases() -> list[dict]:
@@ -491,6 +495,72 @@ def _print_extraction(totals: dict) -> None:
     for key, label in FIELDS:
         accuracy = _rate(totals["hits"][key], totals["matched"])
         print(f"  {label}={accuracy:.3f} (min {FIELD_MIN:.2f})")
+
+
+def _score_curation(venue_id) -> tuple[dict, list[str]]:
+    """Curate from the confirmed eval menus and score the imported list too.
+
+    A name without a catalog id, a spend over the budget, or a margin that
+    disagrees with the pricing service fails the run.
+    """
+
+    from madira.domain.errors import DraftFailed
+    from madira.domain.lists.pricing import economics
+    from madira.domain.lists.service import curate, list_lists
+
+    problems = []
+    try:
+        created = curate(venue_id, budget=12000, target_margin=3.2, name="Eval house list")
+    except DraftFailed as exc:
+        return {"items": 0, "grounded": 0, "margin_ok": 0, "spent": 0, "budget": 0}, [exc.message]
+    stored = list_lists(venue_id)["lists"]
+    imported = next((row for row in stored if row.get("source_filename") == "sample_list.csv"), None)
+    examined = [created]
+    if imported is not None:
+        examined.append(imported)
+    items = 0
+    grounded = 0
+    margin_ok = 0
+    for row in examined:
+        budget = int(row.get("budget") or 0)
+        spent = int(row.get("spent") or 0)
+        if budget > 0 and spent > budget:
+            problems.append(f"{row.get('name')} spends {spent} cents over a {budget} cent budget")
+        capacity = row.get("capacity_bottles")
+        if capacity is not None and int(row.get("bottles") or 0) > int(capacity):
+            problems.append(f"{row.get('name')} holds more bottles than the cellar")
+        for item in row.get("items") or []:
+            items += 1
+            if item.get("product_id"):
+                grounded += 1
+            else:
+                problems.append(f"{item.get('name') or 'item'} is not a catalog product")
+            priced = economics(int(item.get("cost") or 0), int(item.get("bottle_price") or 0), int(item.get("pour_price") or 0))
+            if priced["margin_pct"] == item.get("margin_pct"):
+                margin_ok += 1
+            else:
+                problems.append(f"{item.get('name')} margin does not match the pricing service")
+        for cell in row.get("suggestions") or []:
+            if cell.get("product_id"):
+                problems.append(f"buying suggestion {cell.get('name')} names a product")
+    return {
+        "items": items,
+        "grounded": grounded,
+        "margin_ok": margin_ok,
+        "spent": int(created.get("spent") or 0),
+        "budget": int(created.get("budget") or 0),
+    }, problems
+
+
+def _print_curation(counts: dict) -> None:
+    print(
+        "curation summary  "
+        f"items={counts['items']}  "
+        f"grounded={counts['grounded']}  "
+        f"margin_ok={counts['margin_ok']}  "
+        f"spent={counts['spent']}  "
+        f"budget={counts['budget']}"
+    )
 
 
 def _print_pairing(counts: dict) -> None:
