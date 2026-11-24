@@ -20,6 +20,7 @@ from madira.auth import GOOGLE_JWKS, GOOGLE_TOKEN, clear_jwks_cache
 from madira.db import SessionLocal, init_db
 from madira.main import app
 from madira.models import (
+    Approval,
     AuditEvent,
     CountConflictResolution,
     CountLine,
@@ -105,6 +106,7 @@ def _wipe() -> None:
         session.execute(delete(ParProposal))
         session.execute(delete(AuditEvent))
         session.execute(delete(Document))
+        session.execute(delete(Approval))
         session.execute(delete(User))
         session.commit()
     finally:

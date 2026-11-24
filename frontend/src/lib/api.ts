@@ -853,6 +853,162 @@ export async function updateRetention(years: number): Promise<RetentionPolicy> {
   return readJson(res);
 }
 
+export type SupplierContactRow = {
+  id: string;
+  supplier_id: string;
+  name: string;
+  role: string | null;
+  email: string;
+  phone: string | null;
+  is_primary: boolean;
+};
+
+export type SupplierRow = {
+  id: string;
+  name: string;
+  kind: string;
+  contact_email: string;
+  account_number: string | null;
+  order_minimum_cents: number;
+  default_case_size: number;
+  delivery_days: string[];
+  lead_time_days: number;
+  payment_terms: string | null;
+  notes: string;
+  contacts: SupplierContactRow[];
+};
+
+export type PurchaseLine = {
+  id: string;
+  sku: string;
+  name: string;
+  product_name: string;
+  case_size: number;
+  cases_ordered: number;
+  quantity_ordered: number;
+  quantity_received: number;
+  unit_cost_cents: number;
+  line_total_cents: number;
+  vintage: string | null;
+};
+
+export type PurchaseApproval = {
+  id: string;
+  decision: string;
+  required_role: string;
+  comment: string | null;
+  decided_at: string | null;
+};
+
+export type PurchaseOrderRow = {
+  id: string;
+  po_number: string | null;
+  status: string;
+  supplier_id: string;
+  supplier: string;
+  contact: SupplierContactRow | null;
+  expected_delivery_date: string | null;
+  subtotal_cents: number;
+  order_minimum_cents: number;
+  minimum_met: boolean;
+  shortfall_cents: number;
+  pdf_document_id: string | null;
+  sent_via: string | null;
+  lines: PurchaseLine[];
+  approval: PurchaseApproval;
+};
+
+export async function listProcurementSuppliers(): Promise<{ suppliers: SupplierRow[] }> {
+  const res = await fetch(`${API}/procurement/suppliers`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function createProcurementSupplier(body: {
+  name: string;
+  default_case_size: number;
+  order_minimum_cents: number;
+  delivery_days: string[];
+  lead_time_days: number;
+  payment_terms?: string;
+}): Promise<{ supplier: SupplierRow }> {
+  const res = await fetch(`${API}/procurement/suppliers`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function addSupplierContact(
+  supplierId: string,
+  body: { name: string; email: string; role?: string; phone?: string; is_primary?: boolean },
+): Promise<{ contact: SupplierContactRow }> {
+  const res = await fetch(`${API}/procurement/suppliers/${supplierId}/contacts`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function listLifecycleOrders(): Promise<{ orders: PurchaseOrderRow[] }> {
+  const res = await fetch(`${API}/procurement/orders`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function createLifecycleOrder(body: {
+  supplier_id: string;
+  notes?: string;
+  lines: { sku: string; product_name: string; bottles: number; unit_cost_cents: number }[];
+}): Promise<PurchaseOrderRow> {
+  const res = await fetch(`${API}/procurement/orders`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function draftLifecycleOrders(): Promise<{ orders: PurchaseOrderRow[] }> {
+  const res = await fetch(`${API}/procurement/orders/draft-from-reorder`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function decidePurchaseOrder(
+  poId: string,
+  decision: "approve" | "reject",
+  comment: string,
+): Promise<PurchaseOrderRow> {
+  const res = await fetch(`${API}/procurement/orders/${poId}/${decision}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment }),
+  });
+  return readJson(res);
+}
+
+export async function sendPurchaseOrder(poId: string): Promise<PurchaseOrderRow> {
+  const res = await fetch(`${API}/procurement/orders/${poId}/send`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function closePurchaseOrder(poId: string): Promise<PurchaseOrderRow> {
+  const res = await fetch(`${API}/procurement/orders/${poId}/close`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function cancelPurchaseOrder(poId: string): Promise<PurchaseOrderRow> {
+  const res = await fetch(`${API}/procurement/orders/${poId}/cancel`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
 export async function deleteLlmSettings(): Promise<LlmSettings> {
   const res = await fetch(`${API}/settings/llm`, { method: "DELETE", credentials: "same-origin" });
   return readSettings(res);

@@ -1,5 +1,7 @@
 "use client";
 
+import { ApprovalCard } from "@/components/ApprovalCard";
+import type { ApprovalPurchaseOrder, ApprovalRecord } from "@/components/ApprovalCard";
 import { asAudit, AuditTable } from "@/components/AuditTable";
 import { CountSheet } from "@/components/CountSheet";
 import { asReview, DishReview } from "@/components/DishReview";
@@ -314,6 +316,11 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
   ServiceCard: (p) => <ServiceCardSurface card={p.card} />,
   CountSheet: (p) => <CountSheet session={p.session} lines={p.lines} />,
   VarianceReport: (p) => <VarianceReport report={p.report} />,
+  ApprovalCard: (p) => {
+    const order = p.purchaseOrder as ApprovalPurchaseOrder | undefined;
+    if (!order || typeof order !== "object" || !order.id) return null;
+    return <ApprovalCard purchaseOrder={order} approval={(p.approval as ApprovalRecord) || null} />;
+  },
 };
 
 export function renderMadiraComponent(name: string, props: Record<string, unknown>) {

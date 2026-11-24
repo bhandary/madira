@@ -3,6 +3,7 @@
 import { createCatalog } from "@copilotkit/a2ui-renderer";
 import { z } from "zod/v3";
 import { renderMadiraComponent } from "@/components/A2UISurface";
+import { approvalCardProps } from "./approvalCardSchema";
 import { auditTableProps } from "./auditTableSchema";
 import { countSheetProps } from "./countSheetSchema";
 import { dishReviewProps } from "./dishReviewSchema";
@@ -46,7 +47,9 @@ const definitions = Object.fromEntries(
                 ? countSheetProps.describe(def.description)
                 : name === "VarianceReport"
                   ? varianceReportProps.describe(def.description)
-                  : schemaFor(def.props).describe(def.description),
+                  : name === "ApprovalCard"
+                    ? approvalCardProps.describe(def.description)
+                    : schemaFor(def.props).describe(def.description),
     },
   ]),
 );

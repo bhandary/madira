@@ -1,12 +1,18 @@
-"""Reorder drafts. Line cost is unit cost times quantity, both from the stock rows."""
+"""Reorder drafts. Line cost is unit cost times quantity, both from the stock rows.
+
+Case rounding lives on the purchasing lifecycle. This draft still orders the
+bottle count the cellar is short, so existing reorder totals stay the same.
+"""
 
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import select
 
 from madira.domain.inventory.service import rows as inventory_rows
+from madira.domain.procurement.orders import finalize_legacy_draft
 from madira.domain.session import session_scope
 from madira.models import POLine, PurchaseOrder, Supplier
 from madira.money import DEFAULT_CURRENCY
@@ -44,20 +50,33 @@ def draft(venue_id: uuid.UUID) -> dict:
                         po_id=po.id,
                         sku=line["sku"],
                         name=line["name"],
+                        product_name=line["name"],
                         qty=qty,
+                        case_size=1,
+                        cases_ordered=qty,
+                        quantity_ordered=Decimal(qty),
+                        quantity_received=Decimal(0),
                         unit_cost=unit_cost,
+                        unit_cost_cents=unit_cost,
+                        line_total_cents=line_cost,
                         currency=line.get("currency") or DEFAULT_CURRENCY,
                     )
                 )
                 po_lines.append({**line, "qty": qty, "unit_cost": unit_cost, "line_cost": line_cost})
                 total += line_cost
+            meta = finalize_legacy_draft(session, po, supplier, total)
             orders.append(
                 {
                     "id": po.id,
+                    "po_number": meta["po_number"],
                     "status": "draft",
                     "supplier": supplier.name if supplier else "",
                     "currency": DEFAULT_CURRENCY,
                     "total": total,
+                    "minimum_met": meta["minimum_met"],
+                    "shortfall_cents": meta["shortfall_cents"],
+                    "expected_delivery_date": meta["expected_delivery_date"],
+                    "approval": meta["approval"],
                     "lines": po_lines,
                     "notes": po.notes,
                 }

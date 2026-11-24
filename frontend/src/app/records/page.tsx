@@ -17,6 +17,7 @@ import {
 const DOC_TYPES = [
   ["invoice", "Invoice"],
   ["po_pdf", "Purchase order PDF"],
+  ["purchase_order", "Purchase order"],
   ["delivery_note", "Delivery note"],
   ["license", "License"],
   ["certificate", "Certificate"],
