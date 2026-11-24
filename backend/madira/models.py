@@ -71,6 +71,10 @@ class Venue(Base):
     name: Mapped[str] = mapped_column(String(200))
     slug: Mapped[str] = mapped_column(String(80))
     currency: Mapped[str] = _currency()
+    timezone: Mapped[str] = mapped_column(
+        String(64), default="America/Los_Angeles", server_default=text("'America/Los_Angeles'")
+    )
+    briefing_hour: Mapped[int] = mapped_column(Integer, default=15, server_default=text("15"))
 
 
 class Membership(Base):
@@ -173,6 +177,8 @@ class Sku(Base):
     cost: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
     best_by: Mapped[date | None] = mapped_column(Date, nullable=True)
+    eighty_sixed_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    eighty_sixed_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
     variant: Mapped[ProductVariant] = relationship(back_populates="skus")
 
 
@@ -346,6 +352,7 @@ class Dish(Base):
     confidence: Mapped[dict] = mapped_column(JSON, default=dict)
     content_hash: Mapped[str] = mapped_column(String(64), default="")
     needs_repairing: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_special: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     menu: Mapped[Menu] = relationship(back_populates="dishes", foreign_keys="Dish.menu_id")
     version: Mapped[MenuVersion] = relationship(back_populates="dishes", foreign_keys="Dish.menu_version_id")
     pairings: Mapped[list[Pairing]] = relationship(back_populates="dish", cascade="all, delete-orphan")
@@ -1065,6 +1072,46 @@ class QuizReview(Base):
     due_at: Mapped[datetime] = mapped_column(AwareDateTime)
     last_result: Mapped[str] = mapped_column(String(16), default="", server_default=text("''"))
     updated_at: Mapped[datetime] = _stamp()
+
+
+class Briefing(Base):
+    """One pre-shift briefing for a venue and a local service date."""
+
+    __tablename__ = "briefings"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "service_date", name="uq_briefings_venue_date"),
+        CheckConstraint("status IN ('draft', 'published')", name="ck_briefings_status"),
+        CheckConstraint("due_review_count >= 0", name="ck_briefings_due_reviews"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    service_date: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(16), default="draft", server_default=text("'draft'"))
+    intro: Mapped[str] = mapped_column(Text, default="")
+    cards: Mapped[list] = mapped_column(JSON, default=list)
+    push_sku_id: Mapped[uuid.UUID | None] = _fk("skus.id", nullable=True, index=True)
+    due_review_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    built_at: Mapped[datetime] = _stamp()
+    published_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    published_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+
+
+class BriefingAck(Base):
+    """One staff member's acknowledgement of a briefing."""
+
+    __tablename__ = "briefing_acks"
+    __table_args__ = (
+        UniqueConstraint("briefing_id", "user_id", name="uq_briefing_acks_briefing_user"),
+        CheckConstraint("seconds_to_ack >= 0", name="ck_briefing_acks_seconds"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    briefing_id: Mapped[uuid.UUID] = _fk("briefings.id", index=True)
+    user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    seconds_to_ack: Mapped[int] = mapped_column(Integer, default=0)
+    acknowledged_at: Mapped[datetime] = _stamp()
 
 
 class Tasting(Base):

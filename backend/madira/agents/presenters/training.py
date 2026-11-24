@@ -32,6 +32,49 @@ def briefing_surface(title: str, lessons: list[dict]) -> list[dict[str, Any]]:
     return surface("briefing", BRIEFING_SCHEMA, {"title": title, "lessons": lessons})
 
 
+TONIGHT_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "cards"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "cards", "component": "BriefingCards", "briefing": {"path": "/briefing"}},
+]
+
+LOOKUP_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "results"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "results", "component": "FloorLookup", "lookup": {"path": "/lookup"}},
+]
+
+
+def tonight_surface(briefing: dict) -> list[dict[str, Any]]:
+    return surface("tonight-briefing", TONIGHT_SCHEMA, {"title": "Tonight", "briefing": briefing})
+
+
+def lookup_surface(payload: dict) -> list[dict[str, Any]]:
+    return surface("floor-lookup", LOOKUP_SCHEMA, {"title": "Floor lookup", "lookup": payload})
+
+
+def with_tonight_briefing(payload: dict) -> dict:
+    briefing = payload.get("briefing") or {
+        "id": "",
+        "service_date": payload.get("service_date") or "",
+        "status": "none",
+        "intro": "The briefing opens later today.",
+        "cards": [],
+        "due_review_count": 0,
+        "acknowledged": False,
+        "seconds_to_ack": None,
+    }
+    body = dict(payload)
+    body["a2ui_operations"] = tonight_surface(briefing)
+    return body
+
+
+def with_lookup(payload: dict) -> dict:
+    body = dict(payload)
+    body["a2ui_operations"] = lookup_surface(payload)
+    return body
+
+
 def with_briefing(payload: dict) -> dict:
     operations = briefing_surface("Staff briefing", payload["lessons"])
     if payload["quiz"]:

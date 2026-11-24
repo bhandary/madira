@@ -604,6 +604,66 @@ export async function getDueReviews(): Promise<{ reviews: DueReview[] }> {
   return readJson(res);
 }
 
+export type BriefingItem = { title: string; detail: string };
+export type BriefingCard = { kind: string; title: string; body: string; items: BriefingItem[] };
+export type TonightBriefing = {
+  id: string;
+  service_date: string;
+  status: string;
+  intro: string;
+  cards: BriefingCard[];
+  due_review_count: number;
+  acknowledged: boolean;
+  seconds_to_ack: number | null;
+};
+export type TonightBoard = {
+  service_date: string;
+  briefing_hour: number;
+  timezone: string;
+  available: boolean;
+  role: string;
+  briefing: TonightBriefing | null;
+  low_stock: { sku: string; name: string; on_hand: number; par: number }[];
+  storage_alerts: { id: string; zone: string; metric: string; status: string }[];
+  deliveries_due: { po_number: string; supplier: string; expected_delivery_date: string | null; status: string }[];
+  approvals: { id: string; kind: string; title: string; status: string }[];
+};
+export type LookupHit = {
+  name: string;
+  producer: string;
+  grape: string;
+  region: string;
+  pairing: string;
+  server_script: string;
+  flavor_profile: string;
+  glassware: string;
+  serving_temperature: string;
+  pour_size: string;
+  stock: number | string;
+  price_cents: number;
+  currency: string;
+};
+
+export async function getTonight(): Promise<TonightBoard> {
+  const res = await fetch(`${API}/tonight`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function acknowledgeBriefing(id: string, secondsToAck: number): Promise<TonightBriefing> {
+  const res = await fetch(`${API}/tonight/briefing/${id}/ack`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ seconds_to_ack: secondsToAck }),
+  });
+  return readJson(res);
+}
+
+export async function lookupFloor(query: string): Promise<{ query: string; results: LookupHit[] }> {
+  const res = await fetch(`${API}/lookup?q=${encodeURIComponent(query)}`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
 export async function getStandards(): Promise<{ can_author: boolean; standards: ServiceStandard[] }> {
   const res = await fetch(`${API}/training/standards`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);

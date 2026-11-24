@@ -61,6 +61,10 @@ def classify_intent(text: str) -> str:
         return "compliance"
     if any(k in t for k in ("tasting note", "tasting notes", "service card", "talking point", "server hook")):
         return "notes"
+    if any(k in t for k in ("floor lookup", "look up", "lookup")):
+        return "training"
+    if "tonight" in t and "briefing" in t:
+        return "training"
     if any(k in t for k in ("quiz", "training", "lesson", "etiquette", "roleplay", "briefing", "flashcard", "waitstaff")):
         return "training"
     if any(k in t for k in ("inventory", "stock", "par level", "reorder", "purchase order", "on-hand", "on hand", "sku", "propose par", "par proposal", "count variance", "count session")):
@@ -158,6 +162,8 @@ class DemoChatModel(BaseChatModel):
         if self.role == "menu-extractor":
             return self._extract_menu(messages)
         text = last_human(messages)
+        if self.role == "briefing-intro":
+            return self._briefing_intro(messages)
         if self.role == "staff-trainer" and "LESSON_GROUNDING" in text:
             from madira.agents.demo.lessons import lesson_draft_json
 
@@ -165,6 +171,12 @@ class DemoChatModel(BaseChatModel):
         if self.role in SPECIALISTS:
             return self._specialist(messages)
         return self._orchestrator(messages)
+
+    def _briefing_intro(self, messages: list[BaseMessage]) -> AIMessage:
+        text = last_human(messages)
+        match = re.search(r"SERVICE_DATE (\d{4}-\d{2}-\d{2})", text)
+        day = match.group(1) if match else "tonight"
+        return _ai(content=f"Tonight's briefing for {day}. Walk the cards, then acknowledge.")
 
     def _draft_note(self, messages: list[BaseMessage]) -> AIMessage:
         from madira.agents.demo.notes import note_draft_json
@@ -261,6 +273,10 @@ class DemoChatModel(BaseChatModel):
             return "Report cellar inventory, par levels, depletion, and low-stock alerts. Draft reorders if stock is short."
         if specialist == "staff-trainer":
             lowered = text.lower()
+            if "look up" in lowered or "lookup" in lowered:
+                return f"Look up this floor question: {text}"
+            if "tonight" in lowered and "briefing" in lowered:
+                return "Get tonight's briefing for the floor."
             if "roleplay" in lowered:
                 return "Start diner roleplay as a skeptical guest who ordered the ribeye."
             if "draft" in lowered and "lesson" in lowered:
@@ -383,6 +399,14 @@ class DemoChatModel(BaseChatModel):
 
         if role == "staff-trainer":
             lowered = text.lower()
+            if ("look up" in lowered or "lookup" in lowered or "floor question" in lowered) and "floor_lookup" not in done:
+                query = text
+                marker = "floor question:"
+                if marker in lowered:
+                    query = text[lowered.index(marker) + len(marker) :].strip()
+                return _ai([_call("floor_lookup", {"query": query or text})])
+            if "tonight" in lowered and "briefing" in lowered and "get_tonight_briefing" not in done:
+                return _ai([_call("get_tonight_briefing", {})])
             if "roleplay" in lowered and "start_roleplay" not in done:
                 return _ai([_call("start_roleplay", {})])
             if "due" in lowered and "review" in lowered and "get_due_reviews" not in done:
