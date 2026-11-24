@@ -38,12 +38,43 @@ def seed(session: Session | None = None) -> None:
             from madira.domain.inventory.storage import ensure_demo_zones
 
             ensure_demo_zones(session, venue_id)
+            _ensure_list_pricing(session, venue_id)
             session.commit()
         finally:
             reset(token)
     finally:
         if own:
             session.close()
+
+
+def _ensure_list_pricing(session: Session, venue_id) -> None:
+    """House pricing bands, a drink window on the Muscadet, and a best-by on the stout.
+
+    Capacity on the two demo zones is what the selector spends bottles against.
+    A second seed does not overwrite a band or a date someone already set.
+    """
+
+    from datetime import date, timedelta
+
+    from madira.domain.lists.pricing import ensure_default_rules
+    from madira.models import ProductVariant, StorageZone
+
+    ensure_default_rules(session, venue_id)
+    year = date.today().year
+    muscadet = session.scalar(select(Sku).where(Sku.venue_id == venue_id, Sku.barcode == "W-MUS-01"))
+    if muscadet is not None:
+        variant = session.get(ProductVariant, muscadet.product_variant_id)
+        if variant is not None and variant.drink_by_year is None:
+            variant.drink_from_year = year - 1
+            variant.drink_by_year = year
+    stout = session.scalar(select(Sku).where(Sku.venue_id == venue_id, Sku.barcode == "B-STT-01"))
+    if stout is not None and stout.best_by is None:
+        stout.best_by = date.today() + timedelta(days=30)
+    for name, bottles in (("Main Cellar", 48), ("Bar & Cold Box", 24)):
+        zone = session.scalar(select(StorageZone).where(StorageZone.venue_id == venue_id, StorageZone.name == name))
+        if zone is not None and zone.capacity_bottles is None:
+            zone.capacity_bottles = bottles
+    session.flush()
 
 
 def _seed_demo_catalog(session: Session, venue_id) -> None:

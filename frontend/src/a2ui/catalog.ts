@@ -8,6 +8,8 @@ import { receivingChecklistProps } from "./receivingChecklistSchema";
 import { auditTableProps } from "./auditTableSchema";
 import { countSheetProps } from "./countSheetSchema";
 import { dishReviewProps } from "./dishReviewSchema";
+import { coverageGridProps } from "./coverageGridSchema";
+import { listEditorProps } from "./listEditorSchema";
 import { pairingGridProps } from "./pairingGridSchema";
 import { varianceReportProps } from "./varianceReportSchema";
 import { zoneConditionCardProps } from "./zoneConditionCardSchema";
@@ -41,8 +43,12 @@ const definitions = Object.fromEntries(
       props:
         name === "DishReview"
           ? dishReviewProps.describe(def.description)
-          : name === "PairingGrid"
+            : name === "PairingGrid"
             ? pairingGridProps.describe(def.description)
+            : name === "CoverageGrid"
+              ? coverageGridProps.describe(def.description)
+              : name === "ListEditor"
+                ? listEditorProps.describe(def.description)
             : name === "AuditTable"
               ? auditTableProps.describe(def.description)
               : name === "CountSheet"

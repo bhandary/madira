@@ -495,9 +495,9 @@ export async function getTastings() {
   return res.json();
 }
 
-export async function getLists() {
-  const res = await fetch(`${API}/lists`, { cache: "no-store" });
-  return res.json();
+export async function getLists(): Promise<{ lists: BeverageListDetail[] }> {
+  const res = await fetch(`${API}/lists`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
 }
 
 export type ListImportRow = {
@@ -1253,6 +1253,159 @@ export async function previewAuditPack(startDate: string, endDate: string): Prom
   const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
   const res = await fetch(`${API}/compliance/audit-pack/preview?${params}`, {
     cache: "no-store",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export type PricingRule = {
+  id: string | null;
+  category: string;
+  cost_min_cents: number;
+  cost_max_cents: number | null;
+  bottle_multiple: number;
+  glass_pours_per_bottle: number;
+  glass_multiple: number;
+  round_to_cents: number;
+};
+
+export type ListItemRecord = {
+  id: string;
+  sku_id: string;
+  product_id: string | null;
+  list_id: string;
+  section: string;
+  section_id: string | null;
+  position: number;
+  category: string;
+  name: string;
+  producer: string;
+  region: string;
+  style: string;
+  vintage: string;
+  cost?: number;
+  pour_price: number;
+  bottle_price: number;
+  currency: string;
+  margin_pct?: number;
+  beverage_cost_pct?: number;
+  rule_bottle_price?: number;
+  rule_glass_price?: number;
+  line_cost?: number;
+  band: string;
+};
+
+export type ListSectionRecord = {
+  id: string;
+  name: string;
+  position: number;
+  budget_share_pct: number | null;
+  spend?: number;
+  item_count: number;
+  margin_pct?: number;
+  beverage_cost_pct?: number;
+};
+
+export type CoverageCell = {
+  category: string;
+  style: string;
+  band: string;
+  status: string;
+  product_id: string | null;
+  sku_id: string | null;
+  name: string;
+  dish_id: string | null;
+  dish_name: string;
+};
+
+export type ListCandidate = {
+  sku_id: string;
+  product_id: string;
+  name: string;
+  category: string;
+  style: string;
+  band: string;
+  cost?: number;
+};
+
+export type HealthFlag = {
+  code: string;
+  message: string;
+  dish_id: string | null;
+  item_id: string | null;
+  sku_id: string | null;
+  section: string;
+};
+
+export type BeverageListDetail = {
+  id: string;
+  list_id: string;
+  name: string;
+  budget: number;
+  spent: number;
+  remaining: number;
+  currency: string;
+  target_margin: number;
+  target_beverage_cost_pct: number | null;
+  concept: string;
+  price_tier: string;
+  notes: string;
+  item_count: number;
+  items: ListItemRecord[];
+  sections: ListSectionRecord[];
+  cells: CoverageCell[];
+  suggestions: CoverageCell[];
+  gaps: string[];
+  health: { list_id: string; flags: HealthFlag[] };
+  candidates: ListCandidate[];
+  bottles: number;
+  capacity_bottles: number | null;
+};
+
+export async function curateList(body: {
+  budget: number;
+  target_margin: number;
+  target_beverage_cost_pct?: number | null;
+  concept?: string;
+  price_tier?: string;
+  name?: string;
+}): Promise<BeverageListDetail> {
+  const res = await fetch(`${API}/lists/curate`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function addListItem(listId: string, skuId: string, section = ""): Promise<BeverageListDetail> {
+  const res = await fetch(`${API}/lists/${listId}/items`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sku_id: skuId, section }),
+  });
+  return readJson(res);
+}
+
+export async function updateListItem(
+  listId: string,
+  itemId: string,
+  patch: { reprice?: boolean; pour_price?: number; bottle_price?: number; position?: number; section?: string },
+): Promise<BeverageListDetail> {
+  const res = await fetch(`${API}/lists/${listId}/items/${itemId}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return readJson(res);
+}
+
+export async function deleteListItem(listId: string, itemId: string): Promise<BeverageListDetail> {
+  const res = await fetch(`${API}/lists/${listId}/items/${itemId}`, {
+    method: "DELETE",
     credentials: "same-origin",
   });
   return readJson(res);

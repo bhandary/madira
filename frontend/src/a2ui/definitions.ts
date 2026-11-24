@@ -22,6 +22,20 @@ export const catalogDefinitions = {
     description: "Curated list with cost, pour, bottle, and margin.",
     props: { items: "array" },
   },
+  ListEditor: {
+    description: "List sections and bottles, with reprice, reorder, remove, and add from cellar candidates.",
+    props: {
+      listId: "string",
+      currency: "string",
+      sections: "array of sections",
+      items: "array of list items",
+      candidates: "array of cellar candidates",
+    },
+  },
+  CoverageGrid: {
+    description: "Coverage matrix of category, style, and price band. Unfilled cells are buying suggestions.",
+    props: { cells: "array of coverage cells" },
+  },
   ListSummary: {
     description: "Budget, spend, coverage, and gaps.",
     props: { budget: "number", spent: "number", remaining: "number", targetMargin: "number", coverage: "object", gaps: "array" },

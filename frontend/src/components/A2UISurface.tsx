@@ -7,6 +7,8 @@ import type { ReceivingLineView, ReceivingOrder, ReceivingReceiptView } from "@/
 import { asAudit, AuditTable } from "@/components/AuditTable";
 import { CountSheet } from "@/components/CountSheet";
 import { asReview, DishReview } from "@/components/DishReview";
+import { CoverageGrid } from "@/components/CoverageGrid";
+import { ListEditor } from "@/components/ListEditor";
 import { asPairings, PairingGrid } from "@/components/PairingGrid";
 import { asCard, asNote, ServiceCard, TastingNoteCard } from "@/components/TastingNotes";
 import { VarianceReport } from "@/components/VarianceReport";
@@ -307,6 +309,10 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
   DishList: (p) => <DishList dishes={p.dishes} />,
   DishReview: (p) => <DishReviewSurface review={p.review} />,
   ListSummary: (p) => <ListSummary {...p} />,
+  ListEditor: (p) => (
+    <ListEditor listId={p.listId} currency={p.currency} sections={p.sections} items={p.items} candidates={p.candidates} />
+  ),
+  CoverageGrid: (p) => <CoverageGrid cells={p.cells} />,
   BeverageListTable: (p) => <BeverageListTable items={p.items} />,
   InventoryTable: (p) => <InventoryTable items={p.items} />,
   StockAlerts: (p) => <StockAlerts alerts={p.alerts} />,

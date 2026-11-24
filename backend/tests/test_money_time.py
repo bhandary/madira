@@ -12,8 +12,8 @@ from pathlib import Path
 from sqlalchemy import func, select, text
 
 from madira.db import SessionLocal, init_db
+from madira.domain.lists.pricing import economics, price_for
 from madira.domain.procurement.service import build_ics
-from madira.agents.demo.fixtures import curate_list
 from madira.models import Supplier, Tasting
 from madira.money import bottle_multiple, format_whole, pour_multiple, to_minor
 from madira.seed import seed
@@ -38,25 +38,14 @@ def test_to_minor_rounds_half_away_from_zero():
 
 
 def test_list_math_stays_in_minor_units_and_displays_the_same_dollars():
-    payload = curate_list(budget=12000, target_margin=3.2)
-    assert payload["budget"] == 1_200_000
-    assert payload["currency"] == "USD"
-    assert payload["spent"] == 519_760
-    assert payload["remaining"] == 1_200_000 - 519_760
-    assert payload["spent"] == sum(item["line_cost"] for item in payload["items"])
-    assert payload["target_margin"] == 3.2
-    assert "Buys stay at $5,198 of $12,000." in payload["notes"]
-    assert "3.2x" in payload["notes"]
-    muscadet = payload["items"][0]
-    assert muscadet["cost"] == 1800
-    assert muscadet["line_cost"] == 1800 * 12
-    assert muscadet["pour_multiple"] == 4.44
-    assert muscadet["margin_pct"] == 77.5
-    kolsch = next(item for item in payload["items"] if item["name"] == "Kölsch")
-    assert kolsch["cost"] == 240
-    assert kolsch["line_cost"] == 240 * 24
-    assert format_whole(payload["spent"]) == "5,198"
-    assert format_whole(payload["budget"]) == "12,000"
+    assert to_minor(12000) == 1_200_000
+    assert format_whole(1_200_000) == "12,000"
+    muscadet = price_for(1800, "wine")
+    assert muscadet["bottle_price"] == 5400
+    assert muscadet["glass_price"] == 1300
+    priced = economics(1800, muscadet["bottle_price"], muscadet["glass_price"])
+    assert priced["margin_pct"] == 66.7
+    assert priced["beverage_cost_pct"] == 33.3
     assert float(pour_multiple(1600, 1800)) == 4.44
     assert float(bottle_multiple(4800, 1800)) == 2.67
 
@@ -233,7 +222,7 @@ with engine.connect() as conn:
     version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
     orgs = conn.execute(text("SELECT COUNT(*) FROM organizations")).scalar()
     suppliers = conn.execute(text("SELECT COUNT(*) FROM suppliers")).scalar()
-    assert version == "0014_storage_zones"
+    assert version == "0015_list_pricing_coverage"
 assert orgs == 1
 assert suppliers == 0
 """

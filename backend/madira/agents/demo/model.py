@@ -316,7 +316,12 @@ class DemoChatModel(BaseChatModel):
             return finish("Pairings posted for wine, beer, spirit, and sake on each dish.")
 
         if role == "list-curator":
-            if "curate_beverage_list" not in done:
+            if "SECTIONS_JSON=" in text:
+                return _ai(content=_section_notes_json(text))
+            lowered = text.lower()
+            # A curate already returns the coverage grid and the health payload.
+            # A second surface would paint a second budget summary.
+            if "curate_beverage_list" not in done and ("curate" in lowered or "budget" in lowered):
                 return _ai(
                     [
                         _call(
@@ -329,7 +334,13 @@ class DemoChatModel(BaseChatModel):
                         )
                     ]
                 )
-            return finish("Beverage list curated with coverage, gaps, and cost/margin math.")
+            if "curate_beverage_list" in done:
+                return finish("Beverage list curated from the menu. Coverage, section margins, and health come from the list service.")
+            if "get_list_health" not in done and "health" in lowered:
+                return _ai([_call("get_list_health", {"list_id": _extract_list_id(text)})])
+            if "get_coverage" not in done and "coverage" in lowered:
+                return _ai([_call("get_coverage", {"list_id": _extract_list_id(text)})])
+            return finish("Beverage list curated from the menu. Coverage, section margins, and health come from the list service.")
 
         if role == "inventory-purchasing":
             lowered = text.lower()
@@ -423,6 +434,40 @@ def _extract_budget(text: str) -> float:
     if match:
         return float(match.group(1).replace(",", ""))
     return 12000.0
+
+
+def _extract_list_id(text: str) -> str:
+    found = re.search(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        text or "",
+    )
+    return found.group(0) if found else ""
+
+
+def _section_notes_json(text: str) -> str:
+    """Prose only. The pricing service owns every number, so these notes have none."""
+
+    marker = "SECTIONS_JSON="
+    start = text.find(marker)
+    names = ["Wine"]
+    if start >= 0:
+        line = text[start + len(marker) :].splitlines()[0].strip()
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            parsed = []
+        if isinstance(parsed, list) and parsed:
+            names = [str(name) for name in parsed]
+    sections = []
+    for name in names:
+        label = " ".join(str(name).split()) or "List"
+        sections.append(
+            {
+                "name": label,
+                "note": f"The {label} section follows the menu and leaves room to buy what is still missing.",
+            }
+        )
+    return json.dumps({"sections": sections})
 
 
 def _extract_margin(text: str) -> float:
