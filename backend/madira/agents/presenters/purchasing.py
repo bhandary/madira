@@ -89,3 +89,51 @@ def with_drafted(payload: dict) -> dict:
     for order in orders:
         operations.extend(approval_surface(order, surface_id=f"purchase-order-approval-{order['id']}"))
     return {"orders": orders, "a2ui_operations": operations}
+
+
+RECEIVING_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "checklist"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {
+        "id": "checklist",
+        "component": "ReceivingChecklist",
+        "purchaseOrder": {"path": "/purchaseOrder"},
+        "receipt": {"path": "/receipt"},
+        "lines": {"path": "/lines"},
+    },
+]
+
+
+def receiving_checklist_surface(receipt: dict, surface_id: str = "receiving-checklist") -> list[dict[str, Any]]:
+    number = receipt.get("po_number") or "Delivery"
+    summary = receipt.get("discrepancy_summary") or {}
+    return surface(
+        surface_id,
+        RECEIVING_SCHEMA,
+        {
+            "title": f"Receiving {number}",
+            "purchaseOrder": {
+                "id": str(receipt.get("purchase_order_id") or ""),
+                "po_number": receipt.get("po_number") or "",
+                "supplier": receipt.get("supplier") or "",
+                "status": receipt.get("purchase_order_status") or "",
+            },
+            "receipt": {
+                "id": str(receipt.get("id") or ""),
+                "status": receipt.get("status") or "draft",
+                "invoice_id": receipt.get("invoice_id") or "",
+                "notes": receipt.get("notes") or "",
+                "discrepancy_summary": summary,
+            },
+            "lines": list(receipt.get("lines") or []),
+        },
+    )
+
+
+def with_receipt(receipt: dict) -> dict:
+    body = dict(receipt)
+    surface_id = "receiving-checklist"
+    if receipt.get("id"):
+        surface_id = f"receiving-checklist-{receipt['id']}"
+    body["a2ui_operations"] = receiving_checklist_surface(receipt, surface_id=surface_id)
+    return body

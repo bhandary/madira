@@ -2,6 +2,8 @@
 
 import { ApprovalCard } from "@/components/ApprovalCard";
 import type { ApprovalPurchaseOrder, ApprovalRecord } from "@/components/ApprovalCard";
+import { ReceivingChecklist } from "@/components/ReceivingChecklist";
+import type { ReceivingLineView, ReceivingOrder, ReceivingReceiptView } from "@/components/ReceivingChecklist";
 import { asAudit, AuditTable } from "@/components/AuditTable";
 import { CountSheet } from "@/components/CountSheet";
 import { asReview, DishReview } from "@/components/DishReview";
@@ -320,6 +322,17 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
     const order = p.purchaseOrder as ApprovalPurchaseOrder | undefined;
     if (!order || typeof order !== "object" || !order.id) return null;
     return <ApprovalCard purchaseOrder={order} approval={(p.approval as ApprovalRecord) || null} />;
+  },
+  ReceivingChecklist: (p) => {
+    const order = p.purchaseOrder as ReceivingOrder | undefined;
+    if (!order || typeof order !== "object" || !order.id) return null;
+    return (
+      <ReceivingChecklist
+        purchaseOrder={order}
+        receipt={(p.receipt as ReceivingReceiptView) || null}
+        lines={Array.isArray(p.lines) ? (p.lines as ReceivingLineView[]) : null}
+      />
+    );
   },
 };
 

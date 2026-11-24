@@ -1,20 +1,24 @@
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from madira.agents.presenters.purchasing import with_drafted, with_orders, with_purchase_order
+from madira.agents.presenters.purchasing import with_drafted, with_orders, with_purchase_order, with_receipt
 from madira.domain.compliance.service import Rejected as VaultRejected
 from madira.domain.errors import NotFound
+from madira.domain.inventory.ledger import Rejected as LedgerRejected
 from madira.domain.procurement import orders as lifecycle
+from madira.domain.procurement import receiving
 from madira.domain.procurement.orders import OrderError
+from madira.domain.procurement.receiving import ReceivingError
 from madira.domain.purchasing.service import draft, list_orders
 from madira.rbac import Capability, require
-from madira.storage import StorageError
+from madira.storage import StorageError, upload_max_bytes
 from madira.tenancy import active_venue_id, current_request
 
 router = APIRouter()
@@ -64,6 +68,26 @@ class DecisionBody(BaseModel):
     comment: str | None = None
 
 
+class ReceiptLineBody(BaseModel):
+    po_line_id: uuid.UUID | None = None
+    sku: str | None = None
+    counted_qty: float | int | str
+    received_vintage: str | None = None
+    bin_id: uuid.UUID | None = None
+    resolution_note: str | None = None
+
+
+class ReceiptBody(BaseModel):
+    invoice_id: uuid.UUID | None = None
+    notes: str | None = None
+    lines: list[ReceiptLineBody]
+
+
+class AcceptBody(BaseModel):
+    acknowledge_discrepancies: bool = False
+    notes: str | None = None
+
+
 def _actor():
     return current_request()
 
@@ -71,7 +95,9 @@ def _actor():
 def _fail(exc: Exception) -> HTTPException:
     if isinstance(exc, NotFound):
         return HTTPException(404, exc.message)
-    if isinstance(exc, (OrderError, VaultRejected)):
+    if isinstance(exc, ReceivingError):
+        return HTTPException(exc.status, exc.detail)
+    if isinstance(exc, (OrderError, VaultRejected, LedgerRejected)):
         return HTTPException(exc.status, exc.message)
     if isinstance(exc, StorageError):
         return HTTPException(exc.status, exc.message)
@@ -81,7 +107,7 @@ def _fail(exc: Exception) -> HTTPException:
 def _call(fn):
     try:
         return fn()
-    except (NotFound, OrderError, VaultRejected, StorageError) as exc:
+    except (NotFound, OrderError, VaultRejected, StorageError, ReceivingError, LedgerRejected) as exc:
         raise _fail(exc) from exc
 
 
@@ -179,3 +205,111 @@ def procurement_order_pdf(po_id: uuid.UUID) -> Response:
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{quoted}"'},
     )
+
+
+@router.post("/procurement/orders/{po_id}/invoices", dependencies=[require(Capability.PO_WRITE)])
+async def procurement_invoice_upload(
+    po_id: uuid.UUID,
+    file: UploadFile = File(...),
+    invoice_number: str = Form(...),
+    invoice_date: str = Form(...),
+    tax_cents: int = Form(0),
+    lines_json: str = Form(""),
+) -> dict[str, Any]:
+    body = await file.read(upload_max_bytes() + 1)
+    parsed = _lines_json(lines_json)
+
+    def upload():
+        return receiving.upload_invoice(
+            active_venue_id(),
+            po_id,
+            filename=file.filename or "invoice",
+            content_type=file.content_type,
+            body=body,
+            invoice_number=invoice_number,
+            invoice_date=invoice_date,
+            tax_cents=tax_cents,
+            lines=parsed,
+            actor=_actor(),
+        )
+
+    return _call(upload)
+
+
+@router.get("/procurement/invoices", dependencies=[require(Capability.PO_READ)])
+def procurement_invoices() -> dict[str, Any]:
+    return _call(lambda: receiving.list_invoices(active_venue_id()))
+
+
+@router.get("/procurement/invoices/{invoice_id}", dependencies=[require(Capability.PO_READ)])
+def procurement_invoice_get(invoice_id: uuid.UUID) -> dict[str, Any]:
+    return _call(lambda: receiving.get_invoice(active_venue_id(), invoice_id))
+
+
+@router.get("/procurement/invoices/{invoice_id}/document", dependencies=[require(Capability.PO_READ)])
+def procurement_invoice_document(invoice_id: uuid.UUID) -> Response:
+    try:
+        filename, media, payload = receiving.invoice_document(active_venue_id(), invoice_id)
+    except (NotFound, ReceivingError, StorageError) as exc:
+        raise _fail(exc) from exc
+    quoted = filename.replace("\\", "").replace('"', "")
+    return Response(content=payload, media_type=media, headers={"Content-Disposition": f'attachment; filename="{quoted}"'})
+
+
+@router.post("/procurement/orders/{po_id}/receipts", dependencies=[require(Capability.PO_WRITE)])
+def procurement_receipt_stage(po_id: uuid.UUID, body: ReceiptBody) -> dict[str, Any]:
+    lines = [line.model_dump() for line in body.lines]
+
+    def stage():
+        receipt = receiving.stage_receipt(
+            active_venue_id(),
+            po_id,
+            invoice_id=body.invoice_id,
+            lines=lines,
+            notes=body.notes,
+            actor=_actor(),
+        )
+        return with_receipt(receipt)
+
+    return _call(stage)
+
+
+@router.get("/procurement/receipts", dependencies=[require(Capability.PO_READ)])
+def procurement_receipts() -> dict[str, Any]:
+    return _call(lambda: receiving.list_receipts(active_venue_id()))
+
+
+@router.get("/procurement/receipts/{receipt_id}", dependencies=[require(Capability.PO_READ)])
+def procurement_receipt_get(receipt_id: uuid.UUID) -> dict[str, Any]:
+    return _call(lambda: with_receipt(receiving.get_receipt(active_venue_id(), receipt_id)))
+
+
+@router.post("/procurement/receipts/{receipt_id}/accept", dependencies=[require(Capability.PO_WRITE)])
+def procurement_receipt_accept(receipt_id: uuid.UUID, body: AcceptBody | None = None) -> dict[str, Any]:
+    acknowledge = False if body is None else body.acknowledge_discrepancies
+    notes = None if body is None else body.notes
+
+    def accept():
+        receipt = receiving.accept_receipt(
+            active_venue_id(),
+            receipt_id,
+            acknowledge_discrepancies=acknowledge,
+            notes=notes,
+            actor=_actor(),
+        )
+        return with_receipt(receipt)
+
+    return _call(accept)
+
+
+def _lines_json(raw: str) -> list[dict] | None:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(422, "lines_json must be JSON.") from exc
+    if not isinstance(parsed, list):
+        raise HTTPException(422, "lines_json must be a list.")
+    return parsed

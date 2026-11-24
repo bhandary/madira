@@ -11,7 +11,7 @@ from madira.agents.presenters.lists import with_list
 from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
 from madira.agents.presenters.procurement import with_scheduled, with_tasting_list
-from madira.agents.presenters.purchasing import with_drafted, with_orders, with_purchase_order
+from madira.agents.presenters.purchasing import with_drafted, with_orders, with_purchase_order, with_receipt
 from madira.agents.presenters.training import with_briefing, with_quiz
 from madira.domain.catalog import notes as notes_service
 from madira.domain.errors import DraftFailed, NotFound
@@ -22,8 +22,10 @@ from madira.domain.inventory.ledger import Rejected
 from madira.domain.lists import service as lists_service
 from madira.domain.menu import service as menu_service
 from madira.domain.procurement import orders as order_lifecycle
+from madira.domain.procurement import receiving as receiving_service
 from madira.domain.procurement import service as procurement_service
 from madira.domain.procurement.orders import OrderError
+from madira.domain.procurement.receiving import ReceivingError
 from madira.domain.purchasing import service as purchasing_service
 from madira.domain.training import service as training_service
 from madira.tenancy import active_venue_id, current_request
@@ -177,6 +179,24 @@ def get_purchase_order(po_id: str = "") -> str:
     return _dumps(body)
 
 
+def get_receiving_checklist(po_id: str = "", receipt_id: str = "") -> str:
+    """Show the ReceivingChecklist for a staged delivery or a sent purchase order."""
+    try:
+        if (receipt_id or "").strip():
+            receipt = receiving_service.get_receipt(_vid(), uuid.UUID(receipt_id))
+        elif (po_id or "").strip():
+            found = receiving_service.latest_receipt(_vid(), uuid.UUID(po_id))
+            receipt = found if found is not None else receiving_service.preview_receipt(_vid(), uuid.UUID(po_id))
+        else:
+            return _dumps({"error": "po_id or receipt_id is required"})
+    except (NotFound, OrderError, ReceivingError, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "receipt not found")})
+    body = with_receipt(receipt)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("inventory-purchasing")
+    return _dumps(body)
+
+
 def get_training_briefing() -> str:
     """Daily menu pairing briefing and wine/service lessons for waitstaff and bartenders."""
     body = with_briefing(training_service.briefing(_vid()))
@@ -246,6 +266,7 @@ INVENTORY_TOOLS = [
     draft_purchase_orders,
     draft_case_purchase_orders,
     get_purchase_order,
+    get_receiving_checklist,
     propose_par_changes,
     get_count_variance,
 ]

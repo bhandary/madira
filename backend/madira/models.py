@@ -794,6 +794,94 @@ class Approval(Base):
     created_at: Mapped[datetime] = _stamp()
 
 
+INVOICE_STATUSES = ("uploaded", "matched", "discrepancy", "accepted")
+INVOICE_EXTRACTION_MODES = ("demo", "vision", "manual")
+RECEIPT_STATUSES = ("draft", "accepted", "rejected")
+
+
+class Invoice(Base):
+    """A supplier invoice. The original file lives in the document vault."""
+
+    __tablename__ = "invoices"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('uploaded', 'matched', 'discrepancy', 'accepted')",
+            name="ck_invoices_status",
+        ),
+        CheckConstraint(
+            "extraction_mode IN ('demo', 'vision', 'manual')",
+            name="ck_invoices_extraction_mode",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id", index=True)
+    purchase_order_id: Mapped[uuid.UUID | None] = _fk("purchase_orders.id", nullable=True, index=True)
+    invoice_number: Mapped[str] = mapped_column(String(80), index=True)
+    invoice_date: Mapped[str] = mapped_column(String(10))
+    subtotal_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    tax_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    total_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    currency: Mapped[str] = _currency()
+    document_id: Mapped[uuid.UUID] = _fk("documents.id", index=True)
+    extracted_lines: Mapped[list] = mapped_column(JSON, default=list)
+    extraction_mode: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(32), default="uploaded", server_default=text("'uploaded'"))
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+
+
+class Receipt(Base):
+    """A counted delivery against a purchase order, optionally tied to an invoice."""
+
+    __tablename__ = "receipts"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'accepted', 'rejected')",
+            name="ck_receipts_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    purchase_order_id: Mapped[uuid.UUID] = _fk("purchase_orders.id", index=True)
+    invoice_id: Mapped[uuid.UUID | None] = _fk("invoices.id", nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="draft", server_default=text("'draft'"))
+    received_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    discrepancies_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+    discrepancy_summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    lines: Mapped[list[ReceiptLine]] = relationship(back_populates="receipt", cascade="all, delete-orphan")
+
+
+class ReceiptLine(Base):
+    """One counted line. Flags record the three-way match against the PO and invoice."""
+
+    __tablename__ = "receipt_lines"
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    receipt_id: Mapped[uuid.UUID] = _fk("receipts.id", index=True)
+    po_line_id: Mapped[uuid.UUID | None] = _fk("po_lines.id", nullable=True, index=True)
+    sku: Mapped[str] = mapped_column(String(64), index=True)
+    product_name: Mapped[str] = mapped_column(String(200))
+    ordered_qty: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    invoiced_qty: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    counted_qty: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    ordered_unit_cost_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    invoiced_unit_cost_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ordered_vintage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    received_vintage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    bin_id: Mapped[uuid.UUID | None] = _fk("bins.id", nullable=True, index=True)
+    flags: Mapped[list] = mapped_column(JSON, default=list)
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    receipt: Mapped[Receipt] = relationship(back_populates="lines")
+
+
 class Lesson(Base):
     __tablename__ = "lessons"
     __table_args__ = (UniqueConstraint("venue_id", "slug", name="uq_lessons_venue_slug"),)
