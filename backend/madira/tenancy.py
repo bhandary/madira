@@ -28,12 +28,20 @@ DEMO_VENUE_SLUG = "maison-madira"
 DEMO_USER_SUB = "madira-demo-owner"
 DEMO_USER_EMAIL = "owner@maison-madira.demo"
 DEMO_USER_NAME = "Demo Owner"
+DEMO_PERSONA_COOKIE = "madira_demo_persona"
 
 OWNER = "Owner"
 SOMMELIER = "Sommelier"
 MANAGER = "Manager"
 STAFF = "Staff"
 AUDITOR = "Auditor"
+
+# Demo floor users. The cookie is honored only while demo_posture() is true.
+_DEMO_PERSONAS = (
+    ("ana", "madira-demo-ana", "ana@maison-madira.demo", "Ana", STAFF, "server"),
+    ("ben", "madira-demo-ben", "ben@maison-madira.demo", "Ben", STAFF, "bartender"),
+    ("mia", "madira-demo-mia", "mia@maison-madira.demo", "Mia", MANAGER, None),
+)
 
 _request: ContextVar[RequestContext | None] = ContextVar("madira_request_context", default=None)
 
@@ -129,6 +137,7 @@ def ensure_demo_tenant(session: Session | None = None) -> RequestContext:
             session.flush()
         elif membership.role != OWNER:
             membership.role = OWNER
+        _ensure_demo_personas(session, venue, now)
         ctx = _context_from(user, membership, venue)
         session.commit()
         return ctx
@@ -166,6 +175,83 @@ def grant_configured_owner(session: Session, user: User) -> None:
         session.add(Membership(user_id=user.id, venue_id=venue.id, role=OWNER))
     else:
         membership.role = OWNER
+
+
+def _ensure_user(session: Session, *, sub: str, email: str, name: str, now) -> User:
+    user = session.scalar(select(User).where(User.google_sub == sub))
+    if user is None:
+        user = User(google_sub=sub, email=email, name=name, picture="", created_at=now, last_login_at=now)
+        session.add(user)
+        session.flush()
+        return user
+    if user.name != name:
+        user.name = name
+    if user.email != email:
+        user.email = email
+    return user
+
+
+def _ensure_demo_personas(session: Session, venue: Venue, now) -> None:
+    for _slug, sub, email, name, role, position in _DEMO_PERSONAS:
+        user = _ensure_user(session, sub=sub, email=email, name=name, now=now)
+        membership = session.scalar(
+            select(Membership).where(Membership.user_id == user.id, Membership.venue_id == venue.id)
+        )
+        if membership is None:
+            session.add(Membership(user_id=user.id, venue_id=venue.id, role=role, position=position))
+            continue
+        membership.role = role
+        membership.position = position
+    session.flush()
+
+
+def persona_context(session: Session, slug: str) -> RequestContext | None:
+    """The demo persona for a cookie value, or None when the slug is not one of them."""
+
+    slug = (slug or "").strip().lower()
+    spec = next((row for row in _DEMO_PERSONAS if row[0] == slug), None)
+    if spec is None:
+        return None
+    _slug, sub, _email, _name, _role, _position = spec
+    user = session.scalar(select(User).where(User.google_sub == sub))
+    if user is None:
+        return None
+    venue = session.scalar(select(Venue).where(Venue.slug == DEMO_VENUE_SLUG).order_by(Venue.id))
+    if venue is None:
+        return None
+    membership = session.scalar(
+        select(Membership).where(Membership.user_id == user.id, Membership.venue_id == venue.id)
+    )
+    if membership is None:
+        return None
+    return _context_from(user, membership, venue)
+
+
+def demo_persona_catalog() -> list[dict]:
+    """Names and roles for the demo switcher. Empty unless the model is in demo mode."""
+
+    if not demo_posture():
+        return []
+    ensure_demo_tenant()
+    session = SessionLocal()
+    try:
+        catalog = [
+            {"slug": "owner", "name": DEMO_USER_NAME, "role": OWNER, "position": None, "email": DEMO_USER_EMAIL}
+        ]
+        for slug, sub, email, name, role, position in _DEMO_PERSONAS:
+            user = session.scalar(select(User).where(User.google_sub == sub))
+            catalog.append(
+                {
+                    "slug": slug,
+                    "name": user.name if user is not None else name,
+                    "role": role,
+                    "position": position,
+                    "email": email,
+                }
+            )
+        return catalog
+    finally:
+        session.close()
 
 
 def _as_uuid(value) -> uuid.UUID:
@@ -227,7 +313,14 @@ def resolve_request(request: Request) -> RequestContext:
                 raise HTTPException(status_code=403, detail="No venue membership.")
             return _context_from(user, membership, venue)
         if demo_posture():
-            return ensure_demo_tenant(session)
+            ctx = ensure_demo_tenant(session)
+            # A real session already returned above. This cookie is demo-only.
+            slug = (request.cookies.get(DEMO_PERSONA_COOKIE) or "").strip().lower()
+            if slug and slug != "owner":
+                switched = persona_context(session, slug)
+                if switched is not None:
+                    return switched
+            return ctx
         raise HTTPException(status_code=401, detail="Sign in required.")
     finally:
         session.close()

@@ -51,11 +51,17 @@ test("adjust inventory and draft a reorder", async ({ page }) => {
 
 test("take a training quiz", async ({ page }) => {
   await page.goto("/training");
-  await page.getByTestId("training-quiz").click();
-  await page.getByTestId("training-workbench-submit").click();
-  await expect(page.getByTestId("delegate-staff-trainer")).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByTestId("quiz-card")).toBeVisible();
+  const lesson = page.getByTestId("my-lesson").filter({ hasText: "Tonight's pairing briefing" });
+  await lesson.getByTestId("lesson-quiz").click();
+  const questions = page.getByTestId("quiz-question");
+  await expect(questions.first()).toBeVisible();
+  const count = await questions.count();
+  for (let index = 0; index < count; index += 1) {
+    await questions.nth(index).getByTestId("quiz-choice").nth(1).click();
+  }
+  await page.getByTestId("quiz-submit").click();
   await expect(page.getByTestId("quiz-score")).toContainText(/Score/);
+  await expect(page.getByTestId("quiz-next-review")).toBeVisible();
 });
 
 test("schedule a supplier tasting with ics draft", async ({ page }) => {

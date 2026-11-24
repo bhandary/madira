@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -46,6 +46,10 @@ def _stamp():
     return mapped_column(AwareDateTime, server_default=func.now())
 
 
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class Organization(Base):
     __tablename__ = "organizations"
 
@@ -85,6 +89,8 @@ class Membership(Base):
     user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     role: Mapped[str] = mapped_column(String(32))
+    # Floor role for lessons: server, bartender, barback, or host. Empty for everyone else.
+    position: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
 
 class Product(Base):
@@ -958,9 +964,37 @@ class ReceiptLine(Base):
     receipt: Mapped[Receipt] = relationship(back_populates="lines")
 
 
+class Standard(Base):
+    """House service standard. Madira ships a default; the venue's edit is the one lessons use."""
+
+    __tablename__ = "standards"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "slug", name="uq_standards_venue_slug"),
+        CheckConstraint("version >= 1", name="ck_standards_version"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    slug: Mapped[str] = mapped_column(String(80))
+    topic: Mapped[str] = mapped_column(String(80))
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text, default="")
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
+    updated_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    updated_at: Mapped[datetime] = _stamp()
+
+
 class Lesson(Base):
     __tablename__ = "lessons"
-    __table_args__ = (UniqueConstraint("venue_id", "slug", name="uq_lessons_venue_slug"),)
+    __table_args__ = (
+        UniqueConstraint("venue_id", "slug", name="uq_lessons_venue_slug"),
+        CheckConstraint(
+            "position IN ('server', 'bartender', 'barback', 'host', 'all')",
+            name="ck_lessons_position",
+        ),
+        CheckConstraint("status IN ('draft', 'approved')", name="ck_lessons_status"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
@@ -969,16 +1003,31 @@ class Lesson(Base):
     role: Mapped[str] = mapped_column(String(64), default="waitstaff")
     category: Mapped[str] = mapped_column(String(64), default="wine")
     body: Mapped[str] = mapped_column(Text, default="")
+    position: Mapped[str] = mapped_column(String(16), default="all", server_default=text("'all'"))
+    status: Mapped[str] = mapped_column(String(16), default="approved", server_default=text("'approved'"))
+    approved_by: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    source: Mapped[str] = mapped_column(String(16), default="seed", server_default=text("'seed'"))
+    standard_ids: Mapped[list] = mapped_column(JSON, default=list)
+    sku_ids: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(AwareDateTime, default=_now, server_default=func.now())
 
 
 class Quiz(Base):
     __tablename__ = "quizzes"
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'approved')", name="ck_quizzes_status"),
+        CheckConstraint("source IN ('lesson', 'list')", name="ck_quizzes_source"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
-    lesson_id: Mapped[uuid.UUID] = _fk("lessons.id")
+    lesson_id: Mapped[uuid.UUID | None] = _fk("lessons.id", nullable=True)
     title: Mapped[str] = mapped_column(String(200))
     questions: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="approved", server_default=text("'approved'"))
+    source: Mapped[str] = mapped_column(String(16), default="lesson", server_default=text("'lesson'"))
+    created_at: Mapped[datetime] = mapped_column(AwareDateTime, default=_now, server_default=func.now())
 
 
 class QuizAttempt(Base):
@@ -987,10 +1036,35 @@ class QuizAttempt(Base):
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     quiz_id: Mapped[uuid.UUID] = _fk("quizzes.id")
+    user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
     staff_name: Mapped[str] = mapped_column(String(120), default="Floor")
     answers: Mapped[list] = mapped_column(JSON, default=list)
     score: Mapped[float] = mapped_column(Float, default=0)
+    # 10000 basis points is a perfect score. The service writes this; the UI does not recompute it.
+    score_bp: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    per_question: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = _stamp()
+
+
+class QuizReview(Base):
+    """One Leitner box for a person, a quiz, and a question."""
+
+    __tablename__ = "quiz_reviews"
+    __table_args__ = (
+        UniqueConstraint("user_id", "quiz_id", "question_id", name="uq_quiz_reviews_user_quiz_question"),
+        CheckConstraint("box >= 0 AND box <= 5", name="ck_quiz_reviews_box"),
+        CheckConstraint("last_result IN ('correct', 'wrong', '')", name="ck_quiz_reviews_last_result"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    quiz_id: Mapped[uuid.UUID] = _fk("quizzes.id", index=True)
+    question_id: Mapped[str] = mapped_column(String(80))
+    box: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    due_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    last_result: Mapped[str] = mapped_column(String(16), default="", server_default=text("''"))
+    updated_at: Mapped[datetime] = _stamp()
 
 
 class Tasting(Base):

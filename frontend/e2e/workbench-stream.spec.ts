@@ -4,7 +4,7 @@ const pages = [
   { path: "/menu", submit: "menu-workbench-submit", surface: "pairing-grid" },
   { path: "/list", submit: "list-workbench-submit", surface: "beverage-list-table" },
   { path: "/inventory", submit: "inventory-workbench-submit", surface: "purchase-order-table" },
-  { path: "/training", submit: "training-workbench-submit", surface: "quiz-card" },
+  { path: "/training", submit: "training-workbench-submit", surface: "lesson-card" },
   { path: "/suppliers", submit: "suppliers-workbench-submit", surface: "tasting-calendar" },
 ];
 

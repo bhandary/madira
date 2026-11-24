@@ -20,7 +20,7 @@ const SECTIONS = [
   {
     href: "/training",
     title: "Team",
-    body: "The nightly briefing, a scored quiz, and a diner roleplay for the floor.",
+    body: "Role lessons, a quiz from the list, and reviews that come back on a schedule.",
   },
 ];
 

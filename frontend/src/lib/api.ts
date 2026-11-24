@@ -485,9 +485,162 @@ export async function rejectParProposal(proposalId: string): Promise<{ proposal:
   return readJson(res);
 }
 
-export async function getTraining() {
-  const res = await fetch(`${API}/training`, { cache: "no-store" });
+export type TrainingLesson = {
+  id: string;
+  slug: string;
+  title: string;
+  body: string;
+  position: string;
+  status: string;
+  can_author: boolean;
+  quiz_id: string | null;
+  standards: { id: string; slug: string; title: string }[];
+  bottles: { sku_id: string; name: string }[];
+};
+
+export type TrainingLessons = {
+  role: string;
+  name: string;
+  position: string | null;
+  can_author: boolean;
+  lessons: TrainingLesson[];
+  drafts: TrainingLesson[];
+};
+
+export type TrainingQuiz = {
+  id: string;
+  lesson_id?: string | null;
+  title: string;
+  questions: { id: string; prompt: string; choices: string[]; kind?: string }[];
+  score?: number | null;
+  score_bp?: number | null;
+  correct?: number | null;
+  total?: number | null;
+  review?: { id: string; prompt: string; selected: number; ok: boolean; explain: string }[];
+  next_review_at?: string | null;
+  next_review_on?: string | null;
+};
+
+export type DueReview = {
+  quiz_id: string;
+  quiz_title: string;
+  question_id: string;
+  prompt: string;
+  box: number;
+  due_at: string;
+  due_on: string;
+  last_result: string;
+};
+
+export type ServiceStandard = {
+  id: string;
+  slug: string;
+  topic: string;
+  title: string;
+  body: string;
+  version: number;
+  is_default: boolean;
+  updated_at: string;
+};
+
+export type DemoPersona = {
+  slug: string;
+  name: string;
+  role: string;
+  position: string | null;
+  email: string;
+};
+
+export async function getTrainingLessons(): Promise<TrainingLessons> {
+  const res = await fetch(`${API}/training/lessons`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function draftTrainingLesson(position: string): Promise<TrainingLesson> {
+  const res = await fetch(`${API}/training/lessons/draft`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ position }),
+  });
+  return readJson(res);
+}
+
+export async function approveLesson(lessonId: string): Promise<TrainingLesson> {
+  const res = await fetch(`${API}/training/lessons/${lessonId}/approve`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function editLesson(lessonId: string, patch: { title?: string; body?: string; position?: string }): Promise<TrainingLesson> {
+  const res = await fetch(`${API}/training/lessons/${lessonId}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return readJson(res);
+}
+
+export async function getQuiz(quizId: string): Promise<TrainingQuiz> {
+  const res = await fetch(`${API}/training/quizzes/${quizId}`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function submitQuizAttempt(quizId: string, answers: number[]): Promise<TrainingQuiz> {
+  const res = await fetch(`${API}/training/quizzes/${quizId}/attempts`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answers }),
+  });
+  return readJson(res);
+}
+
+export async function getDueReviews(): Promise<{ reviews: DueReview[] }> {
+  const res = await fetch(`${API}/training/reviews/due`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getStandards(): Promise<{ can_author: boolean; standards: ServiceStandard[] }> {
+  const res = await fetch(`${API}/training/standards`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function saveStandard(standard: { slug: string; title: string; body: string; topic?: string }): Promise<ServiceStandard> {
+  const res = await fetch(`${API}/training/standards`, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(standard),
+  });
+  return readJson(res);
+}
+
+export async function resetStandard(slug: string): Promise<ServiceStandard> {
+  const res = await fetch(`${API}/training/standards/${slug}/reset`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function getDemoPersonas(): Promise<{ active: string; personas: DemoPersona[] } | null> {
+  const res = await fetch(`${API}/auth/demo-personas`, { cache: "no-store", credentials: "same-origin" });
+  if (!res.ok) return null;
   return res.json();
+}
+
+export async function setDemoPersona(slug: string): Promise<void> {
+  const res = await fetch(`${API}/auth/demo-persona`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slug }),
+  });
+  if (!res.ok) throw new Error("The demo persona could not be changed.");
 }
 
 export async function getTastings() {

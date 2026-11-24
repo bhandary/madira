@@ -12,7 +12,7 @@ from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
 from madira.agents.presenters.procurement import with_scheduled, with_tasting_list
 from madira.agents.presenters.purchasing import with_drafted, with_orders, with_purchase_order, with_receipt
-from madira.agents.presenters.training import with_briefing, with_quiz
+from madira.agents.presenters.training import with_lesson, with_lessons, with_quiz
 from madira.domain.catalog import notes as notes_service
 from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.inventory import counts as count_service
@@ -27,6 +27,8 @@ from madira.domain.procurement import service as procurement_service
 from madira.domain.procurement.orders import OrderError
 from madira.domain.procurement.receiving import ReceivingError
 from madira.domain.purchasing import service as purchasing_service
+from madira.domain.training import lessons as lessons_service
+from madira.domain.training import quizzes as quizzes_service
 from madira.domain.training import service as training_service
 from madira.domain.session import session_scope
 from madira.tenancy import active_venue_id, current_request
@@ -246,23 +248,62 @@ def get_receiving_checklist(po_id: str = "", receipt_id: str = "") -> str:
     return _dumps(body)
 
 
-def get_training_briefing() -> str:
-    """Daily menu pairing briefing and wine/service lessons for waitstaff and bartenders."""
-    body = with_briefing(training_service.briefing(_vid()))
+def list_lessons() -> str:
+    """List the lessons this person can read. Scores and citations come from the training service."""
+    try:
+        payload = lessons_service.list_lessons(_vid())
+    except DraftFailed as exc:
+        return _dumps({"error": exc.message})
+    body = with_lessons(payload)
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("staff-trainer")
     return _dumps(body)
 
 
-def grade_quiz(answers: str, staff_name: str = "Floor") -> str:
-    """Grade a training quiz. `answers` is a comma-separated list of choice indexes (0-based), e.g. '1,2,2,1'."""
-    payload = training_service.grade(_vid(), answers, staff_name=staff_name)
-    if "error" in payload:
-        return _dumps({"error": payload["error"]})
+def draft_lesson(position: str = "server") -> str:
+    """Draft a lesson for server, bartender, barback, host, or all, grounded on house standards and on-list bottles."""
+    try:
+        payload = lessons_service.draft_lesson(_vid(), position)
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": exc.message})
+    body = with_lesson(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def get_quiz(quiz_id: str) -> str:
+    """Return one quiz. The answer key stays on the server."""
+    try:
+        payload = quizzes_service.get_quiz(_vid(), uuid.UUID(quiz_id))
+    except (DraftFailed, NotFound, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "quiz not found")})
     body = with_quiz(payload)
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("staff-trainer")
     return _dumps(body)
+
+
+def grade_quiz(quiz_id: str, answers: str) -> str:
+    """Grade a quiz for the signed-in user. `answers` is a comma-separated list of choice indexes."""
+    try:
+        payload = quizzes_service.grade(_vid(), uuid.UUID(quiz_id), answers)
+    except (DraftFailed, NotFound, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "quiz not found")})
+    body = with_quiz(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def get_due_reviews() -> str:
+    """List quiz questions that are due for this person. Dates come from the review service."""
+    try:
+        payload = quizzes_service.due_reviews(_vid())
+    except DraftFailed as exc:
+        return _dumps({"error": exc.message})
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(payload)
 
 
 def start_roleplay() -> str:
@@ -365,7 +406,7 @@ INVENTORY_TOOLS = [
     propose_par_changes,
     get_count_variance,
 ]
-TRAINING_TOOLS = [get_training_briefing, grade_quiz, start_roleplay]
+TRAINING_TOOLS = [list_lessons, draft_lesson, get_quiz, grade_quiz, get_due_reviews, start_roleplay]
 SUPPLIER_TOOLS = [list_tastings, schedule_tasting]
 COMPLIANCE_TOOLS = [get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status]
 

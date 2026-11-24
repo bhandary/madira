@@ -157,6 +157,11 @@ class DemoChatModel(BaseChatModel):
             return self._draft_note(messages)
         if self.role == "menu-extractor":
             return self._extract_menu(messages)
+        text = last_human(messages)
+        if self.role == "staff-trainer" and "LESSON_GROUNDING" in text:
+            from madira.agents.demo.lessons import lesson_draft_json
+
+            return _ai(content=lesson_draft_json(text))
         if self.role in SPECIALISTS:
             return self._specialist(messages)
         return self._orchestrator(messages)
@@ -255,12 +260,16 @@ class DemoChatModel(BaseChatModel):
                 return "Draft purchase orders for every SKU below par, grouped by supplier."
             return "Report cellar inventory, par levels, depletion, and low-stock alerts. Draft reorders if stock is short."
         if specialist == "staff-trainer":
-            if "quiz" in text.lower() or "grade" in text.lower() or re.search(r"\d,\s*\d", text):
-                answers = _extract_answers(text)
-                return f"Grade the floor quiz with answers {answers} for staff name Floor."
-            if "roleplay" in text.lower():
+            lowered = text.lower()
+            if "roleplay" in lowered:
                 return "Start diner roleplay as a skeptical guest who ordered the ribeye."
-            return "Deliver today's pairing briefing, wine-knowledge lesson, and the floor quiz."
+            if "draft" in lowered and "lesson" in lowered:
+                return f"Draft a lesson. {text}"
+            if "due" in lowered and "review" in lowered:
+                return "List quiz questions that are due for review."
+            if "grade" in lowered or re.search(r"\d,\s*\d", text):
+                return f"Grade the quiz named in the request. {text}"
+            return "List the lessons for this role."
         if specialist == "compliance-auditor":
             lowered = text.lower()
             if "storage" in lowered or "zone" in lowered or "excursion" in lowered:
@@ -373,13 +382,26 @@ class DemoChatModel(BaseChatModel):
             return finish("Inventory reviewed; draft purchase orders grouped by supplier where stock is under par.")
 
         if role == "staff-trainer":
-            if ("quiz" in text.lower() or "grade" in text.lower() or re.search(r"\d,\s*\d", text)) and "grade_quiz" not in done:
-                return _ai([_call("grade_quiz", {"answers": _extract_answers(text), "staff_name": "Floor"})])
-            if "roleplay" in text.lower() and "start_roleplay" not in done:
+            lowered = text.lower()
+            if "roleplay" in lowered and "start_roleplay" not in done:
                 return _ai([_call("start_roleplay", {})])
-            if "get_training_briefing" not in done and "grade_quiz" not in done:
-                return _ai([_call("get_training_briefing", {})])
-            return finish("Training surfaces ready: briefing, quiz, and roleplay opener.")
+            if "due" in lowered and "review" in lowered and "get_due_reviews" not in done:
+                return _ai([_call("get_due_reviews", {})])
+            if "draft" in lowered and "lesson" in lowered and "draft_lesson" not in done:
+                position = "server"
+                for name in ("bartender", "barback", "host", "server", "all"):
+                    if re.search(rf"\b{name}\b", lowered):
+                        position = name
+                        break
+                return _ai([_call("draft_lesson", {"position": position})])
+            quiz_id = _extract_product_id(text)
+            if quiz_id and ("grade" in lowered or re.search(r"\d,\s*\d", text)) and "grade_quiz" not in done:
+                return _ai([_call("grade_quiz", {"quiz_id": quiz_id, "answers": _extract_answers(text)})])
+            if quiz_id and "quiz" in lowered and "get_quiz" not in done:
+                return _ai([_call("get_quiz", {"quiz_id": quiz_id})])
+            if "list_lessons" not in done:
+                return _ai([_call("list_lessons", {})])
+            return finish("Lessons are on the card. Scores and review dates come from the quiz service.")
 
         if role == "compliance-auditor":
             lowered = text.lower()
