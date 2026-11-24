@@ -16,6 +16,8 @@ from madira.tenancy import AUDITOR, MANAGER, OWNER, SOMMELIER, STAFF, RequestCon
 class Capability(str, Enum):
     FLOOR = "floor"
     COUNT = "count"
+    # Read the cellar, locations, bins, and the stock ledger. Writes stay on COUNT.
+    INVENTORY_READ = "inventory_read"
     EDIT = "edit"
     APPROVE = "approve"
     RECORDS = "records"
@@ -27,6 +29,7 @@ class Capability(str, Enum):
 MATRIX: dict[Capability, frozenset[str]] = {
     Capability.FLOOR: frozenset({OWNER, SOMMELIER, MANAGER, STAFF}),
     Capability.COUNT: frozenset({OWNER, SOMMELIER, MANAGER}),
+    Capability.INVENTORY_READ: frozenset({OWNER, SOMMELIER, MANAGER, AUDITOR}),
     Capability.EDIT: frozenset({OWNER, SOMMELIER}),
     Capability.APPROVE: frozenset({OWNER, SOMMELIER}),
     Capability.RECORDS: frozenset({OWNER, SOMMELIER, MANAGER, AUDITOR}),

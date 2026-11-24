@@ -48,7 +48,6 @@ def _other_venue(organization_id: uuid.UUID) -> uuid.UUID:
                     sku_id=stock.id,
                     supplier_id=supplier.id,
                     on_hand=0,
-                    depletion_30d=1,
                     unit="btl",
                 )
             )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -472,8 +474,29 @@ class Supplier(Base):
     tastings: Mapped[list[Tasting]] = relationship(back_populates="supplier")
 
 
+LOCATION_KINDS = ("cellar", "bar", "walk_in", "storage", "other")
+MOVEMENT_TYPES = (
+    "opening_balance",
+    "receive",
+    "sale",
+    "count_adjustment",
+    "breakage",
+    "comp",
+    "transfer_in",
+    "transfer_out",
+    "return",
+    "faulty_bottle",
+)
+
+
 class InventoryItem(Base):
-    """On-hand quantity for a SKU. Par and cost live on the SKU; the ledger is later."""
+    """Cached on-hand for a SKU. The stock ledger is the source of truth.
+
+    ``on_hand`` is the sum of ``stock_movements`` for this SKU, written in the
+    same transaction as each new movement. ``depletion_30d`` is not stored; it
+    is derived from those movements when the cellar is read. Par and cost live
+    on the SKU.
+    """
 
     __tablename__ = "inventory_items"
 
@@ -481,11 +504,75 @@ class InventoryItem(Base):
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
     supplier_id: Mapped[uuid.UUID | None] = _fk("suppliers.id", nullable=True)
-    on_hand: Mapped[int] = mapped_column(Integer, default=0)
-    depletion_30d: Mapped[int] = mapped_column(Integer, default=0)
+    on_hand: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"))
     unit: Mapped[str] = mapped_column(String(32), default="btl")
     supplier: Mapped[Supplier | None] = relationship(back_populates="items")
     sku: Mapped[Sku] = relationship()
+
+
+class Location(Base):
+    """A cellar, bar, walk-in, or other stock place inside one venue."""
+
+    __tablename__ = "locations"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "name", name="uq_locations_venue_name"),
+        CheckConstraint(
+            "kind IN ('cellar', 'bar', 'walk_in', 'storage', 'other')",
+            name="ck_locations_kind",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(32))
+    notes: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    created_at: Mapped[datetime] = _stamp()
+
+
+class Bin(Base):
+    """A labeled spot inside a location. ``qr_payload`` is the scannable id."""
+
+    __tablename__ = "bins"
+    __table_args__ = (UniqueConstraint("venue_id", "code", name="uq_bins_venue_code"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    location_id: Mapped[uuid.UUID] = _fk("locations.id", index=True)
+    code: Mapped[str] = mapped_column(String(64))
+    label: Mapped[str] = mapped_column(String(200), default="")
+    qr_payload: Mapped[str] = mapped_column(String(240))
+    created_at: Mapped[datetime] = _stamp()
+
+
+class StockMovement(Base):
+    """Append-only stock ledger. Corrections are new rows, never edits."""
+
+    __tablename__ = "stock_movements"
+    __table_args__ = (
+        CheckConstraint(
+            "movement_type IN ('opening_balance', 'receive', 'sale', 'count_adjustment', "
+            "'breakage', 'comp', 'transfer_in', 'transfer_out', 'return', 'faulty_bottle')",
+            name="ck_stock_movements_type",
+        ),
+        CheckConstraint("quantity <> 0", name="ck_stock_movements_quantity"),
+        Index("ix_stock_movements_venue_created", "venue_id", "created_at"),
+        Index("ix_stock_movements_venue_sku_created", "venue_id", "sku_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
+    location_id: Mapped[uuid.UUID] = _fk("locations.id", index=True)
+    bin_id: Mapped[uuid.UUID | None] = _fk("bins.id", nullable=True, index=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    movement_type: Mapped[str] = mapped_column(String(32))
+    unit_cost_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    actor_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(AwareDateTime, server_default=func.now(), index=True)
 
 
 class PurchaseOrder(Base):
