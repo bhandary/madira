@@ -1,9 +1,11 @@
 "use client";
 
 import { asAudit, AuditTable } from "@/components/AuditTable";
+import { CountSheet } from "@/components/CountSheet";
 import { asReview, DishReview } from "@/components/DishReview";
 import { asPairings, PairingGrid } from "@/components/PairingGrid";
 import { asCard, asNote, ServiceCard, TastingNoteCard } from "@/components/TastingNotes";
+import { VarianceReport } from "@/components/VarianceReport";
 
 function money(n: unknown, currency?: unknown) {
   const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
@@ -310,6 +312,8 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
   TastingNoteCard: (p) => <TastingNoteSurface note={p.note} />,
   AuditTable: (p) => <AuditSurface events={p.events} chain={p.chain} />,
   ServiceCard: (p) => <ServiceCardSurface card={p.card} />,
+  CountSheet: (p) => <CountSheet session={p.session} lines={p.lines} />,
+  VarianceReport: (p) => <VarianceReport report={p.report} />,
 };
 
 export function renderMadiraComponent(name: string, props: Record<string, unknown>) {

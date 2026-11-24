@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AgentWorkbench } from "@/components/AgentWorkbench";
 import { CellarBoard } from "@/components/CellarBoard";
 import { getInventory, patchStock } from "@/lib/api";
@@ -54,6 +55,11 @@ export default function InventoryPage() {
       blurb="Adjust stock on the floor, then let Inventory & Purchasing draft supplier POs. Seeded cellar data ships with the demo."
       prompt={prompt}
     >
+      <p className="mt-4">
+        <Link href="/inventory/count" className="btn btn-primary" data-testid="open-count">
+          Count on a phone
+        </Link>
+      </p>
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label className="lbl" htmlFor="inv-sku">
           SKU

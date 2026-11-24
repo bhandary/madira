@@ -6,7 +6,7 @@ import json
 import uuid
 
 from madira.agents import tracker
-from madira.agents.presenters.inventory import with_inventory
+from madira.agents.presenters.inventory import with_count_report, with_inventory
 from madira.agents.presenters.lists import with_list
 from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
@@ -15,6 +15,8 @@ from madira.agents.presenters.purchasing import with_orders
 from madira.agents.presenters.training import with_briefing, with_quiz
 from madira.domain.catalog import notes as notes_service
 from madira.domain.errors import DraftFailed, NotFound
+from madira.domain.inventory import counts as count_service
+from madira.domain.inventory import par as par_service
 from madira.domain.inventory import service as inventory_service
 from madira.domain.inventory.ledger import Rejected
 from madira.domain.lists import service as lists_service
@@ -98,6 +100,39 @@ def update_stock(sku: str, on_hand: int) -> str:
     return get_inventory()
 
 
+def propose_par_changes(lead_time_days: int = 7, safety_days: int = 4) -> str:
+    """Propose par updates from 30-day depletion. Par does not change until a person accepts."""
+    try:
+        payload = par_service.propose_par_changes(
+            _vid(),
+            lead_time_days=int(lead_time_days),
+            safety_days=int(safety_days),
+            proposed_by="cellar-manager",
+        )
+    except (NotFound, Rejected, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "par proposal failed")})
+    tracker.complete_delegation("cellar-manager")
+    return _dumps(payload)
+
+
+def get_count_variance(session_id: str = "") -> str:
+    """Return a count variance report with CountSheet and VarianceReport surfaces."""
+    try:
+        if (session_id or "").strip():
+            report = count_service.get_count_report(_vid(), uuid.UUID(session_id))
+        else:
+            sessions = count_service.list_count_sessions(_vid())["sessions"]
+            if not sessions:
+                return _dumps({"error": "no count session"})
+            report = count_service.get_count_report(_vid(), uuid.UUID(sessions[0]["id"]))
+    except (NotFound, Rejected, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "count session not found")})
+    body = with_count_report(report)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("cellar-manager")
+    return _dumps(body)
+
+
 def draft_purchase_orders() -> str:
     """Draft reorder purchase orders grouped by supplier for every SKU below par."""
     body = with_orders(purchasing_service.draft(_vid()))
@@ -169,7 +204,7 @@ def schedule_tasting(
 MENU_ANALYST_TOOLS = [parse_menu]
 PAIRING_TOOLS = [recommend_pairings, draft_tasting_note]
 LIST_TOOLS = [curate_beverage_list]
-INVENTORY_TOOLS = [get_inventory, update_stock, draft_purchase_orders]
+INVENTORY_TOOLS = [get_inventory, update_stock, draft_purchase_orders, propose_par_changes, get_count_variance]
 TRAINING_TOOLS = [get_training_briefing, grade_quiz, start_roleplay]
 SUPPLIER_TOOLS = [list_tastings, schedule_tasting]
 

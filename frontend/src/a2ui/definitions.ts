@@ -69,4 +69,17 @@ export const catalogDefinitions = {
       chain: "valid, checked count, head hash, and the first broken event",
     },
   },
+  CountSheet: {
+    description: "Phone count lines for one location, including device, quantity, and bin.",
+    props: {
+      session: "count session id, status, and location",
+      lines: "counted lines with sku, quantity, device, and time",
+    },
+  },
+  VarianceReport: {
+    description: "Expected versus counted quantity, dollar impact, and multi-device conflicts.",
+    props: {
+      report: "session, variance lines, and conflict readings",
+    },
+  },
 };

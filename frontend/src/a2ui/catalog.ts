@@ -4,8 +4,10 @@ import { createCatalog } from "@copilotkit/a2ui-renderer";
 import { z } from "zod/v3";
 import { renderMadiraComponent } from "@/components/A2UISurface";
 import { auditTableProps } from "./auditTableSchema";
+import { countSheetProps } from "./countSheetSchema";
 import { dishReviewProps } from "./dishReviewSchema";
 import { pairingGridProps } from "./pairingGridSchema";
+import { varianceReportProps } from "./varianceReportSchema";
 import { MADIRA_CATALOG_ID, catalogDefinitions } from "./definitions";
 
 /**
@@ -40,7 +42,11 @@ const definitions = Object.fromEntries(
             ? pairingGridProps.describe(def.description)
             : name === "AuditTable"
               ? auditTableProps.describe(def.description)
-              : schemaFor(def.props).describe(def.description),
+              : name === "CountSheet"
+                ? countSheetProps.describe(def.description)
+                : name === "VarianceReport"
+                  ? varianceReportProps.describe(def.description)
+                  : schemaFor(def.props).describe(def.description),
     },
   ]),
 );

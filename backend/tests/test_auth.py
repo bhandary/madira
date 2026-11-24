@@ -19,7 +19,19 @@ from sqlalchemy import delete, func, inspect, select, text, update
 from madira.auth import GOOGLE_JWKS, GOOGLE_TOKEN, clear_jwks_cache
 from madira.db import SessionLocal, init_db
 from madira.main import app
-from madira.models import AuditEvent, Document, Membership, MenuVersion, ServiceCard, TastingNote, User
+from madira.models import (
+    AuditEvent,
+    CountConflictResolution,
+    CountLine,
+    CountSession,
+    Document,
+    Membership,
+    MenuVersion,
+    ParProposal,
+    ServiceCard,
+    TastingNote,
+    User,
+)
 from madira.tenancy import DEMO_USER_SUB
 
 CLIENT_ID = "client-id"
@@ -87,6 +99,10 @@ def _wipe() -> None:
         # movements stay; only the actor pointer is cleared, and the append-only
         # trigger is put back before the session commits.
         _clear_stock_actors(session)
+        session.execute(delete(CountConflictResolution))
+        session.execute(delete(CountLine))
+        session.execute(delete(CountSession))
+        session.execute(delete(ParProposal))
         session.execute(delete(AuditEvent))
         session.execute(delete(Document))
         session.execute(delete(User))
