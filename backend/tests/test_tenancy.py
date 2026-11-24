@@ -212,7 +212,6 @@ def _plant_other_venue() -> dict:
                         sku_id=stock.id,
                         supplier_id=supplier.id,
                         on_hand=on_hand,
-                        depletion_30d=0,
                         unit="btl",
                     )
                 )
@@ -291,6 +290,13 @@ def _plant_other_venue() -> dict:
         session.close()
 
 
+def _json_qty(value) -> int | float:
+    number = float(value)
+    if number.is_integer():
+        return int(number)
+    return number
+
+
 def _stock(session, venue_id, code: str) -> InventoryItem | None:
     return session.scalar(
         select(InventoryItem)
@@ -308,7 +314,7 @@ def test_two_venues_are_isolated(client: TestClient, monkeypatch):
     session = SessionLocal()
     try:
         house = _stock(session, planted["demo"].venue_id, "W-MUS-01")
-        house_on_hand = house.on_hand
+        house_on_hand = _json_qty(house.on_hand)
     finally:
         session.close()
 
@@ -475,7 +481,7 @@ def test_roles_follow_the_matrix(client: TestClient, monkeypatch):
         for sub, (role, email) in roles.items():
             _user(session, sub, email, demo.venue_id, role)
         house = _stock(session, demo.venue_id, "W-MUS-01")
-        on_hand = house.on_hand
+        on_hand = _json_qty(house.on_hand)
     finally:
         session.close()
 

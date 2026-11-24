@@ -199,6 +199,142 @@ export async function patchStock(sku: string, on_hand: number) {
   return res.json();
 }
 
+export type CellarLocation = {
+  id: string;
+  name: string;
+  kind: string;
+  notes: string;
+};
+
+export type StockLocation = {
+  location_id: string;
+  location_name: string;
+  quantity: number;
+  valuation_cents: number;
+};
+
+export type StockItem = {
+  sku: string;
+  name: string;
+  on_hand: number;
+  par: number;
+  low: boolean;
+  unit: string;
+  depletion_30d: number;
+  valuation_cents: number;
+  currency: string;
+  locations: StockLocation[];
+};
+
+export type CellarBin = {
+  id: string;
+  location_id: string;
+  location_name: string;
+  code: string;
+  label: string;
+  qr_payload: string;
+};
+
+export type StockMovementRow = {
+  id: string;
+  sku: string;
+  name: string;
+  location_name: string;
+  bin_code: string;
+  quantity: number;
+  movement_type: string;
+  reason: string;
+  created_at: string;
+};
+
+export type BinLabel = {
+  bin_id: string;
+  code: string;
+  label: string;
+  qr_payload: string;
+  svg: string;
+};
+
+export async function getCellar(): Promise<{ items: StockItem[]; locations: CellarLocation[] }> {
+  const res = await fetch(`${API}/inventory`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function listLocations(): Promise<{ locations: CellarLocation[] }> {
+  const res = await fetch(`${API}/inventory/locations`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function createLocation(input: { name: string; kind: string; notes?: string }) {
+  const res = await fetch(`${API}/inventory/locations`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson(res);
+}
+
+export async function listBins(): Promise<{ bins: CellarBin[] }> {
+  const res = await fetch(`${API}/inventory/bins`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function createBin(input: { location_id: string; code: string; label?: string }) {
+  const res = await fetch(`${API}/inventory/bins`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson(res);
+}
+
+export async function getBinLabel(binId: string): Promise<BinLabel> {
+  const res = await fetch(`${API}/inventory/bins/${binId}/qr?format=json`, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function listMovements(): Promise<{ movements: StockMovementRow[] }> {
+  const res = await fetch(`${API}/inventory/movements?limit=80`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function postMovement(input: {
+  sku: string;
+  location_id: string;
+  quantity: number;
+  movement_type: string;
+  reason?: string;
+}) {
+  const res = await fetch(`${API}/inventory/movements`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson(res);
+}
+
+export async function postTransfer(input: {
+  sku: string;
+  from_location_id: string;
+  to_location_id: string;
+  quantity: number;
+  reason?: string;
+}) {
+  const res = await fetch(`${API}/inventory/transfers`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson(res);
+}
+
 export async function getTraining() {
   const res = await fetch(`${API}/training`, { cache: "no-store" });
   return res.json();

@@ -16,6 +16,7 @@ from madira.agents.presenters.training import with_briefing, with_quiz
 from madira.domain.catalog import notes as notes_service
 from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.inventory import service as inventory_service
+from madira.domain.inventory.ledger import Rejected
 from madira.domain.lists import service as lists_service
 from madira.domain.menu import service as menu_service
 from madira.domain.procurement import service as procurement_service
@@ -92,7 +93,7 @@ def update_stock(sku: str, on_hand: int) -> str:
     """Set on-hand quantity for an inventory SKU (for example W-MUS-01)."""
     try:
         inventory_service.set_on_hand(_vid(), sku, on_hand)
-    except NotFound as exc:
+    except (NotFound, Rejected) as exc:
         return _dumps({"error": exc.message})
     return get_inventory()
 

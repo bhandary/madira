@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from decimal import Decimal
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from madira.db import SessionLocal, init_db
 from madira.domain.catalog.service import ensure_sku
 from madira.money import DEFAULT_CURRENCY, to_minor
-from madira.models import InventoryItem, Lesson, Quiz, Supplier
+from madira.models import InventoryItem, Lesson, Quiz, Sku, StockMovement, Supplier
 from madira.tenancy import bind, demo_posture, ensure_demo_tenant, reset
 
 
@@ -31,6 +33,7 @@ def seed(session: Session | None = None) -> None:
             from madira.domain.compliance.service import ensure_demo_records
 
             ensure_demo_records(session, ctx)
+            _ensure_demo_ledger(session, venue_id)
             session.commit()
         finally:
             reset(token)
@@ -66,7 +69,6 @@ def _seed_demo_catalog(session: Session, venue_id) -> None:
                 sku_id=stock.id,
                 supplier_id=supplier.id,
                 on_hand=row["on_hand"],
-                depletion_30d=row["depletion_30d"],
                 unit=row.get("unit", "btl"),
             )
         )
@@ -83,3 +85,176 @@ def _seed_demo_catalog(session: Session, venue_id) -> None:
                     questions=QUIZ["questions"],
                 )
             )
+
+
+_WEIGHTS = {
+    "wine": (7, 2, 1),
+    "beer": (2, 2, 6),
+    "spirit": (3, 7, 0),
+    "sake": (6, 2, 2),
+}
+
+
+def _split_units(total: int, weights: tuple[int, int, int]) -> list[int]:
+    total = int(total)
+    if total <= 0:
+        return [0, 0, 0]
+    base = sum(weights)
+    parts = [total * weight // base for weight in weights]
+    left = total - sum(parts)
+    order = sorted(range(3), key=lambda index: (weights[index], -index), reverse=True)
+    cursor = 0
+    while left:
+        parts[order[cursor % 3]] += 1
+        left -= 1
+        cursor += 1
+    return parts
+
+
+def _draw_sales(opening: list[int], need: int) -> list[int]:
+    sales = [0, 0, 0]
+    left = int(need)
+    order = sorted(range(3), key=lambda index: (opening[index], -index), reverse=True)
+    for index in order:
+        if left <= 0:
+            break
+        take = min(opening[index], left)
+        sales[index] = take
+        left -= take
+    if left:
+        raise RuntimeError("seed sales exceed opening stock")
+    return sales
+
+
+def _ensure_demo_ledger(session: Session, venue_id) -> None:
+    """Locations, bins, and movements that reproduce the seeded cellar.
+
+    Opening balances are dated outside the 30-day window. POS sales inside the
+    window sum to the fixture ``depletion_30d``, and the net of every movement
+    is the fixture ``on_hand``. A later count is left alone. A database that
+    migration backfilled with only an opening balance gets the missing sales
+    without changing that on-hand total.
+    """
+
+    from datetime import datetime, timedelta, timezone
+
+    from madira.agents.demo.fixtures import INVENTORY
+    from madira.domain.inventory.ledger import as_qty, ensure_bin, ensure_location, post_movement
+
+    session.flush()
+    now = datetime.now(timezone.utc)
+    cellar = ensure_location(session, venue_id, "Main Cellar", "cellar", "House cellar")
+    bar = ensure_location(session, venue_id, "Main Bar", "bar", "Service bar")
+    walk_in = ensure_location(session, venue_id, "Walk-In Cooler", "walk_in", "Cold storage")
+    places = (cellar, bar, walk_in)
+    bins = {
+        "CEL-A1": ensure_bin(session, venue_id, cellar.id, "CEL-A1", "Cellar bay A1"),
+        "CEL-A2": ensure_bin(session, venue_id, cellar.id, "CEL-A2", "Cellar bay A2"),
+        "BAR-01": ensure_bin(session, venue_id, bar.id, "BAR-01", "Main bar well"),
+        "WLK-01": ensure_bin(session, venue_id, walk_in.id, "WLK-01", "Walk-in door"),
+    }
+    opened = now - timedelta(days=40)
+    cutoff = now - timedelta(days=30)
+    for index, row in enumerate(INVENTORY):
+        stock = session.scalar(
+            select(Sku).where(Sku.venue_id == venue_id, func.upper(Sku.barcode) == row["sku"].upper())
+        )
+        if stock is None:
+            continue
+        item = session.scalar(
+            select(InventoryItem).where(InventoryItem.venue_id == venue_id, InventoryItem.sku_id == stock.id)
+        )
+        if item is None:
+            continue
+        target_on = Decimal(int(row["on_hand"]))
+        target_dep = Decimal(int(row["depletion_30d"]))
+        existing = session.scalars(
+            select(StockMovement).where(StockMovement.venue_id == venue_id, StockMovement.sku_id == stock.id)
+        ).all()
+        if not existing:
+            weights = _WEIGHTS.get(row["category"], _WEIGHTS["wine"])
+            opening = _split_units(int(target_on + target_dep), weights)
+            sales = _draw_sales(opening, int(target_dep))
+            for place_index, place in enumerate(places):
+                spot = _seed_bin(bins, index, place_index)
+                if opening[place_index] > 0:
+                    post_movement(
+                        session,
+                        venue_id,
+                        sku=row["sku"],
+                        location_id=place.id,
+                        bin_id=spot.id,
+                        quantity=opening[place_index],
+                        movement_type="opening_balance",
+                        unit_cost_cents=int(stock.cost or 0),
+                        source_type="seed",
+                        source_id=f"seed:{row['sku']}",
+                        reason="Seeded opening balance",
+                        created_at=opened,
+                    )
+                if sales[place_index] > 0:
+                    post_movement(
+                        session,
+                        venue_id,
+                        sku=row["sku"],
+                        location_id=place.id,
+                        bin_id=spot.id,
+                        quantity=-sales[place_index],
+                        movement_type="sale",
+                        unit_cost_cents=int(stock.cost or 0),
+                        source_type="pos",
+                        source_id=f"seed-sale:{row['sku']}:{place_index}",
+                        reason="Seeded POS sale",
+                        created_at=now - timedelta(days=3 + place_index * 4),
+                    )
+            continue
+        total = sum((as_qty(move.quantity) for move in existing), Decimal("0"))
+        sales_total = sum(
+            (
+                abs(as_qty(move.quantity))
+                for move in existing
+                if move.movement_type == "sale" and move.created_at is not None and move.created_at >= cutoff
+            ),
+            Decimal("0"),
+        )
+        if total == target_on and sales_total >= target_dep:
+            continue
+        if total == target_on and sales_total < target_dep:
+            gap = target_dep - sales_total
+            spot = bins["CEL-A1"] if index % 2 == 0 else bins["CEL-A2"]
+            post_movement(
+                session,
+                venue_id,
+                sku=row["sku"],
+                location_id=cellar.id,
+                bin_id=spot.id,
+                quantity=gap,
+                movement_type="opening_balance",
+                unit_cost_cents=int(stock.cost or 0),
+                source_type="seed",
+                source_id=f"seed-gap:{row['sku']}",
+                reason="Seeded opening balance",
+                created_at=opened,
+            )
+            post_movement(
+                session,
+                venue_id,
+                sku=row["sku"],
+                location_id=cellar.id,
+                bin_id=spot.id,
+                quantity=-gap,
+                movement_type="sale",
+                unit_cost_cents=int(stock.cost or 0),
+                source_type="pos",
+                source_id=f"seed-sale:{row['sku']}:gap",
+                reason="Seeded POS sale",
+                created_at=now - timedelta(days=4),
+            )
+
+
+def _seed_bin(bins: dict, index: int, place_index: int):
+    if place_index == 0:
+        return bins["CEL-A1"] if index % 2 == 0 else bins["CEL-A2"]
+    if place_index == 1:
+        return bins["BAR-01"]
+    return bins["WLK-01"]

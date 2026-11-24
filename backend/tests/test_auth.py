@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from joserfc import jwt
 from joserfc.jwk import RSAKey
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, inspect, select, text, update
 
 from madira.auth import GOOGLE_JWKS, GOOGLE_TOKEN, clear_jwks_cache
 from madira.db import SessionLocal, init_db
@@ -83,13 +83,41 @@ def _wipe() -> None:
             update(MenuVersion).values(status="draft", confirmed_by=None, confirmed_at=None)
         )
         # The ledger is append-only in the product. This wipe drops the test rows
-        # so a user delete is not blocked by the actor foreign key.
+        # so a user delete is not blocked by the actor foreign key. Stock
+        # movements stay; only the actor pointer is cleared, and the append-only
+        # trigger is put back before the session commits.
+        _clear_stock_actors(session)
         session.execute(delete(AuditEvent))
         session.execute(delete(Document))
         session.execute(delete(User))
         session.commit()
     finally:
         session.close()
+
+
+def _clear_stock_actors(session) -> None:
+    bind = session.get_bind()
+    if bind is None or not inspect(bind).has_table("stock_movements"):
+        return
+    if bind.dialect.name == "sqlite":
+        session.execute(text("DROP TRIGGER IF EXISTS stock_movements_append_only_update"))
+        session.execute(text("UPDATE stock_movements SET actor_user_id = NULL"))
+        session.execute(
+            text(
+                """
+                CREATE TRIGGER stock_movements_append_only_update
+                BEFORE UPDATE ON stock_movements
+                BEGIN
+                    SELECT RAISE(ABORT, 'stock_movements is append-only');
+                END
+                """
+            )
+        )
+        return
+    if bind.dialect.name == "postgresql":
+        session.execute(text("ALTER TABLE stock_movements DISABLE TRIGGER stock_movements_append_only"))
+        session.execute(text("UPDATE stock_movements SET actor_user_id = NULL"))
+        session.execute(text("ALTER TABLE stock_movements ENABLE TRIGGER stock_movements_append_only"))
 
 
 def _load(sub: str = "google-sub-1"):

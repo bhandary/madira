@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AgentWorkbench } from "@/components/AgentWorkbench";
+import { CellarBoard } from "@/components/CellarBoard";
 import { getInventory, patchStock } from "@/lib/api";
 
 type Item = {
@@ -18,6 +19,7 @@ export default function InventoryPage() {
   const [qty, setQty] = useState(1);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
 
   async function refresh() {
     const data = await getInventory();
@@ -81,6 +83,7 @@ export default function InventoryPage() {
           onClick={async () => {
             try {
               await patchStock(sku, qty);
+              setRevision((value) => value + 1);
               await refresh();
             } catch (err) {
               setError(err instanceof Error ? err.message : "Stock could not be adjusted.");
@@ -99,6 +102,13 @@ export default function InventoryPage() {
           {loaded ? `${items.filter((i) => i.low).length} SKUs under par in the seeded cellar.` : "Loading cellar…"}
         </p>
       )}
+      <CellarBoard
+        revision={revision}
+        onStockChanged={() => {
+          setRevision((value) => value + 1);
+          void refresh();
+        }}
+      />
     </AgentWorkbench>
   );
 }

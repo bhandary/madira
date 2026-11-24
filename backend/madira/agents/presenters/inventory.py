@@ -20,5 +20,7 @@ def inventory_surface(title: str, items: list[dict], alerts: list[dict]) -> list
 
 def with_inventory(payload: dict) -> dict:
     body = {"items": payload["items"], "alerts": payload["alerts"]}
+    if "locations" in payload:
+        body["locations"] = payload["locations"]
     body["a2ui_operations"] = inventory_surface("Cellar inventory", payload["items"], payload["alerts"])
     return body
