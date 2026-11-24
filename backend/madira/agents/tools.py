@@ -12,7 +12,7 @@ from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
 from madira.agents.presenters.procurement import with_scheduled, with_tasting_list
 from madira.agents.presenters.purchasing import with_drafted, with_orders, with_purchase_order, with_receipt
-from madira.agents.presenters.training import with_lesson, with_lessons, with_quiz
+from madira.agents.presenters.training import with_lesson, with_lessons, with_lookup, with_quiz, with_tonight_briefing
 from madira.domain.catalog import notes as notes_service
 from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.inventory import counts as count_service
@@ -27,7 +27,9 @@ from madira.domain.procurement import service as procurement_service
 from madira.domain.procurement.orders import OrderError
 from madira.domain.procurement.receiving import ReceivingError
 from madira.domain.purchasing import service as purchasing_service
+from madira.domain.training import briefing as briefing_service
 from madira.domain.training import lessons as lessons_service
+from madira.domain.training import lookup as lookup_service
 from madira.domain.training import quizzes as quizzes_service
 from madira.domain.training import service as training_service
 from madira.domain.session import session_scope
@@ -306,6 +308,30 @@ def get_due_reviews() -> str:
     return _dumps(payload)
 
 
+def get_tonight_briefing() -> str:
+    """Return tonight's pre-shift briefing. The push reason is in words. Do not add cost or margin."""
+    try:
+        payload = briefing_service.get_or_build_today()
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": getattr(exc, "message", "briefing failed")})
+    body = with_tonight_briefing(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def floor_lookup(query: str) -> str:
+    """Look up a dish, a bottle, or a guest preference. Stock and scripts come from the floor services."""
+    try:
+        payload = lookup_service.lookup(query)
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": getattr(exc, "message", "lookup failed")})
+    body = with_lookup(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
 def start_roleplay() -> str:
     """Start diner roleplay: the agent plays a skeptical guest at Maison Madira."""
     payload = training_service.roleplay()
@@ -406,7 +432,16 @@ INVENTORY_TOOLS = [
     propose_par_changes,
     get_count_variance,
 ]
-TRAINING_TOOLS = [list_lessons, draft_lesson, get_quiz, grade_quiz, get_due_reviews, start_roleplay]
+TRAINING_TOOLS = [
+    list_lessons,
+    draft_lesson,
+    get_quiz,
+    grade_quiz,
+    get_due_reviews,
+    get_tonight_briefing,
+    floor_lookup,
+    start_roleplay,
+]
 SUPPLIER_TOOLS = [list_tastings, schedule_tasting]
 COMPLIANCE_TOOLS = [get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status]
 

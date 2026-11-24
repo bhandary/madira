@@ -1,49 +1,107 @@
-import { BentoLink } from "@/components/BentoLink";
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { BriefingCards } from "@/components/BriefingCards";
 import { SommelierChat } from "@/components/SommelierChat";
+import { getTonight, type TonightBoard } from "@/lib/api";
 
-const SECTIONS = [
-  {
-    href: "/menu",
-    title: "Menu & pairings",
-    body: "Parse a menu and read wine, beer, spirit, and sake cards for each dish.",
-  },
-  {
-    href: "/inventory",
-    title: "Cellar",
-    body: "Check on-hand against par, then draft purchase orders that stay unsent.",
-  },
-  {
-    href: "/list",
-    title: "List",
-    body: "Build the beverage list to a cellar budget and a target multiple.",
-  },
-  {
-    href: "/training",
-    title: "Team",
-    body: "Role lessons, a quiz from the list, and reviews that come back on a schedule.",
-  },
-];
+export default function HomePage() {
+  const [board, setBoard] = useState<TonightBoard | null>(null);
+  const [error, setError] = useState("");
 
-export default function Home() {
+  useEffect(() => {
+    let cancelled = false;
+    getTonight()
+      .then((payload) => {
+        if (!cancelled) setBoard(payload);
+      })
+      .catch((exc: unknown) => {
+        if (!cancelled) setError(exc instanceof Error ? exc.message : "Tonight did not load.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
-    <section>
-      <div className="hero">
-        <div className="wave-accent" aria-hidden="true" />
-        <p className="kicker">Maison Madira · beverage program</p>
-        <h1 className="hero-title mt-3">Ask the Head Sommelier</h1>
-        <p className="hero-copy">
-          <span>CopilotKit AG-UI chat streams the same Deep Agent.</span>{" "}
-          <span className="hero-copy-sub">Specialists still render A2UI in the well.</span>
-        </p>
-      </div>
-      <div className="mt-8 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
-        <SommelierChat />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          {SECTIONS.map((section) => (
-            <BentoLink key={section.href} {...section} />
-          ))}
+    <div className="space-y-6">
+      <header className="flex items-end justify-between gap-3">
+        <div>
+          <h1 className="h-page">Tonight</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">The floor, before service.</p>
         </div>
-      </div>
-    </section>
+        <Link href="/lookup" className="btn btn-secondary" data-testid="lookup-link">
+          Lookup
+        </Link>
+      </header>
+      {error ? (
+        <p className="text-sm" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {board?.briefing ? (
+        <BriefingCards briefing={board.briefing} />
+      ) : board ? (
+        <p className="text-sm text-[var(--muted)]">The briefing opens at {board.briefing_hour}:00.</p>
+      ) : null}
+      <section className="panel">
+        <h2 className="text-base font-semibold">Low stock</h2>
+        {board && board.low_stock.length ? (
+          <ul className="mt-2 space-y-1 text-sm">
+            {board.low_stock.map((row) => (
+              <li key={row.sku}>
+                {row.name} · {row.on_hand} / par {row.par}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-[var(--muted)]">Nothing is under par.</p>
+        )}
+      </section>
+      <section className="panel">
+        <h2 className="text-base font-semibold">Storage alerts</h2>
+        {board && board.storage_alerts.length ? (
+          <ul className="mt-2 space-y-1 text-sm">
+            {board.storage_alerts.map((row) => (
+              <li key={row.id}>
+                {row.zone} · {row.metric} · {row.status}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-[var(--muted)]">No open excursions.</p>
+        )}
+      </section>
+      <section className="panel">
+        <h2 className="text-base font-semibold">Deliveries due</h2>
+        {board && board.deliveries_due.length ? (
+          <ul className="mt-2 space-y-1 text-sm">
+            {board.deliveries_due.map((row) => (
+              <li key={row.po_number}>
+                {row.po_number} · {row.supplier} · {row.expected_delivery_date || "unscheduled"}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-[var(--muted)]">No deliveries are due.</p>
+        )}
+      </section>
+      <section className="panel">
+        <h2 className="text-base font-semibold">Approvals waiting</h2>
+        {board && board.approvals.length ? (
+          <ul className="mt-2 space-y-1 text-sm">
+            {board.approvals.map((row) => (
+              <li key={row.id}>
+                {row.title}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-[var(--muted)]">Nothing is waiting on you.</p>
+        )}
+      </section>
+      <SommelierChat />
+    </div>
   );
 }

@@ -18,6 +18,7 @@ from madira.api.notes import router as notes_router
 from madira.api.procurement import router as procurement_router
 from madira.api.purchasing import router as purchasing_router
 from madira.api.settings import router as settings_router
+from madira.api.tonight import router as tonight_router
 from madira.api.training import router as training_router
 from madira.auth import router as auth_router
 from madira.config import FRONTEND_ORIGIN, HOST, PORT
@@ -51,6 +52,7 @@ app.include_router(counts_router)
 app.include_router(compliance_router)
 app.include_router(purchasing_router)
 app.include_router(training_router)
+app.include_router(tonight_router)
 app.include_router(procurement_router)
 app.include_router(fixtures_router)
 

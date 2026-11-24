@@ -10,6 +10,8 @@ import { countSheetProps } from "./countSheetSchema";
 import { dishReviewProps } from "./dishReviewSchema";
 import { coverageGridProps } from "./coverageGridSchema";
 import { listEditorProps } from "./listEditorSchema";
+import { briefingCardsProps } from "./briefingCardsSchema";
+import { floorLookupProps } from "./floorLookupSchema";
 import { lessonCardProps } from "./lessonCardSchema";
 import { pairingGridProps } from "./pairingGridSchema";
 import { quizCardProps } from "./quizCardSchema";
@@ -51,6 +53,10 @@ const definitions = Object.fromEntries(
               ? quizCardProps.describe(def.description)
               : name === "LessonCard"
                 ? lessonCardProps.describe(def.description)
+                : name === "BriefingCards"
+                  ? briefingCardsProps.describe(def.description)
+                  : name === "FloorLookup"
+                    ? floorLookupProps.describe(def.description)
             : name === "CoverageGrid"
               ? coverageGridProps.describe(def.description)
               : name === "ListEditor"

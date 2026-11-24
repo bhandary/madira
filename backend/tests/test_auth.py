@@ -132,6 +132,14 @@ def _wipe() -> None:
             session.execute(update(Lesson).values(approved_by=None))
         if bind is not None and inspect(bind).has_table("quiz_attempts"):
             session.execute(update(QuizAttempt).values(user_id=None))
+        if bind is not None and inspect(bind).has_table("briefing_acks"):
+            session.execute(text("DELETE FROM briefing_acks"))
+        if bind is not None and inspect(bind).has_table("briefings"):
+            session.execute(text("UPDATE briefings SET published_by_user_id = NULL"))
+        if bind is not None and inspect(bind).has_table("skus"):
+            columns = {col["name"] for col in inspect(bind).get_columns("skus")}
+            if "eighty_sixed_by_user_id" in columns:
+                session.execute(text("UPDATE skus SET eighty_sixed_by_user_id = NULL"))
         session.execute(delete(User))
         session.commit()
     finally:

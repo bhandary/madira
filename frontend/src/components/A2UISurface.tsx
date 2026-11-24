@@ -3,6 +3,10 @@
 import type { LessonPayload } from "@/a2ui/lessonCardSchema";
 import type { QuizPayload } from "@/a2ui/quizCardSchema";
 import { ApprovalCard } from "@/components/ApprovalCard";
+import { briefingPayload } from "@/a2ui/briefingCardsSchema";
+import { lookupPayload } from "@/a2ui/floorLookupSchema";
+import { BriefingCards } from "@/components/BriefingCards";
+import { FloorLookup } from "@/components/FloorLookup";
 import { LessonCard } from "@/components/LessonCard";
 import { QuizCard } from "@/components/QuizCard";
 import type { ApprovalPurchaseOrder, ApprovalRecord } from "@/components/ApprovalCard";
@@ -296,6 +300,16 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
     return <LessonCard lesson={lesson} />;
   },
   LessonCards: (p) => <LessonCards lessons={p.lessons} />,
+  BriefingCards: (p) => {
+    const parsed = briefingPayload.safeParse(p.briefing);
+    if (!parsed.success) return null;
+    return <BriefingCards briefing={parsed.data} />;
+  },
+  FloorLookup: (p) => {
+    const parsed = lookupPayload.safeParse(p.lookup);
+    if (!parsed.success) return null;
+    return <FloorLookup results={parsed.data.results} />;
+  },
   ScheduleForm: (p) => <ScheduleForm draft={p.draft} />,
   TastingCalendar: (p) => <TastingCalendar tastings={p.tastings} />,
   TastingNoteCard: (p) => <TastingNoteSurface note={p.note} />,

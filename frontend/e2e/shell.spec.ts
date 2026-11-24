@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const routes = [
-  ["/", "Ask the Head Sommelier"],
+  ["/", "Tonight"],
   ["/menu", "Menu & pairings"],
   ["/list", "List curation"],
   ["/inventory", "Inventory & purchasing"],
@@ -48,9 +48,9 @@ test("keyboard focus is visible on the first control", async ({ page }) => {
 test("mobile more menu reveals suppliers and settings", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/inventory");
-  await expect(page.getByRole("link", { name: "Floor" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Supplier tastings" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Tonight" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Suppliers" })).toHaveCount(0);
   await page.getByRole("button", { name: "More", exact: true }).click();
-  await expect(page.getByTestId("mobile-menu").getByRole("link", { name: "Supplier tastings" })).toBeVisible();
+  await expect(page.getByTestId("mobile-menu").getByRole("link", { name: "Suppliers" })).toBeVisible();
   await expect(page.getByTestId("mobile-menu").getByRole("link", { name: "Settings" })).toBeVisible();
 });

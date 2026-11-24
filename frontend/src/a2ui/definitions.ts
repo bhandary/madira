@@ -64,6 +64,14 @@ export const catalogDefinitions = {
     description: "Staff lessons and daily briefing.",
     props: { lessons: "array" },
   },
+  BriefingCards: {
+    description: "Tonight's pre-shift card stack. The push reason is in words. Staff do not see cost or margin.",
+    props: { briefing: "object" },
+  },
+  FloorLookup: {
+    description: "Floor lookup for a dish, a bottle, or a guest preference. Pairing, script, glassware, temperature, pour, and stock.",
+    props: { lookup: "object" },
+  },
   ScheduleForm: {
     description: "Draft tasting details and .ics.",
     props: { draft: "object" },
