@@ -1,5 +1,6 @@
 "use client";
 
+import { asAudit, AuditTable } from "@/components/AuditTable";
 import { asReview, DishReview } from "@/components/DishReview";
 import { asPairings, PairingGrid } from "@/components/PairingGrid";
 import { asCard, asNote, ServiceCard, TastingNoteCard } from "@/components/TastingNotes";
@@ -269,6 +270,12 @@ function TastingCalendar({ tastings }: { tastings: unknown }) {
   );
 }
 
+function AuditSurface({ events, chain }: { events: unknown; chain: unknown }) {
+  const parsed = asAudit(events, chain);
+  if (!parsed) return null;
+  return <AuditTable events={parsed.events} chain={parsed.chain} />;
+}
+
 function DishReviewSurface({ review }: { review: unknown }) {
   const parsed = asReview(review);
   if (!parsed) return null;
@@ -301,6 +308,7 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
   ScheduleForm: (p) => <ScheduleForm draft={p.draft} />,
   TastingCalendar: (p) => <TastingCalendar tastings={p.tastings} />,
   TastingNoteCard: (p) => <TastingNoteSurface note={p.note} />,
+  AuditTable: (p) => <AuditSurface events={p.events} chain={p.chain} />,
   ServiceCard: (p) => <ServiceCardSurface card={p.card} />,
 };
 

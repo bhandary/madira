@@ -19,7 +19,7 @@ from sqlalchemy import delete, func, select, update
 from madira.auth import GOOGLE_JWKS, GOOGLE_TOKEN, clear_jwks_cache
 from madira.db import SessionLocal, init_db
 from madira.main import app
-from madira.models import Membership, MenuVersion, ServiceCard, TastingNote, User
+from madira.models import AuditEvent, Document, Membership, MenuVersion, ServiceCard, TastingNote, User
 from madira.tenancy import DEMO_USER_SUB
 
 CLIENT_ID = "client-id"
@@ -82,6 +82,10 @@ def _wipe() -> None:
         session.execute(
             update(MenuVersion).values(status="draft", confirmed_by=None, confirmed_at=None)
         )
+        # The ledger is append-only in the product. This wipe drops the test rows
+        # so a user delete is not blocked by the actor foreign key.
+        session.execute(delete(AuditEvent))
+        session.execute(delete(Document))
         session.execute(delete(User))
         session.commit()
     finally:

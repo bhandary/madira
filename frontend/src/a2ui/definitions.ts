@@ -62,4 +62,11 @@ export const catalogDefinitions = {
     description: "Service card with serving temperature, glassware, decanting, and pour size.",
     props: { card: "service card" },
   },
+  AuditTable: {
+    description: "Hash-chained audit events with chain integrity, actor, action, and before/after values.",
+    props: {
+      events: "audit events with seq, action, entity, before and after, and hashes",
+      chain: "valid, checked count, head hash, and the first broken event",
+    },
+  },
 };

@@ -7,6 +7,7 @@ const routes = [
   ["/inventory", "Inventory & purchasing"],
   ["/training", "Staff training"],
   ["/suppliers", "Supplier tastings"],
+  ["/records", "Records"],
   ["/settings", "Settings"],
   ["/login", "Sign in"],
 ] as const;

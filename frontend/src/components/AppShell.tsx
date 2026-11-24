@@ -13,6 +13,7 @@ const SIDEBAR = [
   { href: "/inventory", label: "Inventory" },
   { href: "/training", label: "Staff training" },
   { href: "/suppliers", label: "Supplier tastings" },
+  { href: "/records", label: "Records" },
   { href: "/settings", label: "Settings" },
 ];
 
@@ -26,6 +27,7 @@ const TABS = [
 
 const MORE = [
   { href: "/suppliers", label: "Supplier tastings" },
+  { href: "/records", label: "Records" },
   { href: "/settings", label: "Settings" },
 ];
 
@@ -110,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const moreOpen = openPath === pathname;
   const [status, setStatus] = useState<{ demo_mode?: boolean; label?: string; llm_model?: string } | null>(null);
   const { user, signOut } = useAccount();
-  const moreCurrent = pathname === "/suppliers" || pathname === "/settings" || pathname === "/login";
+  const moreCurrent = pathname === "/suppliers" || pathname === "/records" || pathname === "/settings" || pathname === "/login";
 
   useEffect(() => {
     let cancelled = false;

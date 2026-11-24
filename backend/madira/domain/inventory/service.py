@@ -7,9 +7,10 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from madira.domain.compliance.service import ACTION_INVENTORY, record_audit_event
 from madira.domain.errors import NotFound
 from madira.domain.session import session_scope
-from madira.models import InventoryItem, Sku
+from madira.models import InventoryItem, Sku, Venue
 
 
 def rows(session: Session, venue_id: uuid.UUID) -> list[dict]:
@@ -73,6 +74,20 @@ def set_on_hand(venue_id: uuid.UUID, sku: str, on_hand: int) -> None:
         ).all()
         if not items:
             raise NotFound(f"unknown sku {sku}")
+        venue = session.get(Venue, venue_id)
+        if venue is None:
+            raise NotFound(f"unknown sku {sku}")
         for item in items:
+            previous = int(item.on_hand)
             item.on_hand = int(on_hand)
+            record_audit_event(
+                session,
+                org_id=venue.organization_id,
+                venue_id=venue_id,
+                action=ACTION_INVENTORY,
+                entity_type="inventory_item",
+                entity_id=item.id,
+                before={"sku": code, "on_hand": previous},
+                after={"sku": code, "on_hand": int(on_hand)},
+            )
         session.commit()

@@ -49,6 +49,10 @@ class Organization(Base):
     id: Mapped[uuid.UUID] = _pk()
     name: Mapped[str] = mapped_column(String(200))
     slug: Mapped[str] = mapped_column(String(80), unique=True)
+    # Manju's approved default. The compliance service only accepts 1..25.
+    document_retention_years: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=7, server_default=text("7")
+    )
 
 
 class Venue(Base):
@@ -599,3 +603,59 @@ class User(Base):
     picture: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = _stamp()
     last_login_at: Mapped[datetime] = _stamp()
+
+
+DOC_TYPES = ("invoice", "po_pdf", "delivery_note", "license", "certificate", "other")
+
+
+class AuditEvent(Base):
+    """Append-only hash-chained ledger. Corrections are new rows. No update or delete API."""
+
+    __tablename__ = "audit_events"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "seq", name="uq_audit_events_venue_seq"),
+        CheckConstraint("seq >= 1", name="ck_audit_events_seq"),
+        Index("ix_audit_events_venue_created", "venue_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    org_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    actor_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    actor_email: Mapped[str] = mapped_column(String(320), default="")
+    action: Mapped[str] = mapped_column(String(80))
+    entity_type: Mapped[str] = mapped_column(String(80), default="")
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    before_json: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    after_json: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    prev_hash: Mapped[str] = mapped_column(String(64))
+    event_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = _stamp()
+
+
+class Document(Base):
+    """Vault metadata. Bytes live under the venue prefix in file storage."""
+
+    __tablename__ = "documents"
+    __table_args__ = (
+        CheckConstraint(
+            "doc_type IN ('invoice', 'po_pdf', 'delivery_note', 'license', 'certificate', 'other')",
+            name="ck_documents_doc_type",
+        ),
+        Index("ix_documents_venue_created", "venue_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    org_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    doc_type: Mapped[str] = mapped_column(String(32))
+    filename: Mapped[str] = mapped_column(String(200))
+    content_type: Mapped[str] = mapped_column(String(128))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    storage_key: Mapped[str] = mapped_column(String(500), unique=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    linked_entity_type: Mapped[str] = mapped_column(String(80), default="")
+    linked_entity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    uploaded_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    created_at: Mapped[datetime] = _stamp()
