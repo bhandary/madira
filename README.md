@@ -77,6 +77,8 @@ See `.env.example`.
 | `MADIRA_OWNER_EMAIL` | unset | Google account that becomes Owner of the default venue on sign-in. Settings, billing, and model keys require Owner. |
 | `MADIRA_FRONTEND_ORIGIN` | `http://localhost:3000` | Only this origin is allowed by CORS, with credentials. |
 | `DATABASE_URL` | sqlite file | Postgres URL for dev and prod. Unset keeps SQLite. |
+| `MADIRA_STORAGE_DIR` | `backend/data/storage` | Local files for list, menu, and label uploads, under a per-venue prefix. |
+| `MADIRA_UPLOAD_MAX_BYTES` | `2097152` | Largest accepted upload. Values above 20 MiB are capped. |
 | `MADIRA_BACKEND_URL` | `http://127.0.0.1:8123` | Used by Next rewrites / CopilotKit HttpAgent |
 | `MADIRA_PORT` | `8123` | Backend |
 | `GOOGLE_CLIENT_ID` | unset | Google OAuth client id. Sign-in stays disabled until this is set. |
@@ -161,15 +163,19 @@ make dev
 
 ```bash
 make test         # Deep Agents wiring: specialists exposed, task delegation, A2UI ops
+make eval         # extraction and pairing evals, demo mode, deterministic
+make eval-live    # same evals on the live model; skips when OPENAI_API_KEY is unset
 cd frontend && npx playwright test
 ```
+
+`make eval` scores the labeled menus in `fixtures/evals` (text, PDF, and photo) and the pairings those dishes get from `fixtures/sample_list.csv`. It exits nonzero when dish recall, precision, or a field accuracy is under its threshold, or when a pairing check fails. Live mode never fills a failed model call from the fixtures.
 
 Project-local verification skill: [`.cursor/skills/verify-madira/SKILL.md`](.cursor/skills/verify-madira/SKILL.md).
 
 ## Product
 
 1. **Menu upload** — PDF, image, or paste → dishes → pairings across four beverage types with rationale and price-tier fit.
-2. **List curation** — budget + target margin, coverage, gaps, cost/margin math.
+2. **List curation** — budget + target margin, coverage, gaps, cost/margin math. **Import CSV** on the List page loads `fixtures/sample_list.csv`: preview matches existing bottles, new products, and row errors, then confirm writes the list. Headers (case and spacing ignored): `section, name, producer, vintage, region, country, category, style, grape, bottle size, bottle price, glass price, cost, barcode`. Prices are in the venue's currency. The original file is stored for that venue.
 3. **Inventory** — on-hand, par, depletion, low-stock, draft POs by supplier (seeded cellar).
 4. **Staff training** — wine knowledge, etiquette, daily briefing, scored quiz, diner roleplay.
 5. **Supplier meetings** — draft tastings, calendar, `.ics` export. **Never sends email or invites.**

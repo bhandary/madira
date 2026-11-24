@@ -13,6 +13,7 @@ from madira.agents.tools import get_inventory, get_training_briefing, list_tasti
 from madira.auth import issue_session, upsert_google_user, utcnow
 from madira.db import SessionLocal, engine
 from madira.main import app
+from madira.domain.catalog.service import ensure_sku
 from madira.models import (
     BeverageList,
     Dish,
@@ -21,16 +22,21 @@ from madira.models import (
     ListItem,
     Membership,
     Menu,
+    MenuVersion,
     POLine,
     Pairing,
+    Product,
+    ProductVariant,
     PurchaseOrder,
     Quiz,
     QuizAttempt,
+    Sku,
     Supplier,
     Tasting,
     User,
     Venue,
 )
+from madira.money import DEFAULT_CURRENCY
 from madira.tenancy import (
     AUDITOR,
     MANAGER,
@@ -116,9 +122,20 @@ def _plant_other_venue() -> dict:
             )
             session.add(menu)
             session.flush()
+            version = MenuVersion(
+                venue_id=venue.id,
+                menu_id=menu.id,
+                number=1,
+                source_type="text",
+                status="draft",
+                raw_text="secret",
+            )
+            session.add(version)
+            session.flush()
             dish = Dish(
                 venue_id=venue.id,
                 menu_id=menu.id,
+                menu_version_id=version.id,
                 name="B secret dish",
                 course="main",
                 description="",
@@ -127,15 +144,16 @@ def _plant_other_venue() -> dict:
             )
             session.add(dish)
             session.flush()
+            secret_pairing = ensure_sku(
+                session,
+                venue.id,
+                category="wine",
+                name="B secret pairing",
+            )
             pairing = Pairing(
                 venue_id=venue.id,
                 dish_id=dish.id,
-                category="wine",
-                name="B secret pairing",
-                producer="",
-                region="",
-                style="",
-                vintage="",
+                sku_id=secret_pairing.id,
                 rationale="secret",
                 price_tier="$",
                 glass_price=1,
@@ -158,44 +176,49 @@ def _plant_other_venue() -> dict:
             )
             session.add(beverage_list)
             session.flush()
+            secret_bottle = ensure_sku(
+                session,
+                venue.id,
+                category="wine",
+                name="B secret bottle",
+            )
             session.add(
                 ListItem(
                     venue_id=venue.id,
                     list_id=beverage_list.id,
-                    category="wine",
-                    name="B secret bottle",
-                    producer="",
-                    region="",
-                    style="",
-                    vintage="",
+                    sku_id=secret_bottle.id,
                     cost=1,
                     pour_price=1,
                     bottle_price=1,
                     margin_pct=1,
                 )
             )
-        for sku, name, on_hand in (("B-ONLY-01", "B-SECRET-BOTTLE", 9), ("W-MUS-01", "B muscadet", 77)):
-            item = session.scalar(
-                select(InventoryItem).where(InventoryItem.venue_id == venue.id, InventoryItem.sku == sku)
-            )
+        for code, name, on_hand in (("B-ONLY-01", "B-SECRET-BOTTLE", 9), ("W-MUS-01", "B muscadet", 77)):
+            item = _stock(session, venue.id, code)
             if item is None:
+                stock = ensure_sku(
+                    session,
+                    venue.id,
+                    category="wine",
+                    name=name,
+                    barcode=code,
+                    par=1,
+                    cost=1,
+                    currency=DEFAULT_CURRENCY,
+                )
                 session.add(
                     InventoryItem(
                         venue_id=venue.id,
-                        sku=sku,
-                        name=name,
-                        category="wine",
+                        sku_id=stock.id,
                         supplier_id=supplier.id,
                         on_hand=on_hand,
-                        par=1,
-                        unit_cost=1,
                         depletion_30d=0,
                         unit="btl",
                     )
                 )
             else:
                 item.on_hand = on_hand
-                item.name = name
+                item.sku.variant.product.name = name
         order = session.scalar(
             select(PurchaseOrder).where(PurchaseOrder.venue_id == venue.id, PurchaseOrder.notes == "B secret order")
         )
@@ -244,7 +267,13 @@ def _plant_other_venue() -> dict:
             )
         user = _user(session, "venue-b-owner", "b@example.com", venue.id, OWNER)
         session.commit()
-        pairing = session.scalar(select(Pairing).where(Pairing.venue_id == venue.id, Pairing.name == "B secret pairing"))
+        pairing = session.scalar(
+            select(Pairing)
+            .join(Sku, Pairing.sku_id == Sku.id)
+            .join(ProductVariant, Sku.product_variant_id == ProductVariant.id)
+            .join(Product, ProductVariant.product_id == Product.id)
+            .where(Pairing.venue_id == venue.id, Product.name == "B secret pairing")
+        )
         return {
             "venue_id": venue.id,
             "organization_id": venue.organization_id,
@@ -262,6 +291,14 @@ def _plant_other_venue() -> dict:
         session.close()
 
 
+def _stock(session, venue_id, code: str) -> InventoryItem | None:
+    return session.scalar(
+        select(InventoryItem)
+        .join(Sku, InventoryItem.sku_id == Sku.id)
+        .where(InventoryItem.venue_id == venue_id, Sku.barcode == code)
+    )
+
+
 def _as(client: TestClient, monkeypatch, google_sub: str) -> None:
     client.cookies.set("madira_session", _session_cookie(monkeypatch, google_sub))
 
@@ -270,7 +307,7 @@ def test_two_venues_are_isolated(client: TestClient, monkeypatch):
     planted = _plant_other_venue()
     session = SessionLocal()
     try:
-        house = session.scalar(select(InventoryItem).where(InventoryItem.venue_id == planted["demo"].venue_id, InventoryItem.sku == "W-MUS-01"))
+        house = _stock(session, planted["demo"].venue_id, "W-MUS-01")
         house_on_hand = house.on_hand
     finally:
         session.close()
@@ -310,16 +347,12 @@ def test_two_venues_are_isolated(client: TestClient, monkeypatch):
 
     session = SessionLocal()
     try:
-        other = session.scalar(
-            select(InventoryItem).where(InventoryItem.venue_id == planted["venue_id"], InventoryItem.sku == "W-MUS-01")
-        )
-        secret = session.scalar(
-            select(InventoryItem).where(InventoryItem.venue_id == planted["venue_id"], InventoryItem.sku == "B-ONLY-01")
-        )
+        other = _stock(session, planted["venue_id"], "W-MUS-01")
+        secret = _stock(session, planted["venue_id"], "B-ONLY-01")
         assert other.on_hand == 77
         assert secret.on_hand == 9
         pairing = session.get(Pairing, planted["pairing_id"])
-        assert pairing is not None and pairing.name == "B secret pairing"
+        assert pairing is not None and pairing.sku.variant.product.name == "B secret pairing"
         removed = session.execute(
             delete(Pairing).where(Pairing.id == planted["pairing_id"], Pairing.venue_id == planted["demo"].venue_id)
         )
@@ -395,9 +428,7 @@ def test_agent_tools_cannot_cross_venues(client: TestClient, monkeypatch):
 
     session = SessionLocal()
     try:
-        secret = session.scalar(
-            select(InventoryItem).where(InventoryItem.venue_id == planted["venue_id"], InventoryItem.sku == "B-ONLY-01")
-        )
+        secret = _stock(session, planted["venue_id"], "B-ONLY-01")
         assert secret.on_hand == 4
         secret.on_hand = 0
         session.commit()
@@ -443,9 +474,7 @@ def test_roles_follow_the_matrix(client: TestClient, monkeypatch):
         }
         for sub, (role, email) in roles.items():
             _user(session, sub, email, demo.venue_id, role)
-        house = session.scalar(
-            select(InventoryItem).where(InventoryItem.venue_id == demo.venue_id, InventoryItem.sku == "W-MUS-01")
-        )
+        house = _stock(session, demo.venue_id, "W-MUS-01")
         on_hand = house.on_hand
     finally:
         session.close()

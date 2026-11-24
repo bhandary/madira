@@ -3,7 +3,21 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, CheckConstraint, Float, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid, func, text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from madira.db import Base
@@ -45,6 +59,7 @@ class Venue(Base):
     organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
     name: Mapped[str] = mapped_column(String(200))
     slug: Mapped[str] = mapped_column(String(80))
+    currency: Mapped[str] = _currency()
 
 
 class Membership(Base):
@@ -65,6 +80,156 @@ class Membership(Base):
     role: Mapped[str] = mapped_column(String(32))
 
 
+class Product(Base):
+    """A drink in the organization catalog. Venues stock it as SKUs."""
+
+    __tablename__ = "products"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "category",
+            "producer",
+            "name",
+            "region",
+            "country",
+            "style",
+            "grape",
+            name="uq_products_identity",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    category: Mapped[str] = mapped_column(String(32), default="")
+    producer: Mapped[str] = mapped_column(String(200), default="")
+    name: Mapped[str] = mapped_column(String(200))
+    region: Mapped[str] = mapped_column(String(200), default="")
+    country: Mapped[str] = mapped_column(String(80), default="")
+    style: Mapped[str] = mapped_column(String(200), default="")
+    grape: Mapped[str] = mapped_column(String(200), default="")
+    body: Mapped[str] = mapped_column(String(32), default="")
+    acidity: Mapped[str] = mapped_column(String(32), default="")
+    tannin: Mapped[str] = mapped_column(String(32), default="")
+    sweetness: Mapped[str] = mapped_column(String(32), default="")
+    oak: Mapped[str] = mapped_column(String(32), default="")
+    intensity: Mapped[str] = mapped_column(String(32), default="")
+    aroma_families: Mapped[list] = mapped_column(JSON, default=list)
+    variants: Mapped[list[ProductVariant]] = relationship(back_populates="product")
+
+
+class ProductVariant(Base):
+    """Vintage and bottle size of one product."""
+
+    __tablename__ = "product_variants"
+    __table_args__ = (
+        UniqueConstraint("product_id", "vintage", "bottle_size", name="uq_product_variants_identity"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
+    vintage: Mapped[str] = mapped_column(String(32), default="")
+    bottle_size: Mapped[str] = mapped_column(String(32), default="")
+    product: Mapped[Product] = relationship(back_populates="variants")
+    skus: Mapped[list[Sku]] = relationship(back_populates="variant")
+
+
+class Sku(Base):
+    """One venue's stock identity for a variant: barcode, bin, par, and cost."""
+
+    __tablename__ = "skus"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "product_variant_id", name="uq_skus_venue_variant"),
+        Index(
+            "uq_skus_venue_barcode",
+            "venue_id",
+            "barcode",
+            unique=True,
+            sqlite_where=text("barcode != ''"),
+            postgresql_where=text("barcode <> ''"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    product_variant_id: Mapped[uuid.UUID] = _fk("product_variants.id", index=True)
+    barcode: Mapped[str] = mapped_column(String(64), default="")
+    bin_label: Mapped[str] = mapped_column(String(200), default="")
+    par: Mapped[int] = mapped_column(Integer, default=0)
+    cost: Mapped[int] = mapped_column(Integer, default=0)
+    currency: Mapped[str] = _currency()
+    variant: Mapped[ProductVariant] = relationship(back_populates="skus")
+
+
+class TastingNote(Base):
+    """A venue's note for one product: three texts, a proposed profile, and an approval."""
+
+    __tablename__ = "tasting_notes"
+    __table_args__ = (
+        CheckConstraint("source IN ('agent', 'staff')", name="ck_tasting_notes_source"),
+        CheckConstraint("status IN ('draft', 'approved')", name="ck_tasting_notes_status"),
+        CheckConstraint(
+            "(status = 'draft' AND approved_by IS NULL AND approved_at IS NULL) OR "
+            "(status = 'approved' AND approved_by IS NOT NULL AND approved_at IS NOT NULL)",
+            name="ck_tasting_notes_approval",
+        ),
+        Index("ix_tasting_notes_venue_product", "venue_id", "product_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
+    server_hook: Mapped[str] = mapped_column(Text, default="")
+    guest_description: Mapped[str] = mapped_column(Text, default="")
+    technical_note: Mapped[str] = mapped_column(Text, default="")
+    body: Mapped[str] = mapped_column(String(32), default="")
+    acidity: Mapped[str] = mapped_column(String(32), default="")
+    tannin: Mapped[str] = mapped_column(String(32), default="")
+    sweetness: Mapped[str] = mapped_column(String(32), default="")
+    oak: Mapped[str] = mapped_column(String(32), default="")
+    intensity: Mapped[str] = mapped_column(String(32), default="")
+    aroma_families: Mapped[list] = mapped_column(JSON, default=list)
+    source: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16))
+    approved_by: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    approved_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    tech_sheet_key: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = _stamp()
+    product: Mapped[Product] = relationship()
+
+
+class ServiceCard(Base):
+    """How one venue serves a product. Drafted with a tasting note and approved on its own."""
+
+    __tablename__ = "service_cards"
+    __table_args__ = (
+        UniqueConstraint("tasting_note_id", name="uq_service_cards_note"),
+        CheckConstraint("source IN ('agent', 'staff')", name="ck_service_cards_source"),
+        CheckConstraint("status IN ('draft', 'approved')", name="ck_service_cards_status"),
+        CheckConstraint(
+            "(status = 'draft' AND approved_by IS NULL AND approved_at IS NULL) OR "
+            "(status = 'approved' AND approved_by IS NOT NULL AND approved_at IS NOT NULL)",
+            name="ck_service_cards_approval",
+        ),
+        Index("ix_service_cards_venue_product", "venue_id", "product_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
+    tasting_note_id: Mapped[uuid.UUID] = _fk("tasting_notes.id", index=True)
+    serving_temperature: Mapped[str] = mapped_column(String(80), default="")
+    glassware: Mapped[str] = mapped_column(String(80), default="")
+    decanting: Mapped[str] = mapped_column(String(80), default="")
+    pour_size: Mapped[str] = mapped_column(String(80), default="")
+    source: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16))
+    approved_by: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    approved_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    note: Mapped[TastingNote] = relationship()
+    product: Mapped[Product] = relationship()
+
+
 class Menu(Base):
     __tablename__ = "menus"
 
@@ -76,43 +241,183 @@ class Menu(Base):
     cuisine: Mapped[str] = mapped_column(String(80), default="")
     price_tier: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = _stamp()
-    dishes: Mapped[list[Dish]] = relationship(back_populates="menu", cascade="all, delete-orphan")
+    versions: Mapped[list[MenuVersion]] = relationship(
+        back_populates="menu",
+        cascade="all, delete-orphan",
+        order_by="MenuVersion.number",
+    )
+    dishes: Mapped[list[Dish]] = relationship(
+        back_populates="menu",
+        cascade="all, delete-orphan",
+        foreign_keys="Dish.menu_id",
+        order_by="Dish.position",
+    )
+
+
+class MenuVersion(Base):
+    """One capture of a menu. Pairing reads a confirmed version only."""
+
+    __tablename__ = "menu_versions"
+    __table_args__ = (
+        UniqueConstraint("menu_id", "number", name="uq_menu_versions_menu_number"),
+        CheckConstraint("number >= 1", name="ck_menu_versions_number"),
+        CheckConstraint("source_type IN ('photo', 'pdf', 'url', 'text')", name="ck_menu_versions_source"),
+        CheckConstraint("status IN ('draft', 'confirmed')", name="ck_menu_versions_status"),
+        CheckConstraint(
+            "(status = 'draft' AND confirmed_by IS NULL AND confirmed_at IS NULL) OR "
+            "(status = 'confirmed' AND confirmed_by IS NOT NULL AND confirmed_at IS NOT NULL)",
+            name="ck_menu_versions_confirm",
+        ),
+        Index("ix_menu_versions_venue_menu", "venue_id", "menu_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    menu_id: Mapped[uuid.UUID] = _fk("menus.id", index=True)
+    number: Mapped[int] = mapped_column(Integer)
+    source_type: Mapped[str] = mapped_column(String(16))
+    source_key: Mapped[str] = mapped_column(String(500), default="")
+    source_filename: Mapped[str] = mapped_column(String(300), default="")
+    source_url: Mapped[str] = mapped_column(String(1000), default="")
+    raw_text: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16))
+    confirmed_by: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    menu: Mapped[Menu] = relationship(back_populates="versions")
+    dishes: Mapped[list[Dish]] = relationship(
+        back_populates="version",
+        cascade="all, delete-orphan",
+        foreign_keys="Dish.menu_version_id",
+        order_by="Dish.position",
+    )
 
 
 class Dish(Base):
     __tablename__ = "dishes"
+    __table_args__ = (
+        UniqueConstraint("menu_version_id", "stable_id", name="uq_dishes_version_stable"),
+        CheckConstraint("position >= 0", name="ck_dishes_position"),
+        CheckConstraint("richness >= 0 AND richness <= 5", name="ck_dishes_richness"),
+        CheckConstraint("acidity >= 0 AND acidity <= 5", name="ck_dishes_acidity"),
+        CheckConstraint("sweetness >= 0 AND sweetness <= 5", name="ck_dishes_sweetness"),
+        CheckConstraint("spice >= 0 AND spice <= 5", name="ck_dishes_spice"),
+        CheckConstraint("umami >= 0 AND umami <= 5", name="ck_dishes_umami"),
+        Index("ix_dishes_version_position", "menu_version_id", "position"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     menu_id: Mapped[uuid.UUID] = _fk("menus.id")
+    menu_version_id: Mapped[uuid.UUID] = _fk("menu_versions.id", index=True)
+    stable_id: Mapped[uuid.UUID] = mapped_column(Uuid, default=uuid.uuid4)
+    position: Mapped[int] = mapped_column(Integer, default=0)
     name: Mapped[str] = mapped_column(String(200))
     course: Mapped[str] = mapped_column(String(80), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     flavor_profile: Mapped[str] = mapped_column(Text, default="")
     price: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
-    menu: Mapped[Menu] = relationship(back_populates="dishes")
+    main_component: Mapped[str] = mapped_column(String(200), default="")
+    cooking_method: Mapped[str] = mapped_column(String(200), default="")
+    sauce: Mapped[str] = mapped_column(String(200), default="")
+    richness: Mapped[int] = mapped_column(Integer, default=0)
+    acidity: Mapped[int] = mapped_column(Integer, default=0)
+    sweetness: Mapped[int] = mapped_column(Integer, default=0)
+    spice: Mapped[int] = mapped_column(Integer, default=0)
+    umami: Mapped[int] = mapped_column(Integer, default=0)
+    allergens: Mapped[list] = mapped_column(JSON, default=list)
+    confidence: Mapped[dict] = mapped_column(JSON, default=dict)
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    needs_repairing: Mapped[bool] = mapped_column(Boolean, default=True)
+    menu: Mapped[Menu] = relationship(back_populates="dishes", foreign_keys="Dish.menu_id")
+    version: Mapped[MenuVersion] = relationship(back_populates="dishes", foreign_keys="Dish.menu_version_id")
     pairings: Mapped[list[Pairing]] = relationship(back_populates="dish", cascade="all, delete-orphan")
 
 
 class Pairing(Base):
     __tablename__ = "pairings"
+    __table_args__ = (
+        CheckConstraint(
+            "slot IN ('best_by_the_glass', 'best_bottle', 'value', 'adventurous', '')",
+            name="ck_pairings_slot",
+        ),
+        CheckConstraint(
+            "status IN ('suggested', 'pinned', 'swapped', 'rejected', 'gap')",
+            name="ck_pairings_status",
+        ),
+        CheckConstraint("confidence IN ('high', 'medium', 'low', '')", name="ck_pairings_confidence"),
+        CheckConstraint(
+            "(status = 'gap' AND sku_id IS NULL) OR (status <> 'gap' AND sku_id IS NOT NULL)",
+            name="ck_pairings_gap_sku",
+        ),
+        Index(
+            "uq_pairings_dish_slot",
+            "dish_id",
+            "slot",
+            unique=True,
+            sqlite_where=text("slot != ''"),
+            postgresql_where=text("slot <> ''"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     dish_id: Mapped[uuid.UUID] = _fk("dishes.id")
-    category: Mapped[str] = mapped_column(String(32))
-    name: Mapped[str] = mapped_column(String(200))
-    producer: Mapped[str] = mapped_column(String(200), default="")
-    region: Mapped[str] = mapped_column(String(200), default="")
-    style: Mapped[str] = mapped_column(String(200), default="")
-    vintage: Mapped[str] = mapped_column(String(32), default="")
+    sku_id: Mapped[uuid.UUID | None] = _fk("skus.id", nullable=True, index=True)
+    slot: Mapped[str] = mapped_column(String(32), default="", server_default=text("''"))
+    status: Mapped[str] = mapped_column(String(16), default="suggested", server_default=text("'suggested'"))
     rationale: Mapped[str] = mapped_column(Text, default="")
+    server_script: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    confidence: Mapped[str] = mapped_column(String(16), default="", server_default=text("''"))
+    gap: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
     price_tier: Mapped[str] = mapped_column(String(32), default="")
     glass_price: Mapped[int] = mapped_column(Integer, default=0)
     bottle_price: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
     dish: Mapped[Dish] = relationship(back_populates="pairings")
+    sku: Mapped[Sku | None] = relationship()
+
+
+class PairingPreference(Base):
+    """A pin, swap, or rejection the sommelier made for a dish, across versions."""
+
+    __tablename__ = "pairing_preferences"
+    __table_args__ = (
+        CheckConstraint("kind IN ('pin', 'swap', 'reject')", name="ck_pairing_preferences_kind"),
+        CheckConstraint(
+            "slot IN ('best_by_the_glass', 'best_bottle', 'value', 'adventurous', '')",
+            name="ck_pairing_preferences_slot",
+        ),
+        Index(
+            "uq_pairing_preferences_choice",
+            "venue_id",
+            "dish_stable_id",
+            "slot",
+            unique=True,
+            sqlite_where=text("kind != 'reject'"),
+            postgresql_where=text("kind <> 'reject'"),
+        ),
+        Index(
+            "uq_pairing_preferences_reject",
+            "venue_id",
+            "dish_stable_id",
+            "sku_id",
+            unique=True,
+            sqlite_where=text("kind = 'reject'"),
+            postgresql_where=text("kind = 'reject'"),
+        ),
+        Index("ix_pairing_preferences_venue_dish", "venue_id", "dish_stable_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    dish_stable_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
+    slot: Mapped[str] = mapped_column(String(32), default="")
+    kind: Mapped[str] = mapped_column(String(16))
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
+    created_at: Mapped[datetime] = _stamp()
+    sku: Mapped[Sku] = relationship()
 
 
 class BeverageList(Base):
@@ -125,6 +430,8 @@ class BeverageList(Base):
     currency: Mapped[str] = _currency()
     target_margin: Mapped[float] = mapped_column(Float, default=3.0)
     notes: Mapped[str] = mapped_column(Text, default="")
+    source_key: Mapped[str] = mapped_column(String(500), default="", server_default=text("''"))
+    source_filename: Mapped[str] = mapped_column(String(300), default="", server_default=text("''"))
     created_at: Mapped[datetime] = _stamp()
     items: Mapped[list[ListItem]] = relationship(back_populates="beverage_list", cascade="all, delete-orphan")
 
@@ -135,18 +442,16 @@ class ListItem(Base):
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     list_id: Mapped[uuid.UUID] = _fk("beverage_lists.id")
-    category: Mapped[str] = mapped_column(String(32))
-    name: Mapped[str] = mapped_column(String(200))
-    producer: Mapped[str] = mapped_column(String(200), default="")
-    region: Mapped[str] = mapped_column(String(200), default="")
-    style: Mapped[str] = mapped_column(String(200), default="")
-    vintage: Mapped[str] = mapped_column(String(32), default="")
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
+    section: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     cost: Mapped[int] = mapped_column(Integer, default=0)
     pour_price: Mapped[int] = mapped_column(Integer, default=0)
     bottle_price: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
     margin_pct: Mapped[float] = mapped_column(Float, default=0)
     beverage_list: Mapped[BeverageList] = relationship(back_populates="items")
+    sku: Mapped[Sku] = relationship()
 
 
 class Supplier(Base):
@@ -164,22 +469,19 @@ class Supplier(Base):
 
 
 class InventoryItem(Base):
+    """On-hand quantity for a SKU. Par and cost live on the SKU; the ledger is later."""
+
     __tablename__ = "inventory_items"
-    __table_args__ = (UniqueConstraint("venue_id", "sku", name="uq_inventory_items_venue_sku"),)
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
-    sku: Mapped[str] = mapped_column(String(64))
-    name: Mapped[str] = mapped_column(String(200))
-    category: Mapped[str] = mapped_column(String(32))
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
     supplier_id: Mapped[uuid.UUID | None] = _fk("suppliers.id", nullable=True)
     on_hand: Mapped[int] = mapped_column(Integer, default=0)
-    par: Mapped[int] = mapped_column(Integer, default=0)
-    unit_cost: Mapped[int] = mapped_column(Integer, default=0)
-    currency: Mapped[str] = _currency()
     depletion_30d: Mapped[int] = mapped_column(Integer, default=0)
     unit: Mapped[str] = mapped_column(String(32), default="btl")
     supplier: Mapped[Supplier | None] = relationship(back_populates="items")
+    sku: Mapped[Sku] = relationship()
 
 
 class PurchaseOrder(Base):

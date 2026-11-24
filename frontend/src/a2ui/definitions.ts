@@ -4,12 +4,19 @@ export const MADIRA_CATALOG_ID = "madira://beverage-catalog";
 
 export const catalogDefinitions = {
   PairingGrid: {
-    description: "Pairing cards for each dish across wine, beer, spirit, and sake.",
-    props: { dishes: "array of dish pairing objects" },
+    description:
+      "Four pairing slots per dish — best by the glass, best bottle, a value pick, and an adventurous pick — with pin, swap, and reject.",
+    props: { menu_id: "string", dishes: "array of dish pairing objects" },
   },
   DishList: {
     description: "Parsed dishes with flavor profiles.",
     props: { dishes: "array" },
+  },
+  DishReview: {
+    description: "Dishes read from a menu, with low-confidence fields flagged. Edit a field and confirm the menu.",
+    props: {
+      review: "menu id, version id, name, status, and dishes with per-field confidence",
+    },
   },
   BeverageListTable: {
     description: "Curated list with cost, pour, bottle, and margin.",
@@ -46,5 +53,13 @@ export const catalogDefinitions = {
   TastingCalendar: {
     description: "Calendar of supplier tastings.",
     props: { tastings: "array" },
+  },
+  TastingNoteCard: {
+    description: "Tasting note with a server hook, guest description, technical note, and flavor profile.",
+    props: { note: "tasting note" },
+  },
+  ServiceCard: {
+    description: "Service card with serving temperature, glassware, decanting, and pour size.",
+    props: { card: "service card" },
   },
 };

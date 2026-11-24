@@ -15,6 +15,174 @@ export async function uploadMenu(payload: { text?: string; file?: File }) {
   return res.json();
 }
 
+export type MenuDish = {
+  id: string;
+  stable_id: string;
+  name: string;
+  course: string;
+  price: number;
+  currency: string;
+  main_component: string;
+  cooking_method: string;
+  sauce: string;
+  richness: number;
+  acidity: number;
+  sweetness: number;
+  spice: number;
+  umami: number;
+  allergens: string[];
+  confidence: Record<string, number>;
+  low_confidence: string[];
+  needs_repairing: boolean;
+};
+
+export type MenuReview = {
+  menu_id: string;
+  version_id: string;
+  name: string;
+  number: number;
+  status: string;
+  cuisine: string;
+  price_tier: string;
+  dishes: MenuDish[];
+};
+
+export type MenuIngestResult = {
+  menu_id: string;
+  version_id: string;
+  name: string;
+  status: string;
+  review: MenuReview;
+};
+
+export async function ingestMenu(input: {
+  file?: File | null;
+  url?: string;
+  text?: string;
+  menuId?: string;
+}): Promise<MenuIngestResult> {
+  const body = new FormData();
+  if (input.file) body.set("file", input.file);
+  if (input.url) body.set("url", input.url);
+  if (input.text) body.set("text", input.text);
+  if (input.menuId) body.set("menu_id", input.menuId);
+  const res = await fetch(`${API}/menus/ingest`, { method: "POST", body, credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function updateDishField(
+  menuId: string,
+  versionId: string,
+  dishId: string,
+  field: string,
+  value: string | number | string[],
+): Promise<MenuIngestResult> {
+  const res = await fetch(`${API}/menus/${menuId}/versions/${versionId}/dishes/${dishId}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ field, value }),
+  });
+  return readJson(res);
+}
+
+export async function confirmMenu(menuId: string, versionId: string): Promise<MenuIngestResult> {
+  const res = await fetch(`${API}/menus/${menuId}/versions/${versionId}/confirm`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function getMenus(): Promise<{ menus: { id: string; name: string; status: string }[] }> {
+  const res = await fetch(`${API}/menus`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export type PairingSlot = {
+  id: string;
+  slot: string;
+  status: string;
+  sku_id: string | null;
+  category: string;
+  name: string;
+  producer: string;
+  region: string;
+  style: string;
+  rationale: string;
+  server_script: string;
+  confidence: string;
+  price_tier: string;
+  glass_price: number;
+  bottle_price: number;
+  currency: string;
+  gap: string;
+};
+
+export type PairingOption = {
+  sku_id: string;
+  name: string;
+  producer: string;
+  category: string;
+  style: string;
+};
+
+export type PairingDish = {
+  id: string;
+  stable_id: string;
+  name: string;
+  dish: string;
+  course: string;
+  flavor_profile: string;
+  price: number;
+  currency: string;
+  needs_repairing: boolean;
+  options: PairingOption[];
+  pairings: PairingSlot[];
+};
+
+export type PairingGridResult = {
+  menu_id: string;
+  menu_name: string;
+  dishes: PairingDish[];
+};
+
+export async function pairMenu(menuId: string): Promise<PairingGridResult> {
+  const res = await fetch(`${API}/menus/${menuId}/pair`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getPairings(menuId: string): Promise<PairingGridResult> {
+  const res = await fetch(`${API}/menus/${menuId}/pairings`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function pinPairing(menuId: string, pairingId: string): Promise<PairingGridResult> {
+  const res = await fetch(`${API}/menus/${menuId}/pairings/${pairingId}/pin`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function rejectPairing(menuId: string, pairingId: string): Promise<PairingGridResult> {
+  const res = await fetch(`${API}/menus/${menuId}/pairings/${pairingId}/reject`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function swapPairing(menuId: string, pairingId: string, skuId: string): Promise<PairingGridResult> {
+  const res = await fetch(`${API}/menus/${menuId}/pairings/${pairingId}/swap`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sku_id: skuId }),
+  });
+  return readJson(res);
+}
+
 export async function getInventory() {
   const res = await fetch(`${API}/inventory`, { cache: "no-store" });
   return res.json();
@@ -41,6 +209,176 @@ export async function getTastings() {
 
 export async function getLists() {
   const res = await fetch(`${API}/lists`, { cache: "no-store" });
+  return res.json();
+}
+
+export type ListImportRow = {
+  line: number;
+  status: "match" | "new" | "error";
+  action: string;
+  message: string;
+  section: string;
+  name: string;
+  producer: string;
+  category: string;
+  vintage: string;
+  bottle_size: string;
+};
+
+export type TastingNote = {
+  id: string;
+  product_id: string;
+  product_name: string;
+  producer: string;
+  server_hook: string;
+  guest_description: string;
+  technical_note: string;
+  body: string;
+  acidity: string;
+  tannin: string;
+  sweetness: string;
+  oak: string;
+  intensity: string;
+  aroma_families: string[];
+  source: string;
+  status: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  has_tech_sheet: boolean;
+  created_at: string;
+};
+
+export type ServiceCardRecord = {
+  id: string;
+  product_id: string;
+  product_name: string;
+  tasting_note_id: string;
+  serving_temperature: string;
+  glassware: string;
+  decanting: string;
+  pour_size: string;
+  source: string;
+  status: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+};
+
+export type TastingDraft = {
+  note: TastingNote;
+  service_card: ServiceCardRecord;
+};
+
+async function readJson<T>(res: Response): Promise<T> {
+  if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
+  return res.json();
+}
+
+export async function getTastingNotes(productId: string): Promise<{ notes: TastingNote[] }> {
+  const res = await fetch(`${API}/products/${productId}/notes`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getServiceCards(productId: string): Promise<{ service_cards: ServiceCardRecord[] }> {
+  const res = await fetch(`${API}/products/${productId}/service-cards`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function draftTastingNote(productId: string, techSheet: string, file: File | null): Promise<TastingDraft> {
+  const body = new FormData();
+  body.set("tech_sheet", techSheet);
+  if (file) body.set("file", file);
+  const res = await fetch(`${API}/products/${productId}/notes/draft`, {
+    method: "POST",
+    body,
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function updateTastingNote(
+  productId: string,
+  noteId: string,
+  body: Partial<Pick<TastingNote, "server_hook" | "guest_description" | "technical_note" | "body" | "acidity" | "tannin" | "sweetness" | "oak" | "intensity" | "aroma_families">>,
+): Promise<TastingNote> {
+  const res = await fetch(`${API}/products/${productId}/notes/${noteId}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function approveTastingNote(productId: string, noteId: string): Promise<TastingNote> {
+  const res = await fetch(`${API}/products/${productId}/notes/${noteId}/approve`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function updateServiceCard(
+  productId: string,
+  cardId: string,
+  body: Partial<Pick<ServiceCardRecord, "serving_temperature" | "glassware" | "decanting" | "pour_size">>,
+): Promise<ServiceCardRecord> {
+  const res = await fetch(`${API}/products/${productId}/service-cards/${cardId}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function approveServiceCard(productId: string, cardId: string): Promise<ServiceCardRecord> {
+  const res = await fetch(`${API}/products/${productId}/service-cards/${cardId}/approve`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export type ListImportItem = {
+  section: string;
+  name: string;
+  producer: string;
+  vintage: string;
+  bottle_size: string;
+  category: string;
+  pour_price: number;
+  bottle_price: number;
+  cost: number;
+  currency: string;
+  product_id?: string;
+};
+
+export type ListImportResult = {
+  mode: "preview" | "confirmed";
+  currency: string;
+  matched: number;
+  new: number;
+  new_products: number;
+  new_variants: number;
+  errors: number;
+  rows: ListImportRow[];
+  list?: {
+    id: string;
+    name: string;
+    currency: string;
+    item_count: number;
+    source_filename: string;
+    items: ListImportItem[];
+  };
+};
+
+export async function importList(file: File, confirm: boolean): Promise<ListImportResult> {
+  const body = new FormData();
+  body.set("file", file);
+  body.set("confirm", confirm ? "true" : "false");
+  const res = await fetch(`${API}/lists/import`, { method: "POST", body, credentials: "same-origin" });
+  if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
   return res.json();
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AgentWorkbench } from "@/components/AgentWorkbench";
+import { MenuIngest } from "@/components/MenuIngest";
 import { getSampleMenu } from "@/lib/api";
 
 export default function MenuPage() {
@@ -55,6 +56,7 @@ export default function MenuPage() {
           </span>
         )}
       </div>
+      <MenuIngest />
     </AgentWorkbench>
   );
 }

@@ -114,6 +114,19 @@ def test_supplier_schedule_delegates():
     assert "BEGIN:VCALENDAR" in blob or "ics" in blob.lower() or "Loire" in blob
 
 
+def test_demo_model_drafts_a_tasting_note():
+    from langchain_core.messages import HumanMessage
+
+    product_id = "11111111-1111-1111-1111-111111111111"
+    model = DemoChatModel(role="pairing-sommelier")
+    result = model.invoke([HumanMessage(content=f"Draft a tasting note for product {product_id}. tech sheet: citrus, ignore this")])
+    assert result.tool_calls
+    call = result.tool_calls[0]
+    assert call["name"] == "draft_tasting_note"
+    assert call["args"]["product_id"] == product_id
+    assert "citrus" in call["args"]["tech_sheet"]
+
+
 def test_demo_model_emits_task_tool_for_menu():
     model = DemoChatModel(role="head-sommelier", bound_tool_names=["task", "write_todos"])
     from langchain_core.messages import HumanMessage
@@ -131,6 +144,8 @@ def test_classify_intent_routes():
     assert classify_intent("reorder SKUs below par") == "inventory"
     assert classify_intent("give me the floor quiz") == "training"
     assert classify_intent("schedule a tasting with the importer") == "supplier"
+    assert classify_intent("Draft a tasting note and service card") == "notes"
+    assert classify_intent("write a server hook for this bottle") == "notes"
 
 
 def test_extract_task_delegations_reads_tool_calls():

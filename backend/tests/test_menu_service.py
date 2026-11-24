@@ -12,7 +12,7 @@ from sqlalchemy import select
 from madira.agents.tools import parse_menu as parse_menu_tool
 from madira.agents.tools import recommend_pairings as recommend_pairings_tool
 from madira.db import SessionLocal, init_db
-from madira.domain.errors import NotFound
+from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.menu.service import (
     extract_upload_text,
     get_menu,
@@ -74,24 +74,51 @@ def test_menus_are_isolated_by_venue():
 
 
 def test_pairings_use_service_prices_for_the_owning_venue():
+    from madira.domain.lists.service import curate
+    from madira.models import ListItem
+
     demo = ensure_demo_tenant()
+    curate(demo.venue_id)
     created = parse_menu(demo.venue_id, SAMPLE_MENU_TEXT, "pasted")
     paired = recommend_pairings(demo.venue_id, str(created["menu_id"]))
-    muscadet = paired["dishes"][0]["pairings"][0]
-    assert muscadet["name"].startswith("Muscadet")
-    assert muscadet["glass_price"] == 1600
-    assert muscadet["bottle_price"] == 6200
-    assert muscadet["currency"] == "USD"
+    assert "error" not in paired
+    rows = paired["dishes"][0]["pairings"]
+    assert [row["slot"] for row in rows] == [
+        "best_by_the_glass",
+        "best_bottle",
+        "value",
+        "adventurous",
+    ]
+    suggested = [row for row in rows if row["status"] != "gap"]
+    assert suggested
+    session = SessionLocal()
+    try:
+        for row in suggested:
+            item = session.scalar(
+                select(ListItem).where(ListItem.sku_id == row["sku_id"], ListItem.venue_id == demo.venue_id)
+            )
+            assert item is not None
+            assert row["glass_price"] == item.pour_price
+            assert row["bottle_price"] == item.bottle_price
+            assert row["currency"] == "USD"
+    finally:
+        session.close()
     stored = get_menu(demo.venue_id, created["menu_id"])
-    assert stored["dishes"][0]["pairings"][0]["glass_price"] == 1600
+    stored_glass = next(row for row in stored["dishes"][0]["pairings"] if row["slot"] == "best_by_the_glass")
+    fresh_glass = next(row for row in rows if row["slot"] == "best_by_the_glass")
+    assert stored_glass["glass_price"] == fresh_glass["glass_price"]
 
 
-def test_image_upload_still_uses_the_sample_menu_text():
-    text = extract_upload_text("plate.png", b"\x89PNG\r\n")
-    assert "Dungeness" in text
-    assert "image upload in demo mode" in text
+def test_photo_and_binary_uploads_are_not_replaced_with_the_sample_menu():
+    with pytest.raises(DraftFailed) as photo:
+        extract_upload_text("plate.png", b"\x89PNG\r\n")
+    assert photo.value.status == 415
+    assert "Dungeness" not in photo.value.message
     assert extract_upload_text("notes.txt", "Crab special — $18\n".encode()) == "Crab special — $18\n"
-    assert extract_upload_text("blob.bin", b"\xff\xfe") == SAMPLE_MENU_TEXT
+    with pytest.raises(DraftFailed) as binary:
+        extract_upload_text("blob.bin", b"\xff\xfe")
+    assert binary.value.status == 415
+    assert "Dungeness" not in binary.value.message
 
 
 def test_tool_wrapper_emits_the_dish_surface():
@@ -119,7 +146,12 @@ def test_parse_route_returns_the_same_surface():
         assert paired.status_code == 200
         pair_body = paired.json()
         assert "PairingGrid" in json.dumps(pair_body["a2ui_operations"])
-        assert pair_body["dishes"][0]["pairings"][0]["glass_price"] == 1600
+        assert [row["slot"] for row in pair_body["dishes"][0]["pairings"]] == [
+            "best_by_the_glass",
+            "best_bottle",
+            "value",
+            "adventurous",
+        ]
         missing = client.post(f"/menus/{uuid.uuid4()}/pair")
         assert missing.status_code == 404
 
@@ -133,5 +165,10 @@ def test_recommend_tool_records_a_pairing_surface():
     finally:
         reset(token)
     assert "error" not in body
-    assert body["dishes"][0]["pairings"][0]["glass_price"] == 1600
+    assert [row["slot"] for row in body["dishes"][0]["pairings"]] == [
+        "best_by_the_glass",
+        "best_bottle",
+        "value",
+        "adventurous",
+    ]
     assert "PairingGrid" in json.dumps(body["a2ui_operations"])
