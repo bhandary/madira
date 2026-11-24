@@ -115,6 +115,11 @@ def _wipe() -> None:
         session.execute(delete(AuditEvent))
         session.execute(delete(Document))
         session.execute(delete(Approval))
+        bind = session.get_bind()
+        if bind is not None and inspect(bind).has_table("condition_readings"):
+            session.execute(text("UPDATE condition_readings SET recorded_by_user_id = NULL"))
+        if bind is not None and inspect(bind).has_table("condition_excursions"):
+            session.execute(text("UPDATE condition_excursions SET acknowledged_by_user_id = NULL"))
         session.execute(delete(User))
         session.commit()
     finally:

@@ -8,6 +8,13 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from madira.agents.presenters.compliance import with_audit
+from madira.domain.compliance.audit_pack import (
+    Rejected as PackRejected,
+    build_audit_pack,
+    compliance_gaps,
+    export_audit_pack,
+    parse_day,
+)
 from madira.domain.compliance.service import (
     Rejected,
     document_public,
@@ -23,7 +30,7 @@ from madira.domain.errors import NotFound
 from madira.domain.session import session_scope
 from madira.rbac import Capability, require
 from madira.storage import StorageError, upload_max_bytes
-from madira.tenancy import OWNER, RequestContext, active_venue_id, current_organization_id
+from madira.tenancy import OWNER, RequestContext, active_venue_id, current_organization_id, current_request
 
 router = APIRouter()
 
@@ -35,7 +42,7 @@ class RetentionBody(BaseModel):
 def _fail(exc: Exception) -> HTTPException:
     if isinstance(exc, NotFound):
         return HTTPException(404, exc.message)
-    if isinstance(exc, Rejected):
+    if isinstance(exc, (Rejected, PackRejected)):
         return HTTPException(exc.status, exc.message)
     if isinstance(exc, StorageError):
         return HTTPException(exc.status, exc.message)
@@ -161,3 +168,43 @@ def retention_patch(body: RetentionBody, ctx: RequestContext = require(Capabilit
     except (NotFound, Rejected) as exc:
         raise _fail(exc) from exc
     return {"document_retention_years": years, "can_edit": True}
+
+
+@router.get("/compliance/audit-pack/preview", dependencies=[require(Capability.AUDIT_PACK)])
+def audit_pack_preview(start_date: str, end_date: str) -> dict:
+    try:
+        start = parse_day(start_date)
+        end = parse_day(end_date)
+        with session_scope() as session:
+            return build_audit_pack(session, active_venue_id(), start, end, current_request())
+    except (NotFound, PackRejected) as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/compliance/audit-pack/export")
+def audit_pack_export(
+    start_date: str,
+    end_date: str,
+    format: str = "zip",
+    ctx: RequestContext = require(Capability.AUDIT_PACK),
+) -> Response:
+    try:
+        start = parse_day(start_date)
+        end = parse_day(end_date)
+        with session_scope() as session:
+            filename, media, payload = export_audit_pack(session, ctx.venue_id, start, end, format, ctx)
+            session.commit()
+    except (NotFound, PackRejected) as exc:
+        raise _fail(exc) from exc
+    quoted = filename.replace("\\", "").replace('"', "")
+    return Response(
+        content=payload,
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{quoted}"'},
+    )
+
+
+@router.get("/compliance/gaps", dependencies=[require(Capability.AUDIT_PACK)])
+def gaps() -> dict:
+    with session_scope() as session:
+        return compliance_gaps(session, active_venue_id())

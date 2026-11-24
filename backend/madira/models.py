@@ -1026,3 +1026,77 @@ class Document(Base):
     linked_entity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     uploaded_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
     created_at: Mapped[datetime] = _stamp()
+
+
+EXCURSION_METRICS = (
+    "temp_high",
+    "temp_low",
+    "humidity_high",
+    "humidity_low",
+    "temp_and_humidity",
+)
+EXCURSION_STATUSES = ("open", "acknowledged")
+
+
+class StorageZone(Base):
+    """A temperature and humidity target for one cellar, bar, or cold box."""
+
+    __tablename__ = "storage_zones"
+    __table_args__ = (UniqueConstraint("venue_id", "name", name="uq_storage_zones_venue_name"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    location_id: Mapped[uuid.UUID | None] = _fk("locations.id", nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    target_temp_min_c: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    target_temp_max_c: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    target_humidity_min_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    target_humidity_max_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+
+
+class ConditionReading(Base):
+    """One manual or sensor reading for a storage zone."""
+
+    __tablename__ = "condition_readings"
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    zone_id: Mapped[uuid.UUID] = _fk("storage_zones.id", index=True)
+    temp_c: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    humidity_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    source: Mapped[str] = mapped_column(String(32), default="manual", server_default=text("'manual'"))
+    recorded_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ConditionExcursion(Base):
+    """An out-of-range reading, with the bottles sitting in that zone."""
+
+    __tablename__ = "condition_excursions"
+    __table_args__ = (
+        CheckConstraint(
+            "metric IN ('temp_high', 'temp_low', 'humidity_high', 'humidity_low', 'temp_and_humidity')",
+            name="ck_condition_excursions_metric",
+        ),
+        CheckConstraint(
+            "status IN ('open', 'acknowledged')",
+            name="ck_condition_excursions_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    zone_id: Mapped[uuid.UUID] = _fk("storage_zones.id", index=True)
+    reading_id: Mapped[uuid.UUID] = _fk("condition_readings.id", index=True)
+    metric: Mapped[str] = mapped_column(String(32))
+    measured_temp_c: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    measured_humidity_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    affected_skus: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(32), default="open", server_default=text("'open'"))
+    acknowledged_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = _stamp()

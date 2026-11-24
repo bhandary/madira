@@ -97,4 +97,10 @@ export const catalogDefinitions = {
       lines: "counted lines with ordered, invoiced, and received quantities",
     },
   },
+  ZoneConditionCard: {
+    description: "Storage zone target temperature and humidity, the latest reading, and an excursion with affected SKUs.",
+    props: {
+      zone: "zone name, targets, latest reading, status, and excursion",
+    },
+  },
 };

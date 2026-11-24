@@ -35,6 +35,9 @@ def seed(session: Session | None = None) -> None:
 
             ensure_demo_records(session, ctx)
             _ensure_demo_ledger(session, venue_id)
+            from madira.domain.inventory.storage import ensure_demo_zones
+
+            ensure_demo_zones(session, venue_id)
             session.commit()
         finally:
             reset(token)

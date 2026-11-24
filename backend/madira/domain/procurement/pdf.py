@@ -108,25 +108,47 @@ def render_purchase_order_pdf(po, supplier, contact, lines, venue, approval) -> 
     return _document(rows)
 
 
-def _document(lines: list[str]) -> bytes:
+def render_text_pdf(lines: list[str]) -> bytes:
+    """Valid ``%PDF-1.4`` bytes. Long reports continue on further pages."""
+
+    cleaned = [_plain(line)[:180] for line in lines] or [""]
+    chunks = [cleaned[index : index + 46] for index in range(0, len(cleaned), 46)]
+    streams = [_page_stream(chunk) for chunk in chunks]
+    page_count = len(streams)
+    font_id = 3
+    page_ids = [4 + index * 2 for index in range(page_count)]
+    content_ids = [5 + index * 2 for index in range(page_count)]
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    objects: list[bytes] = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        f"<< /Type /Pages /Kids [{kids}] /Count {page_count} >>".encode("ascii"),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    for index, stream in enumerate(streams):
+        objects.append(
+            (
+                f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+                f"/Contents {content_ids[index]} 0 R /Resources << /Font << /F1 {font_id} 0 R >> >> >>"
+            ).encode("ascii")
+        )
+        objects.append(b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream")
+    return _wrap_pdf(objects)
+
+
+def _page_stream(lines: list[str]) -> bytes:
     commands = ["BT", "/F1 10 Tf", "50 760 Td", "14 TL"]
     for index, line in enumerate(lines):
-        text = _pdf_escape(_plain(line))[:200]
+        text = _pdf_escape(line)[:180]
         if index == 0:
             commands.append(f"({text}) Tj")
         else:
             commands.append("T*")
             commands.append(f"({text}) Tj")
     commands.append("ET")
-    stream = "\n".join(commands).encode("latin-1", "replace")
-    objects = [
-        b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-        b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-        b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream",
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    ]
+    return "\n".join(commands).encode("latin-1", "replace")
+
+
+def _wrap_pdf(objects: list[bytes]) -> bytes:
     out = bytearray(b"%PDF-1.4\n")
     offsets = [0]
     for number, body in enumerate(objects, start=1):
@@ -146,3 +168,7 @@ def _document(lines: list[str]) -> bytes:
         ).encode("ascii")
     )
     return bytes(out)
+
+
+def _document(lines: list[str]) -> bytes:
+    return render_text_pdf(lines)

@@ -7,6 +7,7 @@ const LABELS: Record<string, string> = {
   "inventory-purchasing": "Inventory & Purchasing",
   "staff-trainer": "Staff Trainer",
   "supplier-scheduler": "Supplier Scheduler",
+  "compliance-auditor": "Compliance Auditor",
 };
 
 export type DelegationRow = {

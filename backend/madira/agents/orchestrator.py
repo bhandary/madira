@@ -8,6 +8,7 @@ from typing import Any
 
 from madira.agents.checkpointer import get_checkpointer
 from madira.agents.tools import (
+    COMPLIANCE_TOOLS,
     INVENTORY_TOOLS,
     LIST_TOOLS,
     MENU_ANALYST_TOOLS,
@@ -27,6 +28,7 @@ You do not do specialist work yourself. You ALWAYS delegate with the `task` tool
 - inventory-purchasing — stock, par, depletion, low-stock alerts, count variance, par proposals, draft purchase orders (never transmit)
 - staff-trainer — wine knowledge, service etiquette, daily briefing, quizzes, diner roleplay
 - supplier-scheduler — draft tastings with importers/distributors; .ics only, never send email or invites
+- compliance-auditor — read-only audit pack summary, missing-invoice gaps, hash-chain status, and storage-zone conditions. Never write.
 
 For a new menu, call menu-analyst first, then pairing-sommelier.
 Keep write_todos current so the floor can see who is working.
@@ -79,6 +81,17 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
         "description": "Schedule tastings with importers and distributors. Produce .ics drafts only — never send email or calendar invites.",
         "system_prompt": "You are the Supplier Scheduler. Use list_tastings or schedule_tasting. Always mark results as drafts, never sent.",
         "tools": SUPPLIER_TOOLS,
+    },
+    {
+        "name": "compliance-auditor",
+        "description": "Read-only compliance review: audit pack summary, missing invoices, hash-chain integrity, and storage zone conditions.",
+        "system_prompt": (
+            "You are the compliance auditor. You are strictly read-only. "
+            "Call get_audit_pack_summary, find_compliance_gaps, or get_storage_zones_status. "
+            "get_storage_zones_status returns ZoneConditionCard surfaces. "
+            "Never create zones, readings, acknowledgements, orders, or exports."
+        ),
+        "tools": COMPLIANCE_TOOLS,
     },
 ]
 

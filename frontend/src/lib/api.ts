@@ -1137,3 +1137,128 @@ export async function deleteLlmSettings(): Promise<LlmSettings> {
   const res = await fetch(`${API}/settings/llm`, { method: "DELETE", credentials: "same-origin" });
   return readSettings(res);
 }
+
+export type AffectedSku = {
+  sku: string;
+  product_name: string;
+  bin_code: string;
+  on_hand: number;
+};
+
+export type ZoneReading = {
+  id: string;
+  zone_id?: string;
+  temp_c: number;
+  humidity_pct: number;
+  source?: string;
+  recorded_at?: string | null;
+  notes?: string | null;
+  in_range?: boolean;
+};
+
+export type ZoneExcursion = {
+  id: string;
+  zone_id?: string;
+  reading_id?: string;
+  metric: string;
+  status: string;
+  measured_temp_c?: number;
+  measured_humidity_pct?: number;
+  affected_skus: AffectedSku[];
+  resolution_note?: string | null;
+  created_at?: string | null;
+};
+
+export type StorageZone = {
+  id: string;
+  name: string;
+  location_id?: string | null;
+  location_name?: string | null;
+  target_temp_min_c: number;
+  target_temp_max_c: number;
+  target_humidity_min_pct: number;
+  target_humidity_max_pct: number;
+  notes?: string | null;
+  latest_reading?: ZoneReading | null;
+  status: string;
+  excursion?: ZoneExcursion | null;
+};
+
+export async function listStorageZones(): Promise<{ zones: StorageZone[] }> {
+  const res = await fetch(`${API}/inventory/storage-zones`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function recordZoneReading(
+  zoneId: string,
+  tempC: number,
+  humidityPct: number,
+  notes?: string,
+): Promise<{ reading: ZoneReading; excursion: ZoneExcursion | null; zone: StorageZone }> {
+  const res = await fetch(`${API}/inventory/storage-zones/${zoneId}/readings`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ temp_c: tempC, humidity_pct: humidityPct, notes: notes || null }),
+  });
+  return readJson(res);
+}
+
+export async function acknowledgeExcursion(excursionId: string, resolutionNote?: string): Promise<{ excursion: ZoneExcursion }> {
+  const res = await fetch(`${API}/inventory/excursions/${excursionId}/acknowledge`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resolution_note: resolutionNote || null }),
+  });
+  return readJson(res);
+}
+
+export type AuditPackPurchase = {
+  supplier: string;
+  po_count: number;
+  invoice_count: number;
+  total_invoiced_cents: number;
+  total_received_value_cents: number;
+};
+
+export type AuditPackGap = {
+  purchase_order_id: string;
+  po_number: string;
+  supplier: string;
+  status: string;
+  reason: string;
+};
+
+export type AuditPackPreview = {
+  venue: { id: string; name: string };
+  start_date: string;
+  end_date: string;
+  purchases_by_supplier: AuditPackPurchase[];
+  invoice_register: { invoice_number: string; total_cents: number; status: string }[];
+  missing_invoice_gaps: AuditPackGap[];
+  inventory_valuation: {
+    start_bottles: number;
+    start_value_cents: number;
+    end_bottles: number;
+    end_value_cents: number;
+  };
+  variance_and_shrinkage: { quantity_delta: number; cost_impact_cents: number; count_sessions: unknown[] };
+  comp_breakage_waste: { cost_impact_cents: number; movements: unknown[] };
+  retention: { document_retention_years: number; retain_until: string };
+  chain: { valid: boolean; checked: number; head_hash: string | null };
+};
+
+export async function previewAuditPack(startDate: string, endDate: string): Promise<AuditPackPreview> {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+  const res = await fetch(`${API}/compliance/audit-pack/preview?${params}`, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export function auditPackExportPath(startDate: string, endDate: string, format: "zip" | "journal_csv" | "summary_pdf" | "summary_csv") {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate, format });
+  return `${API}/compliance/audit-pack/export?${params}`;
+}
