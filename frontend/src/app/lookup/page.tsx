@@ -1,25 +1,44 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { FloorLookup } from "@/components/FloorLookup";
-import { lookupFloor, type LookupHit } from "@/lib/api";
+import { getLookupPack, lookupFloor, type LookupHit } from "@/lib/api";
+import { searchPack } from "@/lib/lookupOffline";
 
 export default function LookupPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<LookupHit[] | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [offline, setOffline] = useState(false);
+
+  useEffect(() => {
+    void getLookupPack().catch(() => undefined);
+  }, []);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError("");
+    const disconnected = typeof navigator !== "undefined" && !navigator.onLine;
     try {
+      if (disconnected) {
+        setResults(searchPack(await getLookupPack(), query));
+        setOffline(true);
+        return;
+      }
       const body = await lookupFloor(query);
+      setOffline(false);
       setResults(body.results);
     } catch (exc) {
-      setResults(null);
-      setError(exc instanceof Error ? exc.message : "Lookup did not load.");
+      try {
+        setResults(searchPack(await getLookupPack(), query));
+        setOffline(true);
+      } catch {
+        setResults(null);
+        setOffline(false);
+        setError(exc instanceof Error ? exc.message : "Lookup did not load.");
+      }
     } finally {
       setBusy(false);
     }
@@ -46,6 +65,11 @@ export default function LookupPage() {
           </button>
         </div>
       </form>
+      {offline ? (
+        <p className="text-sm text-[var(--muted)]" data-testid="lookup-offline">
+          Showing the list saved on this phone.
+        </p>
+      ) : null}
       {error ? (
         <p className="text-sm" role="alert">
           {error}

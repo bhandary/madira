@@ -8,13 +8,15 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
-from madira.domain.errors import DraftFailed
+from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.inventory.ledger import as_qty
 from madira.domain.lists.pricing import load_rules, price_for
 from madira.domain.session import session_scope
@@ -30,8 +32,9 @@ from madira.models import (
     Sku,
     StockMovement,
     TastingNote,
+    Venue,
 )
-from madira.tenancy import active_venue_id, demo_posture
+from madira.tenancy import STAFF, active_venue_id, current_request, demo_posture
 
 _PRICE = re.compile(r"\bunder\s*\$?\s*(\d+(?:\.\d+)?)\b", re.I)
 _DOLLARS = re.compile(r"\bunder\s+(\d+(?:\.\d+)?)\s+dollars?\b", re.I)
@@ -134,6 +137,12 @@ def set_lookup_completer(fn) -> None:
 
     global _completer_override
     _completer_override = fn
+
+
+def parser_result_id(filters: LookupFilters) -> str:
+    """Canonical id of a deterministic parse. The client port emits the same string."""
+
+    return json.dumps(filters.model_dump(), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def parse_query(query: str) -> LookupFilters:
@@ -500,4 +509,189 @@ def lookup(query: str) -> dict:
         }
 
 
-__all__ = ["LookupFilters", "lookup", "parse_query", "resolve_filters", "set_lookup_completer"]
+def _zone_for(name: str | None) -> ZoneInfo:
+    try:
+        return ZoneInfo(name or "America/Los_Angeles")
+    except Exception:
+        return ZoneInfo("America/Los_Angeles")
+
+
+def pack() -> dict:
+    """Compact floor cache: on-list bottles, approved notes, cards, tonight's pairings, stock, and 86s.
+
+    Staff never receive cost or margin. Prices are selling prices from the list service.
+    """
+
+    venue_id = active_venue_id()
+    ctx = current_request()
+    staff = ctx is not None and ctx.role == STAFF
+    with session_scope() as session:
+        venue = session.get(Venue, venue_id)
+        if venue is None:
+            raise NotFound("venue not found")
+        service_date = datetime.now(timezone.utc).astimezone(_zone_for(venue.timezone)).date().isoformat()
+        listed = session.scalars(select(ListItem).where(ListItem.venue_id == venue_id)).all()
+        best: dict[uuid.UUID, ListItem] = {}
+        for row in listed:
+            current = best.get(row.sku_id)
+            if current is None or int(row.bottle_price or 0) > int(current.bottle_price or 0):
+                best[row.sku_id] = row
+        skus = []
+        if best:
+            skus = (
+                session.scalars(
+                    select(Sku)
+                    .where(Sku.venue_id == venue_id, Sku.id.in_(list(best)))
+                    .options(joinedload(Sku.variant).joinedload(ProductVariant.product))
+                )
+                .unique()
+                .all()
+            )
+        product_ids = {sku.variant.product_id for sku in skus if sku.variant is not None}
+        notes = session.scalars(
+            select(TastingNote)
+            .where(TastingNote.venue_id == venue_id, TastingNote.status == "approved")
+            .order_by(TastingNote.approved_at.desc(), TastingNote.id.desc())
+        ).all()
+        note_rows = []
+        seen_notes: set[uuid.UUID] = set()
+        for note in notes:
+            if note.product_id not in product_ids or note.product_id in seen_notes:
+                continue
+            seen_notes.add(note.product_id)
+            note_rows.append(
+                {
+                    "id": str(note.id),
+                    "product_id": str(note.product_id),
+                    "server_hook": note.server_hook or "",
+                    "guest_description": note.guest_description or "",
+                    "body": note.body or "",
+                    "acidity": note.acidity or "",
+                    "tannin": note.tannin or "",
+                    "sweetness": note.sweetness or "",
+                    "oak": note.oak or "",
+                    "intensity": note.intensity or "",
+                }
+            )
+        cards = session.scalars(
+            select(ServiceCard)
+            .where(ServiceCard.venue_id == venue_id, ServiceCard.status == "approved")
+            .order_by(ServiceCard.approved_at.desc(), ServiceCard.id.desc())
+        ).all()
+        card_rows = []
+        seen_cards: set[uuid.UUID] = set()
+        for card in cards:
+            if card.product_id not in product_ids or card.product_id in seen_cards:
+                continue
+            seen_cards.add(card.product_id)
+            card_rows.append(
+                {
+                    "id": str(card.id),
+                    "product_id": str(card.product_id),
+                    "glassware": card.glassware or "",
+                    "serving_temperature": card.serving_temperature or "",
+                    "pour_size": card.pour_size or "",
+                    "decanting": card.decanting or "",
+                }
+            )
+        version = session.scalar(
+            select(MenuVersion)
+            .where(MenuVersion.venue_id == venue_id, MenuVersion.status == "confirmed")
+            .order_by(MenuVersion.confirmed_at.desc(), MenuVersion.number.desc())
+            .limit(1)
+        )
+        dishes: list[Dish] = []
+        pairing_models: list[Pairing] = []
+        if version is not None:
+            dishes = list(
+                session.scalars(
+                    select(Dish)
+                    .where(Dish.venue_id == venue_id, Dish.menu_version_id == version.id)
+                    .order_by(Dish.position.asc(), Dish.name.asc(), Dish.id.asc())
+                ).all()
+            )
+            if dishes:
+                pairing_models = list(
+                    session.scalars(
+                        select(Pairing)
+                        .where(
+                            Pairing.venue_id == venue_id,
+                            Pairing.dish_id.in_([dish.id for dish in dishes]),
+                            Pairing.sku_id.is_not(None),
+                        )
+                        .options(joinedload(Pairing.dish))
+                    )
+                    .unique()
+                    .all()
+                )
+        stock = _quantities(session, venue_id)
+        rules = load_rules(session, venue_id)
+        items = []
+        for sku in skus:
+            if sku.variant is None or sku.variant.product is None:
+                continue
+            product = sku.variant.product
+            listed_row = best[sku.id]
+            item = {
+                "id": str(sku.id),
+                "product_id": str(product.id),
+                "sku": sku.barcode or "",
+                "name": product.name or "",
+                "producer": product.producer or "",
+                "grape": product.grape or "",
+                "region": product.region or "",
+                "style": product.style or "",
+                "category": product.category or "",
+                "body": product.body or "",
+                "acidity": product.acidity or "",
+                "tannin": product.tannin or "",
+                "sweetness": product.sweetness or "",
+                "oak": product.oak or "",
+                "intensity": product.intensity or "",
+                "on_list": True,
+                "price_cents": _selling(session, sku, rules, pairing_models),
+                "currency": sku.currency or "USD",
+                "stock": int(stock.get(sku.id, 0)),
+                "eighty_six": sku.eighty_sixed_at is not None,
+            }
+            if not staff:
+                item["cost"] = int(listed_row.cost or 0)
+                item["margin_pct"] = float(listed_row.margin_pct or 0)
+            items.append(item)
+        items.sort(key=lambda row: (row["name"].casefold(), row["sku"]))
+        dish_rows = [
+            {
+                "id": str(dish.id),
+                "name": dish.name or "",
+                "description": dish.description or "",
+                "course": dish.course or "",
+            }
+            for dish in dishes
+        ]
+        pairing_rows = []
+        for pairing in pairing_models:
+            dish = pairing.dish
+            pairing_rows.append(
+                {
+                    "id": str(pairing.id),
+                    "sku_id": str(pairing.sku_id),
+                    "dish_id": str(pairing.dish_id),
+                    "dish": "" if dish is None else dish.name or "",
+                    "course": "" if dish is None else dish.course or "",
+                    "description": "" if dish is None else dish.description or "",
+                    "script": (pairing.server_script or "").strip(),
+                    "pinned": pairing.status == "pinned",
+                }
+            )
+        pairing_rows.sort(key=lambda row: (row["dish"].casefold(), row["id"]))
+        return {
+            "service_date": service_date,
+            "items": items,
+            "notes": note_rows,
+            "cards": card_rows,
+            "dishes": dish_rows,
+            "pairings": pairing_rows,
+        }
+
+
+__all__ = ["LookupFilters", "lookup", "pack", "parse_query", "parser_result_id", "resolve_filters", "set_lookup_completer"]

@@ -115,6 +115,26 @@ function TabIcon({ name }: { name: (typeof TABS)[number]["icon"] | (typeof STAFF
   );
 }
 
+function OfflineBanner() {
+  const [offline, setOffline] = useState(false);
+  useEffect(() => {
+    const sync = () => setOffline(!navigator.onLine);
+    sync();
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
+  if (!offline) return null;
+  return (
+    <div className="announce" role="status" data-testid="offline-banner">
+      <span className="min-w-0">Offline. Tonight, lookup, and open counts stay on this phone.</span>
+    </div>
+  );
+}
+
 function ModeBanner({ status }: { status: { demo_mode?: boolean; label?: string } | null }) {
   const demo = status?.demo_mode !== false;
   const detail = (status?.label || "connecting").replace(/^DEMO MODE\s*[—-]\s*/i, "");
@@ -234,6 +254,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <ModeBanner status={status} />
+        <OfflineBanner />
         <header className="flex items-center border-b border-line bg-panel px-4 py-3 md:hidden">
           <Brand />
         </header>
