@@ -689,6 +689,23 @@ def publish(service_date: date | None = None) -> dict:
         return payload
 
 
+def get_for_date(service_date: date | None = None) -> dict:
+    """Today's briefing, or one service date that was already built."""
+
+    if service_date is None:
+        return get_or_build_today()
+    venue_id = active_venue_id()
+    with session_scope() as session:
+        zone, _hour, _venue = _clock_for(session, venue_id)
+        if service_date == _local(zone).date():
+            pass
+        else:
+            row = _find(session, venue_id, service_date)
+            ready = row is not None and row.status == "published"
+            return _wrapper(session, venue_id, service_date, row, ready)
+    return get_or_build_today()
+
+
 def get_or_build_today() -> dict:
     """Return today's briefing, building it on the first read after briefing hour."""
 
@@ -920,6 +937,7 @@ __all__ = [
     "bottle_push_score",
     "build",
     "completion_report",
+    "get_for_date",
     "get_or_build_today",
     "publish",
     "rebuild",

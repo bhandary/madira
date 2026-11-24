@@ -1,4 +1,6 @@
 import type { AuditChain, AuditEventRow } from "@/a2ui/auditTableSchema";
+import { readCachedJson } from "@/lib/offline";
+import type { LookupPack } from "@/lib/lookupOffline";
 
 export const API = "/madira-api";
 
@@ -649,6 +651,45 @@ export async function getTonight(): Promise<TonightBoard> {
   return readJson(res);
 }
 
+export type TonightEnvelope = {
+  role: string;
+  available: boolean;
+  ready: boolean;
+  service_date: string;
+  timezone: string;
+  briefing_hour: number;
+  briefing: TonightBriefing | null;
+};
+
+export type { LookupPack };
+
+export async function getTonightBriefing(serviceDate?: string): Promise<TonightEnvelope> {
+  const params = serviceDate ? `?service_date=${encodeURIComponent(serviceDate)}` : "";
+  const path = `${API}/tonight/briefing${params}`;
+  try {
+    const res = await fetch(path, { cache: "no-store", credentials: "same-origin" });
+    if (res.ok) return res.json();
+  } catch {
+    // The service worker or the page cache may still have the last briefing.
+  }
+  const cached = await readCachedJson<TonightEnvelope>(path);
+  if (cached) return cached;
+  throw new Error("Tonight's briefing is not on this phone yet.");
+}
+
+export async function getLookupPack(): Promise<LookupPack> {
+  const path = `${API}/lookup/pack`;
+  try {
+    const res = await fetch(path, { cache: "no-store", credentials: "same-origin" });
+    if (res.ok) return res.json();
+  } catch {
+    // Offline lookup uses the pack captured on the last visit.
+  }
+  const cached = await readCachedJson<LookupPack>(path);
+  if (cached) return cached;
+  throw new Error("The floor list is not on this phone yet.");
+}
+
 export async function acknowledgeBriefing(id: string, secondsToAck: number): Promise<TonightBriefing> {
   const res = await fetch(`${API}/tonight/briefing/${id}/ack`, {
     method: "POST",
@@ -656,6 +697,34 @@ export async function acknowledgeBriefing(id: string, secondsToAck: number): Pro
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ seconds_to_ack: secondsToAck }),
   });
+  return readJson(res);
+}
+
+export type BriefingReportUser = {
+  user_id: string;
+  name: string;
+  acknowledged: boolean;
+  seconds_to_ack: number | null;
+};
+
+export type BriefingReportDay = {
+  service_date: string;
+  briefing_id: string | null;
+  status: string | null;
+  acknowledged_count: number;
+  user_count: number;
+  users: BriefingReportUser[];
+};
+
+export type BriefingReport = {
+  start: string;
+  end: string;
+  days: BriefingReportDay[];
+};
+
+export async function getBriefingReport(start: string, end: string): Promise<BriefingReport> {
+  const params = new URLSearchParams({ start, end });
+  const res = await fetch(`${API}/tonight/briefing/report?${params}`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 

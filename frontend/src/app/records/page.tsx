@@ -6,12 +6,14 @@ import { AuditTable, ChainBadge } from "@/components/AuditTable";
 import {
   ApiError,
   getAuditEvents,
+  getBriefingReport,
   getRetention,
   listDocuments,
   updateRetention,
   uploadDocument,
   type AuditChain,
   type AuditEventRow,
+  type BriefingReport,
   type VaultDocument,
 } from "@/lib/api";
 
@@ -24,6 +26,26 @@ const DOC_TYPES = [
   ["certificate", "Certificate"],
   ["other", "Other"],
 ] as const;
+
+function isoDate(offsetDays: number) {
+  const now = new Date();
+  const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offsetDays));
+  return day.toISOString().slice(0, 10);
+}
+
+function completionRows(report: BriefingReport) {
+  const people = new Map<string, { id: string; name: string; acked: number; total: number }>();
+  for (const day of report.days) {
+    if (!day.briefing_id || day.status !== "published") continue;
+    for (const user of day.users) {
+      const row = people.get(user.user_id) || { id: user.user_id, name: user.name || "Unnamed", acked: 0, total: 0 };
+      row.total += 1;
+      if (user.acknowledged) row.acked += 1;
+      people.set(user.user_id, row);
+    }
+  }
+  return [...people.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+}
 
 function bytes(size: number) {
   if (size < 1024) return `${size} B`;
@@ -44,6 +66,9 @@ export default function RecordsPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [reportStart, setReportStart] = useState(() => isoDate(-6));
+  const [reportEnd, setReportEnd] = useState(() => isoDate(0));
+  const [report, setReport] = useState<BriefingReport | null>(null);
 
   const refresh = useCallback(async (filters?: { entityType?: string; action?: string }) => {
     const [ledger, vault, retention] = await Promise.all([
@@ -133,6 +158,22 @@ export default function RecordsPage() {
     }
   }
 
+  async function loadReport(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      setReport(await getBriefingReport(reportStart, reportEnd));
+    } catch (err) {
+      setReport(null);
+      setError(err instanceof Error ? err.message : "The briefing report could not be loaded.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const completions = report ? completionRows(report) : [];
+
   return (
     <div className="min-w-0" data-testid="records-page">
       <h1 className="h-page">Records</h1>
@@ -144,6 +185,53 @@ export default function RecordsPage() {
           {error}
         </p>
       ) : null}
+
+      <section className="mt-6" aria-labelledby="briefing-report-heading" data-testid="briefing-report">
+        <h2 id="briefing-report-heading" className="text-lg font-medium">
+          Briefing completion
+        </h2>
+        <p className="mt-1 text-sm text-muted">Published briefings in the range, and who acknowledged them.</p>
+        <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={loadReport}>
+          <label className="lbl" htmlFor="briefing-report-start">
+            From
+            <input
+              id="briefing-report-start"
+              data-testid="briefing-report-start"
+              className="field min-h-11 w-40"
+              type="date"
+              value={reportStart}
+              onChange={(event) => setReportStart(event.target.value)}
+            />
+          </label>
+          <label className="lbl" htmlFor="briefing-report-end">
+            To
+            <input
+              id="briefing-report-end"
+              data-testid="briefing-report-end"
+              className="field min-h-11 w-40"
+              type="date"
+              value={reportEnd}
+              onChange={(event) => setReportEnd(event.target.value)}
+            />
+          </label>
+          <button type="submit" className="btn btn-secondary min-h-11" data-testid="briefing-report-load" disabled={busy}>
+            Show completion
+          </button>
+        </form>
+        {report ? (
+          <ul className="mt-3 space-y-2">
+            {completions.map((row) => (
+              <li key={row.id} className="panel flex min-h-11 items-center justify-between gap-3 px-3 text-sm" data-testid="briefing-report-person">
+                <span>{row.name}</span>
+                <span>
+                  {row.acked}/{row.total}
+                </span>
+              </li>
+            ))}
+            {completions.length === 0 ? <li className="text-sm text-muted">No published briefings in that range.</li> : null}
+          </ul>
+        ) : null}
+      </section>
 
       <section className="mt-6" aria-labelledby="audit-heading">
         <div className="flex flex-wrap items-end justify-between gap-3">

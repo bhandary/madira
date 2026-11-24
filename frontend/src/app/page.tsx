@@ -4,23 +4,66 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BriefingCards } from "@/components/BriefingCards";
 import { SommelierChat } from "@/components/SommelierChat";
-import { getTonight, type TonightBoard } from "@/lib/api";
+import { getTonight, getTonightBriefing, type TonightBoard, type TonightEnvelope } from "@/lib/api";
+
+function boardFromEnvelope(envelope: TonightEnvelope): TonightBoard {
+  return {
+    service_date: envelope.service_date,
+    briefing_hour: envelope.briefing_hour,
+    timezone: envelope.timezone,
+    available: envelope.available,
+    role: envelope.role,
+    briefing: envelope.briefing,
+    low_stock: [],
+    storage_alerts: [],
+    deliveries_due: [],
+    approvals: [],
+  };
+}
 
 export default function HomePage() {
   const [board, setBoard] = useState<TonightBoard | null>(null);
+  const [partial, setPartial] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    getTonight()
+    const day = new URLSearchParams(window.location.search).get("day") || "";
+    const load = day
+      ? getTonightBriefing(day).then((envelope) => ({ board: boardFromEnvelope(envelope), partial: true }))
+      : Promise.all([getTonight().catch(() => null), getTonightBriefing().catch(() => null)]).then(([live, cached]) => {
+          if (live) return { board: live, partial: false };
+          if (cached) return { board: boardFromEnvelope(cached), partial: true };
+          throw new Error("Tonight did not load.");
+        });
+    load
       .then((payload) => {
-        if (!cancelled) setBoard(payload);
+        if (cancelled) return;
+        setBoard(payload.board);
+        setPartial(payload.partial);
       })
       .catch((exc: unknown) => {
         if (!cancelled) setError(exc instanceof Error ? exc.message : "Tonight did not load.");
       });
+    const onOffline = () => {
+      if (cancelled) return;
+      const day = new URLSearchParams(window.location.search).get("day") || "";
+      setBoard(null);
+      getTonightBriefing(day || undefined)
+        .then((envelope) => {
+          if (cancelled) return;
+          setBoard(boardFromEnvelope(envelope));
+          setPartial(true);
+          setError("");
+        })
+        .catch((exc: unknown) => {
+          if (!cancelled) setError(exc instanceof Error ? exc.message : "Tonight's briefing is not on this phone yet.");
+        });
+    };
+    window.addEventListener("offline", onOffline);
     return () => {
       cancelled = true;
+      window.removeEventListener("offline", onOffline);
     };
   }, []);
 
@@ -47,7 +90,9 @@ export default function HomePage() {
       ) : null}
       <section className="panel">
         <h2 className="text-base font-semibold">Low stock</h2>
-        {board && board.low_stock.length ? (
+        {partial ? (
+          <p className="mt-2 text-sm text-[var(--muted)]">The rest of the board needs the network.</p>
+        ) : board && board.low_stock.length ? (
           <ul className="mt-2 space-y-1 text-sm">
             {board.low_stock.map((row) => (
               <li key={row.sku}>
@@ -59,6 +104,7 @@ export default function HomePage() {
           <p className="mt-2 text-sm text-[var(--muted)]">Nothing is under par.</p>
         )}
       </section>
+      {partial ? null : (
       <section className="panel">
         <h2 className="text-base font-semibold">Storage alerts</h2>
         {board && board.storage_alerts.length ? (
@@ -73,6 +119,8 @@ export default function HomePage() {
           <p className="mt-2 text-sm text-[var(--muted)]">No open excursions.</p>
         )}
       </section>
+      )}
+      {partial ? null : (
       <section className="panel">
         <h2 className="text-base font-semibold">Deliveries due</h2>
         {board && board.deliveries_due.length ? (
@@ -87,6 +135,8 @@ export default function HomePage() {
           <p className="mt-2 text-sm text-[var(--muted)]">No deliveries are due.</p>
         )}
       </section>
+      )}
+      {partial ? null : (
       <section className="panel">
         <h2 className="text-base font-semibold">Approvals waiting</h2>
         {board && board.approvals.length ? (
@@ -101,6 +151,7 @@ export default function HomePage() {
           <p className="mt-2 text-sm text-[var(--muted)]">Nothing is waiting on you.</p>
         )}
       </section>
+      )}
       <SommelierChat />
     </div>
   );

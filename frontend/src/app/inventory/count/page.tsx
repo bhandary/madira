@@ -25,7 +25,7 @@ import {
   type ParProposalRecord,
   type StockItem,
 } from "@/lib/api";
-import { clearQueue, deviceId, mutationId, readQueue, writeQueue, type QueuedCount } from "@/lib/countQueue";
+import { clearOpenSheet, clearQueue, deviceId, mutationId, readOpenSheet, readQueue, writeOpenSheet, writeQueue, type QueuedCount } from "@/lib/countQueue";
 
 function reportView(report: CountReport): VarianceReportData {
   return {
@@ -75,6 +75,19 @@ export default function CountPage() {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        const saved = typeof navigator !== "undefined" && !navigator.onLine ? readOpenSheet() : null;
+        if (saved) {
+          setLocations(saved.locations);
+          setItems(saved.items.map((item) => ({ ...item, on_hand: 0, par: 0, low: false, unit: "btl", depletion_30d: 0, valuation_cents: 0, currency: "USD", locations: [] })));
+          setLocationId(saved.locationId);
+          setSessionId(saved.sessionId);
+          setSessionName(saved.locationName);
+          setSessionStatus(saved.status);
+          setLines(saved.lines);
+          setQueued(readQueue(saved.sessionId));
+          setLoaded(true);
+          return;
+        }
         setLoaded(true);
         setError(err instanceof Error ? err.message : "The count could not be loaded.");
       });
@@ -82,6 +95,28 @@ export default function CountPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!sessionId || sessionStatus !== "in_progress") return;
+    writeOpenSheet({
+      sessionId,
+      locationId,
+      locationName: sessionName,
+      status: sessionStatus,
+      items: items.map((item) => ({ sku: item.sku, name: item.name })),
+      locations: locations.map((place) => ({ id: place.id, name: place.name, kind: place.kind, notes: place.notes })),
+      lines: lines.map((line) => ({
+        id: line.id,
+        sku: line.sku,
+        name: line.name,
+        counted_quantity: line.counted_quantity,
+        expected_quantity: line.expected_quantity ?? null,
+        device_id: line.device_id,
+        bin_code: line.bin_code || "",
+        counted_at: line.counted_at ?? null,
+      })),
+    });
+  }, [items, lines, locationId, locations, sessionId, sessionName, sessionStatus]);
 
   const loadSession = useCallback(async (id: string) => {
     const body = await getCountSession(id);
@@ -239,6 +274,7 @@ export default function CountPage() {
       setReport(body);
       setLines(body.lines || []);
       setSessionStatus(body.session.status);
+      clearOpenSheet();
     } catch (err) {
       setError(err instanceof Error ? err.message : "The count could not be submitted.");
     } finally {

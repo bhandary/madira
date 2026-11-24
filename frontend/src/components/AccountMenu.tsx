@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAccount, getDemoPersonas, notifyAuthChanged, setDemoPersona, signOutAccount, type Account, type DemoPersona } from "@/lib/api";
+import { clearOfflineCaches } from "@/lib/offline";
 
 export function useAccount() {
   const [user, setUser] = useState<Account | null | undefined>(undefined);
@@ -31,6 +32,7 @@ export function useAccount() {
       refresh();
       return;
     }
+    await clearOfflineCaches();
     if (id === seq.current) setUser(null);
     notifyAuthChanged();
   }, [refresh]);
