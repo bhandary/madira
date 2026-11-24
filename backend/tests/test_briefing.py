@@ -287,7 +287,11 @@ def test_higher_margin_wins_the_push_and_the_reason_has_no_numbers(house):
     session = SessionLocal()
     try:
         for sku in session.scalars(select(Sku).where(Sku.venue_id == house.venue_id, Sku.barcode.in_(created))).all():
-            sku.variant.drink_by_year = None
+            if sku.variant is not None:
+                sku.variant.drink_by_year = None
+        session.commit()
+        for barcode in created:
+            apply_count(session, house.venue_id, barcode, 0)
         session.commit()
     finally:
         session.close()
