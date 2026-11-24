@@ -11,6 +11,7 @@ from madira.api.compliance import router as compliance_router
 from madira.api.health import fixtures_router, router as health_router, status_router
 from madira.api.counts import router as counts_router
 from madira.api.inventory import router as inventory_router
+from madira.api.storage import router as storage_router
 from madira.api.lists import router as lists_router
 from madira.api.menus import router as menus_router
 from madira.api.notes import router as notes_router
@@ -45,6 +46,7 @@ app.include_router(lists_router)
 app.include_router(catalog_router)
 app.include_router(notes_router)
 app.include_router(inventory_router)
+app.include_router(storage_router)
 app.include_router(counts_router)
 app.include_router(compliance_router)
 app.include_router(purchasing_router)

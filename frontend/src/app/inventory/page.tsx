@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AgentWorkbench } from "@/components/AgentWorkbench";
 import { CellarBoard } from "@/components/CellarBoard";
-import { getInventory, patchStock } from "@/lib/api";
+import { ZoneConditionCard } from "@/components/ZoneConditionCard";
+import { getInventory, listStorageZones, patchStock, type StorageZone } from "@/lib/api";
 
 type Item = {
   sku: string;
@@ -21,6 +22,7 @@ export default function InventoryPage() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+  const [zones, setZones] = useState<StorageZone[]>([]);
 
   async function refresh() {
     const data = await getInventory();
@@ -28,6 +30,16 @@ export default function InventoryPage() {
     setLoaded(true);
     setError("");
   }
+
+  const refreshZones = useCallback(() => {
+    listStorageZones()
+      .then((data) => setZones(data.zones || []))
+      .catch(() => setZones([]));
+  }, []);
+
+  useEffect(() => {
+    refreshZones();
+  }, [refreshZones]);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +127,20 @@ export default function InventoryPage() {
           void refresh();
         }}
       />
+      <section className="mt-8 min-w-0" aria-labelledby="storage-heading" data-testid="storage-zones">
+        <h2 id="storage-heading" className="text-lg font-medium">
+          Storage zones
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          Log a temperature and humidity reading. An out-of-range reading opens an excursion for the bottles in that zone.
+        </p>
+        <div className="mt-3 space-y-3">
+          {zones.map((zone) => (
+            <ZoneConditionCard key={zone.id} zone={zone} onChanged={refreshZones} />
+          ))}
+          {loaded && zones.length === 0 ? <p className="text-sm text-muted">No storage zones yet.</p> : null}
+        </div>
+      </section>
     </AgentWorkbench>
   );
 }

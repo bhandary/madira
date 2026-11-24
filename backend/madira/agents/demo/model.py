@@ -27,6 +27,7 @@ SPECIALISTS = (
     "inventory-purchasing",
     "staff-trainer",
     "supplier-scheduler",
+    "compliance-auditor",
 )
 
 INTENT_FLOW = {
@@ -37,11 +38,27 @@ INTENT_FLOW = {
     "inventory": ["inventory-purchasing"],
     "training": ["staff-trainer"],
     "supplier": ["supplier-scheduler"],
+    "compliance": ["compliance-auditor"],
 }
 
 
 def classify_intent(text: str) -> str:
     t = (text or "").lower()
+    if any(
+        k in t
+        for k in (
+            "audit pack",
+            "compliance gap",
+            "compliance-auditor",
+            "storage zone",
+            "condition excursion",
+            "excursion",
+            "journal entry",
+            "qbo",
+            "xero",
+        )
+    ):
+        return "compliance"
     if any(k in t for k in ("tasting note", "tasting notes", "service card", "talking point", "server hook")):
         return "notes"
     if any(k in t for k in ("quiz", "training", "lesson", "etiquette", "roleplay", "briefing", "flashcard", "waitstaff")):
@@ -244,6 +261,14 @@ class DemoChatModel(BaseChatModel):
             if "roleplay" in text.lower():
                 return "Start diner roleplay as a skeptical guest who ordered the ribeye."
             return "Deliver today's pairing briefing, wine-knowledge lesson, and the floor quiz."
+        if specialist == "compliance-auditor":
+            lowered = text.lower()
+            if "storage" in lowered or "zone" in lowered or "excursion" in lowered:
+                return "Report storage zone conditions. Read only."
+            if "gap" in lowered or "missing invoice" in lowered:
+                return "Find compliance gaps: missing invoices and hash-chain integrity. Read only."
+            start, end = _audit_dates(text)
+            return f"Summarize the audit pack from {start} to {end}. Read only."
         if specialist == "supplier-scheduler":
             if any(k in text.lower() for k in ("schedule", "book", "set up", "hold")):
                 return (
@@ -345,6 +370,19 @@ class DemoChatModel(BaseChatModel):
                 return _ai([_call("get_training_briefing", {})])
             return finish("Training surfaces ready: briefing, quiz, and roleplay opener.")
 
+        if role == "compliance-auditor":
+            lowered = text.lower()
+            if "audit pack" in lowered and "get_audit_pack_summary" not in done:
+                start, end = _audit_dates(text)
+                return _ai([_call("get_audit_pack_summary", {"start_date": start, "end_date": end})])
+            if ("compliance gap" in lowered or "missing invoice" in lowered or "hash-chain" in lowered) and "find_compliance_gaps" not in done:
+                return _ai([_call("find_compliance_gaps", {})])
+            if ("storage zone" in lowered or "zone condition" in lowered) and "get_storage_zones_status" not in done:
+                return _ai([_call("get_storage_zones_status", {})])
+            if "get_audit_pack_summary" not in done and "find_compliance_gaps" not in done and "get_storage_zones_status" not in done:
+                return _ai([_call("find_compliance_gaps", {})])
+            return finish("Compliance review is read-only. Nothing was changed.")
+
         if role == "supplier-scheduler":
             if any(k in text.lower() for k in ("schedule", "book", "set up", "hold", "new loire")) and "schedule_tasting" not in done:
                 return _ai(
@@ -365,6 +403,16 @@ class DemoChatModel(BaseChatModel):
             return finish("Supplier tasting is a draft only. .ics is attached; nothing was sent.")
 
         return finish("Done.")
+
+
+def _audit_dates(text: str) -> tuple[str, str]:
+    from datetime import date, timedelta
+
+    found = re.findall(r"\d{4}-\d{2}-\d{2}", text or "")
+    today = date.today()
+    start = found[0] if found else (today - timedelta(days=365)).isoformat()
+    end = found[1] if len(found) > 1 else today.isoformat()
+    return start, end
 
 
 def _extract_budget(text: str) -> float:

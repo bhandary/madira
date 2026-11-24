@@ -33,6 +33,9 @@ class Capability(str, Enum):
     PO_WRITE = "po_write"
     # Approve or reject a purchase order. Owner only, at every amount.
     PO_DECIDE = "po_decide"
+    # Preview and download an audit pack, and read the gap report.
+    # Auditor stays read-only: exporting writes an internal audit event, not a business record.
+    AUDIT_PACK = "audit_pack"
 
 
 MATRIX: dict[Capability, frozenset[str]] = {
@@ -49,6 +52,7 @@ MATRIX: dict[Capability, frozenset[str]] = {
     Capability.PO_READ: frozenset({OWNER, SOMMELIER, MANAGER, AUDITOR}),
     Capability.PO_WRITE: frozenset({OWNER, SOMMELIER, MANAGER}),
     Capability.PO_DECIDE: frozenset({OWNER}),
+    Capability.AUDIT_PACK: frozenset({OWNER, MANAGER, AUDITOR}),
 }
 
 

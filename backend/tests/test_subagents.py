@@ -36,6 +36,7 @@ def test_specialist_specs_cover_the_floor():
         "inventory-purchasing",
         "staff-trainer",
         "supplier-scheduler",
+        "compliance-auditor",
     }
     for spec in specialist_specs():
         assert spec["tools"], spec["name"]

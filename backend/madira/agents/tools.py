@@ -28,6 +28,7 @@ from madira.domain.procurement.orders import OrderError
 from madira.domain.procurement.receiving import ReceivingError
 from madira.domain.purchasing import service as purchasing_service
 from madira.domain.training import service as training_service
+from madira.domain.session import session_scope
 from madira.tenancy import active_venue_id, current_request
 
 
@@ -257,6 +258,52 @@ def schedule_tasting(
     return _dumps(body)
 
 
+def _pack_dates(start_date: str, end_date: str) -> tuple[str, str]:
+    from datetime import date, timedelta
+
+    today = date.today()
+    start = (start_date or "").strip() or (today - timedelta(days=365)).isoformat()
+    end = (end_date or "").strip() or today.isoformat()
+    return start, end
+
+
+def get_audit_pack_summary(start_date: str = "", end_date: str = "") -> str:
+    """Read the audit-pack summary for a date range. Does not export or change records."""
+    from madira.domain.compliance.audit_pack import Rejected, build_audit_pack, parse_day
+
+    start, end = _pack_dates(start_date, end_date)
+    try:
+        with session_scope() as session:
+            payload = build_audit_pack(session, _vid(), parse_day(start), parse_day(end), _actor())
+    except (Rejected, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "audit pack failed")})
+    tracker.complete_delegation("compliance-auditor")
+    return _dumps(payload)
+
+
+def find_compliance_gaps() -> str:
+    """Find missing invoices, hash-chain status, and open storage excursions. Read only."""
+    from madira.domain.compliance.audit_pack import compliance_gaps
+
+    with session_scope() as session:
+        payload = compliance_gaps(session, _vid())
+    tracker.complete_delegation("compliance-auditor")
+    return _dumps(payload)
+
+
+def get_storage_zones_status() -> str:
+    """Return storage zones with ZoneConditionCard surfaces. Read only."""
+    from madira.agents.presenters.compliance import with_zones
+    from madira.domain.inventory.storage import list_storage_zones
+
+    with session_scope() as session:
+        zones = list_storage_zones(session, _vid())
+    body = with_zones(zones)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("compliance-auditor")
+    return _dumps(body)
+
+
 MENU_ANALYST_TOOLS = [parse_menu]
 PAIRING_TOOLS = [recommend_pairings, draft_tasting_note]
 LIST_TOOLS = [curate_beverage_list]
@@ -272,6 +319,7 @@ INVENTORY_TOOLS = [
 ]
 TRAINING_TOOLS = [get_training_briefing, grade_quiz, start_roleplay]
 SUPPLIER_TOOLS = [list_tastings, schedule_tasting]
+COMPLIANCE_TOOLS = [get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status]
 
 ALL_TOOLS = (
     MENU_ANALYST_TOOLS
@@ -280,4 +328,5 @@ ALL_TOOLS = (
     + INVENTORY_TOOLS
     + TRAINING_TOOLS
     + SUPPLIER_TOOLS
+    + COMPLIANCE_TOOLS
 )

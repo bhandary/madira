@@ -10,6 +10,7 @@ import { countSheetProps } from "./countSheetSchema";
 import { dishReviewProps } from "./dishReviewSchema";
 import { pairingGridProps } from "./pairingGridSchema";
 import { varianceReportProps } from "./varianceReportSchema";
+import { zoneConditionCardProps } from "./zoneConditionCardSchema";
 import { MADIRA_CATALOG_ID, catalogDefinitions } from "./definitions";
 
 /**
@@ -52,7 +53,9 @@ const definitions = Object.fromEntries(
                     ? approvalCardProps.describe(def.description)
                     : name === "ReceivingChecklist"
                       ? receivingChecklistProps.describe(def.description)
-                      : schemaFor(def.props).describe(def.description),
+                      : name === "ZoneConditionCard"
+                        ? zoneConditionCardProps.describe(def.description)
+                        : schemaFor(def.props).describe(def.description),
     },
   ]),
 );

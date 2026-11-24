@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { AuditPackExport } from "@/components/AuditPackExport";
 import { AuditTable, ChainBadge } from "@/components/AuditTable";
 import {
   ApiError,
@@ -250,6 +251,8 @@ export default function RecordsPage() {
           {loaded && documents.length === 0 ? <li className="text-sm text-muted">No documents filed yet.</li> : null}
         </ul>
       </section>
+
+      <AuditPackExport />
 
       <section className="mt-8" aria-labelledby="retention-heading">
         <h2 id="retention-heading" className="text-lg font-medium">

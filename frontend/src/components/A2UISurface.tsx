@@ -10,6 +10,8 @@ import { asReview, DishReview } from "@/components/DishReview";
 import { asPairings, PairingGrid } from "@/components/PairingGrid";
 import { asCard, asNote, ServiceCard, TastingNoteCard } from "@/components/TastingNotes";
 import { VarianceReport } from "@/components/VarianceReport";
+import { ZoneConditionCard } from "@/components/ZoneConditionCard";
+import type { StorageZone } from "@/lib/api";
 
 function money(n: unknown, currency?: unknown) {
   const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
@@ -333,6 +335,11 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
         lines={Array.isArray(p.lines) ? (p.lines as ReceivingLineView[]) : null}
       />
     );
+  },
+  ZoneConditionCard: (p) => {
+    const zone = p.zone as StorageZone | undefined;
+    if (!zone || typeof zone !== "object" || !zone.id) return null;
+    return <ZoneConditionCard zone={zone} />;
   },
 };
 
