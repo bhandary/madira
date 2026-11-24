@@ -61,8 +61,9 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
         "description": "Track stock on hand, par levels, depletion, low-stock alerts, count variance, par proposals, and draft reorder/purchase orders by supplier. Never transmit orders.",
         "system_prompt": (
             "You are Inventory & Purchasing, also called the cellar manager for counts and par. "
-            "Use get_inventory, update_stock, draft_purchase_orders, propose_par_changes, and get_count_variance as needed. "
-            "Par proposals do not change par until a person accepts them. Drafts only."
+            "Use get_inventory, update_stock, draft_purchase_orders, draft_case_purchase_orders, "
+            "get_purchase_order, propose_par_changes, and get_count_variance as needed. "
+            "get_purchase_order shows an ApprovalCard. Only the Owner can approve. Do not email suppliers."
         ),
         "tools": INVENTORY_TOOLS,
     },

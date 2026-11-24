@@ -5,6 +5,7 @@ const routes = [
   ["/menu", "Menu & pairings"],
   ["/list", "List curation"],
   ["/inventory", "Inventory & purchasing"],
+  ["/purchasing", "Purchasing"],
   ["/training", "Staff training"],
   ["/suppliers", "Supplier tastings"],
   ["/records", "Records"],

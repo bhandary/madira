@@ -82,4 +82,11 @@ export const catalogDefinitions = {
       report: "session, variance lines, and conflict readings",
     },
   },
+  ApprovalCard: {
+    description: "Owner approval for a purchase order, with comment, approve, and reject.",
+    props: {
+      purchaseOrder: "purchase order number, supplier, totals, and delivery date",
+      approval: "pending, approved, or rejected owner decision",
+    },
+  },
 };

@@ -462,16 +462,42 @@ class ListItem(Base):
 
 class Supplier(Base):
     __tablename__ = "suppliers"
+    __table_args__ = (UniqueConstraint("venue_id", "name", name="uq_suppliers_venue_name"),)
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     name: Mapped[str] = mapped_column(String(200))
     kind: Mapped[str] = mapped_column(String(64), default="distributor")
     contact_email: Mapped[str] = mapped_column(String(200), default="")
+    account_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    order_minimum_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    default_case_size: Mapped[int] = mapped_column(Integer, default=12, server_default=text("12"))
+    delivery_days: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False, server_default=text("'[]'")
+    )
+    lead_time_days: Mapped[int] = mapped_column(Integer, default=7, server_default=text("7"))
+    payment_terms: Mapped[str | None] = mapped_column(String(80), nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = _stamp()
+    contacts: Mapped[list[SupplierContact]] = relationship(back_populates="supplier", cascade="all, delete-orphan")
     items: Mapped[list[InventoryItem]] = relationship(back_populates="supplier")
     orders: Mapped[list[PurchaseOrder]] = relationship(back_populates="supplier")
     tastings: Mapped[list[Tasting]] = relationship(back_populates="supplier")
+
+
+class SupplierContact(Base):
+    __tablename__ = "supplier_contacts"
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id", index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    role: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    email: Mapped[str] = mapped_column(String(320))
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+    created_at: Mapped[datetime] = _stamp()
+    supplier: Mapped[Supplier] = relationship(back_populates="contacts")
 
 
 LOCATION_KINDS = ("cellar", "bar", "walk_in", "storage", "other")
@@ -672,31 +698,100 @@ class ParProposal(Base):
     created_at: Mapped[datetime] = _stamp()
 
 
+PO_STATUSES = (
+    "draft",
+    "approved",
+    "sent",
+    "part_received",
+    "received",
+    "closed",
+    "canceled",
+)
+
+
 class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "po_number", name="uq_purchase_orders_venue_number"),
+        CheckConstraint(
+            "status IN ('draft', 'approved', 'sent', 'part_received', 'received', 'closed', 'canceled')",
+            name="ck_purchase_orders_status",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
-    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id")
+    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id", index=True)
+    po_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="draft")
+    expected_delivery_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    subtotal_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    order_minimum_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    minimum_met: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
+    pdf_document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    sent_via: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    delivery_adapter_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
     created_at: Mapped[datetime] = _stamp()
+    updated_at: Mapped[datetime] = _stamp()
     supplier: Mapped[Supplier] = relationship(back_populates="orders")
     lines: Mapped[list[POLine]] = relationship(back_populates="purchase_order", cascade="all, delete-orphan")
 
 
 class POLine(Base):
+    """A line on a purchase order. ``po_id`` is the purchase order foreign key.
+
+    ``qty`` and ``unit_cost`` stay for the original reorder draft. Case-rounded
+    orders also fill ``cases_ordered``, ``quantity_ordered``, and the cent totals.
+    """
+
     __tablename__ = "po_lines"
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
-    po_id: Mapped[uuid.UUID] = _fk("purchase_orders.id")
-    sku: Mapped[str] = mapped_column(String(64))
+    po_id: Mapped[uuid.UUID] = _fk("purchase_orders.id", index=True)
+    sku: Mapped[str] = mapped_column(String(64), index=True)
+    sku_id: Mapped[uuid.UUID | None] = _fk("skus.id", nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
+    product_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     qty: Mapped[int] = mapped_column(Integer, default=1)
+    case_size: Mapped[int] = mapped_column(Integer, default=12, server_default=text("12"))
+    cases_ordered: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    quantity_ordered: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"), server_default=text("0"))
+    quantity_received: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"), server_default=text("0"))
     unit_cost: Mapped[int] = mapped_column(Integer, default=0)
+    unit_cost_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    line_total_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     currency: Mapped[str] = _currency()
+    vintage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     purchase_order: Mapped[PurchaseOrder] = relationship(back_populates="lines")
+
+
+class Approval(Base):
+    """A decision on a venue record. Purchase orders require the Owner."""
+
+    __tablename__ = "approvals"
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('pending', 'approved', 'rejected')",
+            name="ck_approvals_decision",
+        ),
+        Index("ix_approvals_entity", "venue_id", "entity_type", "entity_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    entity_type: Mapped[str] = mapped_column(String(80))
+    entity_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
+    decision: Mapped[str] = mapped_column(String(32), default="pending", server_default=text("'pending'"))
+    required_role: Mapped[str] = mapped_column(String(32), default="owner", server_default=text("'owner'"))
+    decided_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
 
 
 class Lesson(Base):
@@ -789,7 +884,7 @@ class User(Base):
     last_login_at: Mapped[datetime] = _stamp()
 
 
-DOC_TYPES = ("invoice", "po_pdf", "delivery_note", "license", "certificate", "other")
+DOC_TYPES = ("invoice", "po_pdf", "purchase_order", "delivery_note", "license", "certificate", "other")
 
 
 class AuditEvent(Base):
@@ -824,7 +919,7 @@ class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (
         CheckConstraint(
-            "doc_type IN ('invoice', 'po_pdf', 'delivery_note', 'license', 'certificate', 'other')",
+            "doc_type IN ('invoice', 'po_pdf', 'purchase_order', 'delivery_note', 'license', 'certificate', 'other')",
             name="ck_documents_doc_type",
         ),
         Index("ix_documents_venue_created", "venue_id", "created_at"),

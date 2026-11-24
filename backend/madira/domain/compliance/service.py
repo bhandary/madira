@@ -327,7 +327,9 @@ def _filename(value: str) -> str:
 def _doc_type(value: str) -> str:
     cleaned = (value or "").strip().lower()
     if cleaned not in DOC_TYPES:
-        raise Rejected("doc_type must be invoice, po_pdf, delivery_note, license, certificate, or other.")
+        raise Rejected(
+            "doc_type must be invoice, po_pdf, purchase_order, delivery_note, license, certificate, or other."
+        )
     return cleaned
 
 

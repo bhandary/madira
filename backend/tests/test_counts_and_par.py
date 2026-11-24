@@ -525,7 +525,7 @@ from alembic import command
 from madira.db import _alembic_config
 
 cfg = _alembic_config()
-command.upgrade(cfg, "head")
+command.upgrade(cfg, "0011_counts_and_par")
 engine = sa.create_engine(os.environ["DATABASE_URL"])
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
@@ -544,7 +544,7 @@ with engine.connect() as conn:
     assert "count_sessions" not in tables
     assert "par_proposals" not in tables
     assert "stock_movements" in tables
-command.upgrade(cfg, "head")
+command.upgrade(cfg, "0011_counts_and_par")
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
     assert version == "0011_counts_and_par"

@@ -11,6 +11,7 @@ const SIDEBAR = [
   { href: "/menu", label: "Menu & pairings" },
   { href: "/list", label: "List curation" },
   { href: "/inventory", label: "Inventory" },
+  { href: "/purchasing", label: "Purchasing" },
   { href: "/inventory/count", label: "Phone count" },
   { href: "/training", label: "Staff training" },
   { href: "/suppliers", label: "Supplier tastings" },
@@ -27,6 +28,7 @@ const TABS = [
 ] as const;
 
 const MORE = [
+  { href: "/purchasing", label: "Purchasing" },
   { href: "/inventory/count", label: "Phone count" },
   { href: "/suppliers", label: "Supplier tastings" },
   { href: "/records", label: "Records" },
@@ -114,7 +116,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const moreOpen = openPath === pathname;
   const [status, setStatus] = useState<{ demo_mode?: boolean; label?: string; llm_model?: string } | null>(null);
   const { user, signOut } = useAccount();
-  const moreCurrent = pathname === "/suppliers" || pathname === "/records" || pathname === "/settings" || pathname === "/login";
+  const moreCurrent =
+    pathname === "/purchasing" ||
+    pathname === "/suppliers" ||
+    pathname === "/records" ||
+    pathname === "/settings" ||
+    pathname === "/login";
 
   useEffect(() => {
     let cancelled = false;

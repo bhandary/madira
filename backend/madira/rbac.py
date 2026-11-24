@@ -1,7 +1,8 @@
 """Role checks for the section 8 capability matrix.
 
-Sommelier approval is not spend-limited yet: there is no limit to enforce, so
-Sommelier may draft purchase orders. A later purchasing change can add the cap.
+Every purchase order needs an Owner decision. There is no spend threshold and
+no auto-approve. Sommelier may still draft on the original reorder route.
+Approve and reject on the lifecycle routes use PO_DECIDE, which is Owner only.
 """
 
 from __future__ import annotations
@@ -26,6 +27,12 @@ class Capability(str, Enum):
     RECORDS_WRITE = "records_write"
     SETTINGS = "settings"
     AGENT = "agent"
+    # Read suppliers and purchase orders. Staff is not included.
+    PO_READ = "po_read"
+    # Draft, send, close, and cancel. Not approve.
+    PO_WRITE = "po_write"
+    # Approve or reject a purchase order. Owner only, at every amount.
+    PO_DECIDE = "po_decide"
 
 
 MATRIX: dict[Capability, frozenset[str]] = {
@@ -39,6 +46,9 @@ MATRIX: dict[Capability, frozenset[str]] = {
     Capability.RECORDS_WRITE: frozenset({OWNER, SOMMELIER}),
     Capability.SETTINGS: frozenset({OWNER}),
     Capability.AGENT: frozenset({OWNER, SOMMELIER, MANAGER, STAFF}),
+    Capability.PO_READ: frozenset({OWNER, SOMMELIER, MANAGER, AUDITOR}),
+    Capability.PO_WRITE: frozenset({OWNER, SOMMELIER, MANAGER}),
+    Capability.PO_DECIDE: frozenset({OWNER}),
 }
 
 
