@@ -53,8 +53,12 @@ export const catalogDefinitions = {
     props: { orders: "array" },
   },
   QuizCard: {
-    description: "Training quiz with scoring.",
+    description: "Training quiz. The score and the next review date come from the quiz service.",
     props: { quiz: "object" },
+  },
+  LessonCard: {
+    description: "One role lesson. Approve and edit are for authors. Citations are standards and bottles, never prices.",
+    props: { lesson: "object" },
   },
   LessonCards: {
     description: "Staff lessons and daily briefing.",

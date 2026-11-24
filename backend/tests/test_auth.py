@@ -27,13 +27,17 @@ from madira.models import (
     CountSession,
     Document,
     Invoice,
+    Lesson,
     Membership,
     MenuVersion,
     ParProposal,
     PurchaseOrder,
+    QuizAttempt,
+    QuizReview,
     Receipt,
     ReceiptLine,
     ServiceCard,
+    Standard,
     TastingNote,
     User,
 )
@@ -120,6 +124,14 @@ def _wipe() -> None:
             session.execute(text("UPDATE condition_readings SET recorded_by_user_id = NULL"))
         if bind is not None and inspect(bind).has_table("condition_excursions"):
             session.execute(text("UPDATE condition_excursions SET acknowledged_by_user_id = NULL"))
+        if bind is not None and inspect(bind).has_table("quiz_reviews"):
+            session.execute(delete(QuizReview))
+        if bind is not None and inspect(bind).has_table("standards"):
+            session.execute(update(Standard).values(updated_by_user_id=None))
+        if bind is not None and inspect(bind).has_table("lessons"):
+            session.execute(update(Lesson).values(approved_by=None))
+        if bind is not None and inspect(bind).has_table("quiz_attempts"):
+            session.execute(update(QuizAttempt).values(user_id=None))
         session.execute(delete(User))
         session.commit()
     finally:
@@ -170,10 +182,11 @@ def _load(sub: str = "google-sub-1"):
 
 
 def _count() -> int:
+    seeded = {DEMO_USER_SUB, "madira-demo-ana", "madira-demo-ben", "madira-demo-mia"}
     session = SessionLocal()
     try:
         return int(
-            session.scalar(select(func.count()).select_from(User).where(User.google_sub != DEMO_USER_SUB)) or 0
+            session.scalar(select(func.count()).select_from(User).where(User.google_sub.not_in(seeded))) or 0
         )
     finally:
         session.close()

@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getAccount, notifyAuthChanged, signOutAccount, type Account } from "@/lib/api";
+import { getAccount, getDemoPersonas, notifyAuthChanged, setDemoPersona, signOutAccount, type Account, type DemoPersona } from "@/lib/api";
 
 export function useAccount() {
   const [user, setUser] = useState<Account | null | undefined>(undefined);
@@ -80,6 +80,41 @@ function Avatar({ user }: { user: Account }) {
   );
 }
 
+function PersonaSwitch() {
+  const [personas, setPersonas] = useState<DemoPersona[]>([]);
+  const [active, setActive] = useState("");
+
+  useEffect(() => {
+    void getDemoPersonas().then((payload) => {
+      if (!payload) return;
+      setPersonas(payload.personas);
+      setActive(payload.active);
+    });
+  }, []);
+
+  if (personas.length === 0) return null;
+
+  return (
+    <div className="mt-3 space-y-2" data-testid="persona-switch">
+      <p className="text-[11px] uppercase tracking-wide text-muted">Demo floor</p>
+      {personas.map((persona) => (
+        <button
+          key={persona.slug}
+          type="button"
+          data-testid={`persona-${persona.slug}`}
+          aria-pressed={active === persona.slug}
+          className="btn btn-segment w-full text-left"
+          onClick={() => {
+            void setDemoPersona(persona.slug).then(() => window.location.reload());
+          }}
+        >
+          {persona.name} · {persona.role}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function AccountMenu({
   user,
   onSignOut,
@@ -100,6 +135,7 @@ export function AccountMenu({
         >
           Sign in
         </Link>
+        <PersonaSwitch />
       </div>
     );
   }
@@ -118,6 +154,7 @@ export function AccountMenu({
       <button type="button" className="btn btn-secondary mt-2 w-full" data-testid="sign-out" onClick={onSignOut}>
         Sign out
       </button>
+      <PersonaSwitch />
     </div>
   );
 }

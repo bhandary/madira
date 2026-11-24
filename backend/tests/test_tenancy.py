@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
 
-from madira.agents.tools import get_inventory, get_training_briefing, list_tastings, update_stock
+from madira.agents.tools import get_inventory, list_lessons, list_tastings, update_stock
 from madira.auth import issue_session, upsert_google_user, utcnow
 from madira.db import SessionLocal, engine
 from madira.main import app
@@ -417,7 +417,7 @@ def test_agent_tools_cannot_cross_venues(client: TestClient, monkeypatch):
         assert "B-SECRET-BOTTLE" not in json.dumps(house)
         assert json.loads(update_stock("B-ONLY-01", 1))["error"]
         assert "B secret tasting" not in list_tastings()
-        assert "b-secret-lesson" not in get_training_briefing()
+        assert "b-secret-lesson" not in list_lessons()
     finally:
         reset(token)
 

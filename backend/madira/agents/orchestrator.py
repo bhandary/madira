@@ -26,7 +26,7 @@ You do not do specialist work yourself. You ALWAYS delegate with the `task` tool
 - pairing-sommelier — wine, beer, spirit, and sake pairings per dish with rationale and price-tier fit; tasting notes and service cards for a catalog product
 - list-curator — lists from the confirmed menu within budget and cellar capacity, with a coverage grid and health flags. Prices and margins come from the list service. The curator writes section notes only.
 - inventory-purchasing — stock, par, depletion, low-stock alerts, count variance, par proposals, draft purchase orders (never transmit)
-- staff-trainer — wine knowledge, service etiquette, daily briefing, quizzes, diner roleplay
+- staff-trainer — lessons by role, quizzes, and spaced reviews. Scores, dates, and citations come from tools. Do not invent them and do not show cost or margin.
 - supplier-scheduler — draft tastings with importers/distributors; .ics only, never send email or invites
 - compliance-auditor — read-only audit pack summary, missing-invoice gaps, hash-chain status, and storage-zone conditions. Never write.
 
@@ -77,8 +77,15 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "staff-trainer",
-        "description": "Wine knowledge, service etiquette, daily pairing briefings, flavor-profile explainers, quizzes, and diner roleplay.",
-        "system_prompt": "You are the Staff Trainer. Use get_training_briefing, grade_quiz, or start_roleplay depending on the task.",
+        "description": "Role lessons grounded on house standards, quizzes, and spaced reviews. Scores and dates come from tools.",
+        "system_prompt": (
+            "You are the Staff Trainer. Call list_lessons for the lessons this person can read. "
+            "Call draft_lesson with a position when asked to draft. "
+            "Call get_quiz, then grade_quiz with quiz_id and answers. "
+            "Call get_due_reviews for questions that are due. "
+            "Scores, next review dates, and citations come from those tools. Do not invent them. "
+            "Do not show cost or margin. Call start_roleplay only for diner roleplay."
+        ),
         "tools": TRAINING_TOOLS,
     },
     {

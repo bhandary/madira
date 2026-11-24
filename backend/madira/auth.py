@@ -26,8 +26,9 @@ from typing import Any
 from urllib.parse import urlencode, urlparse
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel
 from joserfc import jwt
 from joserfc.errors import InvalidKeyIdError, MissingKeyError
 from joserfc.jwk import KeySet
@@ -479,11 +480,47 @@ def auth_me(request: Request) -> JSONResponse:
     return _no_store(JSONResponse({"user": user_from_session(request.cookies.get(SESSION_COOKIE))}))
 
 
+class PersonaBody(BaseModel):
+    slug: str
+
+
+@router.get("/auth/demo-personas")
+def auth_demo_personas(request: Request) -> JSONResponse:
+    from madira.tenancy import DEMO_PERSONA_COOKIE, demo_persona_catalog, demo_posture
+
+    if not demo_posture():
+        raise HTTPException(status_code=404, detail="Not found.")
+    catalog = demo_persona_catalog()
+    known = {row["slug"] for row in catalog}
+    slug = (request.cookies.get(DEMO_PERSONA_COOKIE) or "owner").strip().lower()
+    if slug not in known:
+        slug = "owner"
+    return _no_store(JSONResponse({"active": slug, "personas": catalog}))
+
+
+@router.post("/auth/demo-persona")
+def auth_demo_persona(body: PersonaBody) -> JSONResponse:
+    from madira.tenancy import DEMO_PERSONA_COOKIE, demo_persona_catalog, demo_posture
+
+    if not demo_posture():
+        raise HTTPException(status_code=404, detail="Not found.")
+    slug = body.slug.strip().lower()
+    catalog = {row["slug"]: row for row in demo_persona_catalog()}
+    if slug not in catalog:
+        raise HTTPException(status_code=404, detail="Not found.")
+    response = JSONResponse(catalog[slug])
+    _set_cookie(response, DEMO_PERSONA_COOKIE, slug, SESSION_TTL)
+    return _no_store(response)
+
+
 @router.post("/auth/logout")
 def auth_logout() -> JSONResponse:
+    from madira.tenancy import DEMO_PERSONA_COOKIE
+
     response = JSONResponse({"ok": True})
     _clear_cookie(response, SESSION_COOKIE)
     _clear_cookie(response, OIDC_COOKIE)
+    _clear_cookie(response, DEMO_PERSONA_COOKIE)
     return _no_store(response)
 
 

@@ -1,6 +1,10 @@
 "use client";
 
+import type { LessonPayload } from "@/a2ui/lessonCardSchema";
+import type { QuizPayload } from "@/a2ui/quizCardSchema";
 import { ApprovalCard } from "@/components/ApprovalCard";
+import { LessonCard } from "@/components/LessonCard";
+import { QuizCard } from "@/components/QuizCard";
 import type { ApprovalPurchaseOrder, ApprovalRecord } from "@/components/ApprovalCard";
 import { ReceivingChecklist } from "@/components/ReceivingChecklist";
 import type { ReceivingLineView, ReceivingOrder, ReceivingReceiptView } from "@/components/ReceivingChecklist";
@@ -186,42 +190,6 @@ function PurchaseOrderTable({ orders }: { orders: unknown }) {
   );
 }
 
-function QuizCard({ quiz }: { quiz: unknown }) {
-  const q = (quiz || {}) as Record<string, unknown>;
-  const questions = (q.questions as Record<string, unknown>[]) || [];
-  const review = (q.review as Record<string, unknown>[]) || [];
-  return (
-    <div className="panel p-3" data-testid="quiz-card">
-      <h3 className="text-base font-medium">{String(q.title || "Quiz")}</h3>
-      {q.score != null && (
-        <p className="mt-1 text-sm" data-testid="quiz-score">
-          Score {String(q.score)}% ({String(q.correct)}/{String(q.total)})
-        </p>
-      )}
-      <ol className="mt-3 space-y-3">
-        {questions.map((item, i) => (
-          <li key={i}>
-            <div className="text-sm font-medium">{String(item.prompt)}</div>
-            <ul className="mt-1 text-sm text-muted">
-              {((item.choices as string[]) || []).map((c, idx) => (
-                <li key={idx}>
-                  {idx}. {c}
-                </li>
-              ))}
-            </ul>
-            {review[i] && (
-              <p className="mt-1 text-sm text-ok">
-                {review[i].ok ? "Correct. " : "Missed. "}
-                {String(review[i].explain)}
-              </p>
-            )}
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
-
 function LessonCards({ lessons }: { lessons: unknown }) {
   const list = Array.isArray(lessons) ? lessons : [];
   return (
@@ -317,7 +285,16 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
   InventoryTable: (p) => <InventoryTable items={p.items} />,
   StockAlerts: (p) => <StockAlerts alerts={p.alerts} />,
   PurchaseOrderTable: (p) => <PurchaseOrderTable orders={p.orders} />,
-  QuizCard: (p) => <QuizCard quiz={p.quiz} />,
+  QuizCard: (p) => {
+    const quiz = p.quiz as QuizPayload | undefined;
+    if (!quiz || typeof quiz !== "object" || !Array.isArray(quiz.questions)) return null;
+    return <QuizCard quiz={quiz} />;
+  },
+  LessonCard: (p) => {
+    const lesson = p.lesson as LessonPayload | undefined;
+    if (!lesson || typeof lesson !== "object" || typeof lesson.title !== "string") return null;
+    return <LessonCard lesson={lesson} />;
+  },
   LessonCards: (p) => <LessonCards lessons={p.lessons} />,
   ScheduleForm: (p) => <ScheduleForm draft={p.draft} />,
   TastingCalendar: (p) => <TastingCalendar tastings={p.tastings} />,

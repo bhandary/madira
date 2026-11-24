@@ -36,6 +36,10 @@ class Capability(str, Enum):
     # Preview and download an audit pack, and read the gap report.
     # Auditor stays read-only: exporting writes an internal audit event, not a business record.
     AUDIT_PACK = "audit_pack"
+    # Read approved lessons and take quizzes. Auditor is not included.
+    TRAINING_LEARN = "training_learn"
+    # Edit standards and draft or approve lessons. Owner and Sommelier.
+    TRAINING_AUTHOR = "training_author"
 
 
 MATRIX: dict[Capability, frozenset[str]] = {
@@ -53,6 +57,8 @@ MATRIX: dict[Capability, frozenset[str]] = {
     Capability.PO_WRITE: frozenset({OWNER, SOMMELIER, MANAGER}),
     Capability.PO_DECIDE: frozenset({OWNER}),
     Capability.AUDIT_PACK: frozenset({OWNER, MANAGER, AUDITOR}),
+    Capability.TRAINING_LEARN: frozenset({OWNER, SOMMELIER, MANAGER, STAFF}),
+    Capability.TRAINING_AUTHOR: frozenset({OWNER, SOMMELIER}),
 }
 
 

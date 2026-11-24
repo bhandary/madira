@@ -39,6 +39,7 @@ def seed(session: Session | None = None) -> None:
 
             ensure_demo_zones(session, venue_id)
             _ensure_list_pricing(session, venue_id)
+            _ensure_training_floor(session, venue_id, ctx.user_id)
             session.commit()
         finally:
             reset(token)
@@ -107,8 +108,20 @@ def _seed_demo_catalog(session: Session, venue_id) -> None:
                 unit=row.get("unit", "btl"),
             )
         )
+    positions = {
+        "waitstaff": "server",
+        "server": "server",
+        "bartender": "bartender",
+        "barback": "barback",
+        "host": "host",
+        "all": "all",
+    }
     for row in LESSONS:
-        lesson = Lesson(**row, venue_id=venue_id)
+        data = dict(row)
+        data["position"] = positions.get(str(data.get("role", "")).lower(), "all")
+        data["status"] = "approved"
+        data["source"] = "seed"
+        lesson = Lesson(**data, venue_id=venue_id)
         session.add(lesson)
         session.flush()
         if row["slug"] == "daily-briefing":
@@ -118,8 +131,58 @@ def _seed_demo_catalog(session: Session, venue_id) -> None:
                     lesson_id=lesson.id,
                     title=QUIZ["title"],
                     questions=QUIZ["questions"],
+                    status="approved",
+                    source="lesson",
                 )
             )
+
+
+_SERVICE_ROWS = (
+    {
+        "barcode": "W-MUS-01",
+        "glassware": "White wine glass",
+        "serving_temperature": "8–10°C",
+        "decanting": "No decant",
+        "pour_size": "150 ml",
+        "server_hook": "Lean and salty. It cuts shellfish and anything with lemon.",
+        "guest_description": "A coastal white that stays bright next to crab or a lemon sauce.",
+    },
+    {
+        "barcode": "W-BAR-01",
+        "glassware": "Bordeaux glass",
+        "serving_temperature": "16–18°C",
+        "decanting": "Decant 60–90 minutes",
+        "pour_size": "150 ml",
+        "server_hook": "Rose and tar. Give the decant the time on the card.",
+        "guest_description": "A firm red that wants time in the glass before the main course.",
+    },
+    {
+        "barcode": "W-CHA-01",
+        "glassware": "White wine glass",
+        "serving_temperature": "10–12°C",
+        "decanting": "No decant",
+        "pour_size": "150 ml",
+        "server_hook": "Chalk and green apple. Keep the glass cold.",
+        "guest_description": "A cool white with chalk and green apple.",
+    },
+    {
+        "barcode": "W-COT-01",
+        "glassware": "Burgundy glass",
+        "serving_temperature": "16–18°C",
+        "decanting": "Decant 30–60 minutes",
+        "pour_size": "150 ml",
+        "server_hook": "Olive, smoke, and bacon. Decant it before the main course.",
+        "guest_description": "A savory red of olive, smoke, and bacon.",
+    },
+)
+
+
+def _ensure_training_floor(session: Session, venue_id, actor_id) -> None:
+    from madira.domain.training.grounding import ensure_house_list
+    from madira.domain.training.standards import ensure_default_standards
+
+    ensure_default_standards(session, venue_id)
+    ensure_house_list(session, venue_id, actor_id, list(_SERVICE_ROWS))
 
 
 _PROFILES = {

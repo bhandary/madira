@@ -10,7 +10,9 @@ import { countSheetProps } from "./countSheetSchema";
 import { dishReviewProps } from "./dishReviewSchema";
 import { coverageGridProps } from "./coverageGridSchema";
 import { listEditorProps } from "./listEditorSchema";
+import { lessonCardProps } from "./lessonCardSchema";
 import { pairingGridProps } from "./pairingGridSchema";
+import { quizCardProps } from "./quizCardSchema";
 import { varianceReportProps } from "./varianceReportSchema";
 import { zoneConditionCardProps } from "./zoneConditionCardSchema";
 import { MADIRA_CATALOG_ID, catalogDefinitions } from "./definitions";
@@ -45,6 +47,10 @@ const definitions = Object.fromEntries(
           ? dishReviewProps.describe(def.description)
             : name === "PairingGrid"
             ? pairingGridProps.describe(def.description)
+            : name === "QuizCard"
+              ? quizCardProps.describe(def.description)
+              : name === "LessonCard"
+                ? lessonCardProps.describe(def.description)
             : name === "CoverageGrid"
               ? coverageGridProps.describe(def.description)
               : name === "ListEditor"

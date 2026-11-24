@@ -61,13 +61,21 @@ def run(live: bool) -> int:
         extraction, extract_problems = _score_extraction(ctx.venue_id, cases)
         pairing, pair_problems = _score_pairing(ctx.venue_id, cases, listed)
         curation, curation_problems = _score_curation(ctx.venue_id)
+        training, training_problems = _score_training(ctx.venue_id)
     finally:
         reset(token)
 
     _print_extraction(extraction)
     _print_pairing(pairing)
     _print_curation(curation)
-    problems = extract_problems + pair_problems + curation_problems + _threshold_problems(extraction, pairing)
+    _print_training(training)
+    problems = (
+        extract_problems
+        + pair_problems
+        + curation_problems
+        + training_problems
+        + _threshold_problems(extraction, pairing)
+    )
     if problems:
         print("result: fail")
         for line in problems:
@@ -82,15 +90,17 @@ def _forbid_fixtures() -> None:
         raise RuntimeError("live eval must not fall back to fixtures")
 
     import madira.agents.demo.menu as demo_menu
-    import madira.domain.menu.extract as extract
     import madira.domain.lists.copy as list_copy
+    import madira.domain.menu.extract as extract
     import madira.domain.pairing.copy as copy
+    import madira.domain.training.lessons as lessons
 
     demo_menu.extraction_json = boom
     demo_menu.known_payloads = boom
     extract.demo_complete = boom
     copy.demo_lines = boom
     list_copy.demo_complete = boom
+    lessons.demo_complete = boom
 
 
 def _cases() -> list[dict]:
@@ -550,6 +560,82 @@ def _score_curation(venue_id) -> tuple[dict, list[str]]:
         "spent": int(created.get("spent") or 0),
         "budget": int(created.get("budget") or 0),
     }, problems
+
+
+def _score_training(venue_id) -> tuple[dict, list[str]]:
+    """A drafted lesson may cite only house standards and on-list bottles.
+
+    Quiz answers have to match the service card or the catalog. The seeded
+    floor quiz is not part of this score.
+    """
+
+    from madira.domain.errors import DraftFailed
+    from madira.domain.session import session_scope
+    from madira.domain.training.grounding import ensure_floor_cards, on_list_facts
+    from madira.domain.training.lessons import draft_lesson, ungrounded_citations
+    from madira.domain.training.quizzes import from_list, inconsistent_answers
+    from madira.models import Lesson, Quiz
+    from madira.tenancy import current_request, ensure_demo_tenant
+
+    empty = {"lessons": 0, "ungrounded": 0, "questions": 0, "consistent": 0}
+    actor = current_request() or ensure_demo_tenant()
+    with session_scope() as session:
+        ensure_floor_cards(session, venue_id, actor.user_id)
+        session.commit()
+    try:
+        drafted = draft_lesson(venue_id, "server")
+    except DraftFailed as exc:
+        return empty, [exc.message]
+    problems = []
+    with session_scope() as session:
+        lesson = session.get(Lesson, drafted["id"])
+        ungrounded = ungrounded_citations(session, venue_id, lesson) if lesson is not None else 1
+        facts = on_list_facts(session, venue_id)
+        quiz = session.get(Quiz, drafted.get("quiz_id")) if drafted.get("quiz_id") else None
+        lesson_questions = list(quiz.questions or []) if quiz is not None else []
+    lesson_bad = inconsistent_answers(facts, lesson_questions)
+    if ungrounded:
+        problems.append(f"training lesson cites {ungrounded} unknown standards or bottles")
+    if not lesson_questions:
+        problems.append("training lesson quiz has no questions")
+    if lesson_bad:
+        problems.append(f"training lesson quiz has {lesson_bad} answers that disagree with the catalog")
+    try:
+        listed = from_list(venue_id)
+    except DraftFailed as exc:
+        problems.append(exc.message)
+        list_questions: list[dict] = []
+        list_bad = 0
+    else:
+        with session_scope() as session:
+            stored = session.get(Quiz, listed["id"])
+            list_questions = list(stored.questions or []) if stored is not None else []
+            facts = on_list_facts(session, venue_id)
+        list_bad = inconsistent_answers(facts, list_questions)
+        if not list_questions:
+            problems.append("list quiz has no questions")
+        if list_bad:
+            problems.append(f"list quiz has {list_bad} answers that disagree with the catalog")
+    questions = len(lesson_questions) + len(list_questions)
+    consistent = questions - lesson_bad - list_bad
+    if questions == 0:
+        problems.append("training quizzes produced no questions")
+    return {
+        "lessons": 1,
+        "ungrounded": ungrounded,
+        "questions": questions,
+        "consistent": consistent,
+    }, problems
+
+
+def _print_training(counts: dict) -> None:
+    print(
+        "training summary  "
+        f"lessons={counts['lessons']}  "
+        f"ungrounded={counts['ungrounded']}  "
+        f"questions={counts['questions']}  "
+        f"consistent={counts['consistent']}"
+    )
 
 
 def _print_curation(counts: dict) -> None:
