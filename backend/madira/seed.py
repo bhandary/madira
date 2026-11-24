@@ -15,7 +15,6 @@ def seed(session: Session | None = None) -> None:
         if session is None:
             init_db()
         return
-    from madira.agents.demo.fixtures import INVENTORY, LESSONS, QUIZ, SUPPLIERS
 
     own = False
     if session is None:
@@ -27,52 +26,60 @@ def seed(session: Session | None = None) -> None:
         venue_id = ctx.venue_id
         token = bind(ctx)
         try:
-            if session.scalar(select(Supplier.id).where(Supplier.venue_id == venue_id).limit(1)):
-                return
-            suppliers: dict[str, Supplier] = {}
-            for row in SUPPLIERS:
-                supplier = Supplier(**row, venue_id=venue_id)
-                session.add(supplier)
-                session.flush()
-                suppliers[supplier.name] = supplier
-            for row in INVENTORY:
-                supplier = suppliers[row["supplier"]]
-                stock = ensure_sku(
-                    session,
-                    venue_id,
-                    category=row["category"],
-                    name=row["name"],
-                    barcode=row["sku"],
-                    par=row["par"],
-                    cost=to_minor(row["unit_cost"]),
-                    currency=DEFAULT_CURRENCY,
-                )
-                session.add(
-                    InventoryItem(
-                        venue_id=venue_id,
-                        sku_id=stock.id,
-                        supplier_id=supplier.id,
-                        on_hand=row["on_hand"],
-                        depletion_30d=row["depletion_30d"],
-                        unit=row.get("unit", "btl"),
-                    )
-                )
-            for row in LESSONS:
-                lesson = Lesson(**row, venue_id=venue_id)
-                session.add(lesson)
-                session.flush()
-                if row["slug"] == "daily-briefing":
-                    session.add(
-                        Quiz(
-                            venue_id=venue_id,
-                            lesson_id=lesson.id,
-                            title=QUIZ["title"],
-                            questions=QUIZ["questions"],
-                        )
-                    )
+            if session.scalar(select(Supplier.id).where(Supplier.venue_id == venue_id).limit(1)) is None:
+                _seed_demo_catalog(session, venue_id)
+            from madira.domain.compliance.service import ensure_demo_records
+
+            ensure_demo_records(session, ctx)
             session.commit()
         finally:
             reset(token)
     finally:
         if own:
             session.close()
+
+
+def _seed_demo_catalog(session: Session, venue_id) -> None:
+    from madira.agents.demo.fixtures import INVENTORY, LESSONS, QUIZ, SUPPLIERS
+
+    suppliers: dict[str, Supplier] = {}
+    for row in SUPPLIERS:
+        supplier = Supplier(**row, venue_id=venue_id)
+        session.add(supplier)
+        session.flush()
+        suppliers[supplier.name] = supplier
+    for row in INVENTORY:
+        supplier = suppliers[row["supplier"]]
+        stock = ensure_sku(
+            session,
+            venue_id,
+            category=row["category"],
+            name=row["name"],
+            barcode=row["sku"],
+            par=row["par"],
+            cost=to_minor(row["unit_cost"]),
+            currency=DEFAULT_CURRENCY,
+        )
+        session.add(
+            InventoryItem(
+                venue_id=venue_id,
+                sku_id=stock.id,
+                supplier_id=supplier.id,
+                on_hand=row["on_hand"],
+                depletion_30d=row["depletion_30d"],
+                unit=row.get("unit", "btl"),
+            )
+        )
+    for row in LESSONS:
+        lesson = Lesson(**row, venue_id=venue_id)
+        session.add(lesson)
+        session.flush()
+        if row["slug"] == "daily-briefing":
+            session.add(
+                Quiz(
+                    venue_id=venue_id,
+                    lesson_id=lesson.id,
+                    title=QUIZ["title"],
+                    questions=QUIZ["questions"],
+                )
+            )

@@ -1,3 +1,5 @@
+import type { AuditChain, AuditEventRow } from "@/a2ui/auditTableSchema";
+
 export const API = "/madira-api";
 
 export async function getStatus() {
@@ -493,6 +495,76 @@ export function notifyAuthChanged() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("madira-auth"));
   }
+}
+
+export type { AuditChain, AuditEventRow };
+
+export type VaultDocument = {
+  id: string;
+  doc_type: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+  linked_entity_type: string;
+  linked_entity_id: string | null;
+  uploaded_by_user_id: string | null;
+  created_at: string;
+};
+
+export type RetentionPolicy = {
+  document_retention_years: number;
+  can_edit: boolean;
+};
+
+export async function getAuditEvents(filters?: {
+  entity_type?: string;
+  action?: string;
+}): Promise<{ events: AuditEventRow[]; chain: AuditChain }> {
+  const params = new URLSearchParams();
+  if (filters?.entity_type) params.set("entity_type", filters.entity_type);
+  if (filters?.action) params.set("action", filters.action);
+  const query = params.toString();
+  const res = await fetch(`${API}/compliance/audit-events${query ? `?${query}` : ""}`, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function listDocuments(): Promise<{ documents: VaultDocument[] }> {
+  const res = await fetch(`${API}/compliance/documents`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function uploadDocument(input: {
+  file: File;
+  doc_type: string;
+  linked_entity_type?: string;
+  linked_entity_id?: string;
+}): Promise<{ document: VaultDocument }> {
+  const body = new FormData();
+  body.set("file", input.file);
+  body.set("doc_type", input.doc_type);
+  if (input.linked_entity_type) body.set("linked_entity_type", input.linked_entity_type);
+  if (input.linked_entity_id) body.set("linked_entity_id", input.linked_entity_id);
+  const res = await fetch(`${API}/compliance/documents`, { method: "POST", body, credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getRetention(): Promise<RetentionPolicy> {
+  const res = await fetch(`${API}/compliance/retention`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function updateRetention(years: number): Promise<RetentionPolicy> {
+  const res = await fetch(`${API}/compliance/retention`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ document_retention_years: years }),
+  });
+  return readJson(res);
 }
 
 export async function deleteLlmSettings(): Promise<LlmSettings> {

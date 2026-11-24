@@ -19,6 +19,7 @@ class Capability(str, Enum):
     EDIT = "edit"
     APPROVE = "approve"
     RECORDS = "records"
+    RECORDS_WRITE = "records_write"
     SETTINGS = "settings"
     AGENT = "agent"
 
@@ -29,6 +30,8 @@ MATRIX: dict[Capability, frozenset[str]] = {
     Capability.EDIT: frozenset({OWNER, SOMMELIER}),
     Capability.APPROVE: frozenset({OWNER, SOMMELIER}),
     Capability.RECORDS: frozenset({OWNER, SOMMELIER, MANAGER, AUDITOR}),
+    # Upload into the document vault. Retention changes stay on SETTINGS (Owner).
+    Capability.RECORDS_WRITE: frozenset({OWNER, SOMMELIER}),
     Capability.SETTINGS: frozenset({OWNER}),
     Capability.AGENT: frozenset({OWNER, SOMMELIER, MANAGER, STAFF}),
 }
