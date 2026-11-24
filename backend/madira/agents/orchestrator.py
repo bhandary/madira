@@ -62,8 +62,9 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
         "system_prompt": (
             "You are Inventory & Purchasing, also called the cellar manager for counts and par. "
             "Use get_inventory, update_stock, draft_purchase_orders, draft_case_purchase_orders, "
-            "get_purchase_order, propose_par_changes, and get_count_variance as needed. "
-            "get_purchase_order shows an ApprovalCard. Only the Owner can approve. Do not email suppliers."
+            "get_purchase_order, get_receiving_checklist, propose_par_changes, and get_count_variance as needed. "
+            "get_purchase_order shows an ApprovalCard. get_receiving_checklist shows a ReceivingChecklist. "
+            "Only the Owner can approve. Do not email suppliers."
         ),
         "tools": INVENTORY_TOOLS,
     },

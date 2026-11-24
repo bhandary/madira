@@ -26,9 +26,13 @@ from madira.models import (
     CountLine,
     CountSession,
     Document,
+    Invoice,
     Membership,
     MenuVersion,
     ParProposal,
+    PurchaseOrder,
+    Receipt,
+    ReceiptLine,
     ServiceCard,
     TastingNote,
     User,
@@ -104,6 +108,10 @@ def _wipe() -> None:
         session.execute(delete(CountLine))
         session.execute(delete(CountSession))
         session.execute(delete(ParProposal))
+        session.execute(delete(ReceiptLine))
+        session.execute(delete(Receipt))
+        session.execute(delete(Invoice))
+        session.execute(update(PurchaseOrder).values(pdf_document_id=None))
         session.execute(delete(AuditEvent))
         session.execute(delete(Document))
         session.execute(delete(Approval))

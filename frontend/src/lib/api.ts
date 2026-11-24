@@ -709,6 +709,10 @@ async function errorMessage(res: Response): Promise<string> {
   try {
     const data = JSON.parse(text) as { detail?: unknown };
     if (typeof data.detail === "string" && data.detail) return data.detail;
+    if (data.detail && typeof data.detail === "object" && "message" in data.detail) {
+      const message = (data.detail as { message?: unknown }).message;
+      if (typeof message === "string" && message) return message;
+    }
   } catch {
     // The body was not JSON.
   }
@@ -1006,6 +1010,126 @@ export async function closePurchaseOrder(poId: string): Promise<PurchaseOrderRow
 
 export async function cancelPurchaseOrder(poId: string): Promise<PurchaseOrderRow> {
   const res = await fetch(`${API}/procurement/orders/${poId}/cancel`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export type InvoiceLine = {
+  sku: string;
+  product_name?: string;
+  quantity: number;
+  unit_cost_cents: number;
+  vintage?: string | null;
+  po_line_id?: string | null;
+};
+
+export type InvoiceRecord = {
+  id: string;
+  purchase_order_id: string | null;
+  invoice_number: string;
+  invoice_date: string;
+  subtotal_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  currency: string;
+  document_id: string;
+  filename: string;
+  sha256: string;
+  content_type: string;
+  extracted_lines: InvoiceLine[];
+  extraction_mode: string;
+  status: string;
+};
+
+export type ReceiptLineRecord = {
+  id: string;
+  po_line_id: string | null;
+  sku: string;
+  product_name: string;
+  ordered_qty: number;
+  invoiced_qty: number | null;
+  counted_qty: number;
+  ordered_unit_cost_cents: number;
+  invoiced_unit_cost_cents: number | null;
+  ordered_vintage: string | null;
+  received_vintage: string | null;
+  bin_id: string | null;
+  flags: string[];
+  resolution_note: string | null;
+  cost_delta_cents: number;
+};
+
+export type DiscrepancySummary = {
+  has_discrepancies: boolean;
+  counts: Record<string, number>;
+  cost_delta_cents: number;
+  lines: { sku: string; flags: string[]; cost_delta_cents: number }[];
+};
+
+export type ReceiptRecord = {
+  id: string;
+  purchase_order_id: string;
+  po_number: string | null;
+  supplier: string;
+  purchase_order_status: string | null;
+  invoice_id: string | null;
+  status: string;
+  discrepancy_summary: DiscrepancySummary;
+  notes: string | null;
+  lines: ReceiptLineRecord[];
+  a2ui_operations?: unknown[];
+};
+
+export async function uploadInvoice(
+  poId: string,
+  input: { file: File; invoice_number: string; invoice_date: string; tax_cents?: number; lines?: InvoiceLine[] },
+): Promise<InvoiceRecord> {
+  const body = new FormData();
+  body.set("file", input.file);
+  body.set("invoice_number", input.invoice_number);
+  body.set("invoice_date", input.invoice_date);
+  if (input.tax_cents != null) body.set("tax_cents", String(input.tax_cents));
+  if (input.lines) body.set("lines_json", JSON.stringify(input.lines));
+  const res = await fetch(`${API}/procurement/orders/${poId}/invoices`, {
+    method: "POST",
+    body,
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function stageReceipt(
+  poId: string,
+  input: {
+    invoice_id?: string | null;
+    notes?: string | null;
+    lines: {
+      po_line_id?: string | null;
+      sku: string;
+      counted_qty: number;
+      received_vintage?: string | null;
+      bin_id?: string | null;
+    }[];
+  },
+): Promise<ReceiptRecord> {
+  const res = await fetch(`${API}/procurement/orders/${poId}/receipts`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson(res);
+}
+
+export async function acceptReceipt(
+  receiptId: string,
+  input: { acknowledge_discrepancies: boolean; notes?: string | null },
+): Promise<ReceiptRecord> {
+  const res = await fetch(`${API}/procurement/receipts/${receiptId}/accept`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
   return readJson(res);
 }
 

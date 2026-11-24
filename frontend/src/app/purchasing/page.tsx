@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ApprovalCard } from "@/components/ApprovalCard";
+import { ReceivingChecklist } from "@/components/ReceivingChecklist";
 import {
   ApiError,
   addSupplierContact,
@@ -13,6 +14,8 @@ import {
   listLifecycleOrders,
   listProcurementSuppliers,
   sendPurchaseOrder,
+  uploadInvoice,
+  type InvoiceRecord,
   type PurchaseOrderRow,
   type SupplierRow,
 } from "@/lib/api";
@@ -64,6 +67,11 @@ export default function PurchasingPage() {
   const [draftName, setDraftName] = useState("Muscadet Domaine de l'Ecu");
   const [draftBottles, setDraftBottles] = useState("6");
   const [draftCost, setDraftCost] = useState("1800");
+  const [invoice, setInvoice] = useState<InvoiceRecord | null>(null);
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [invoiceCost, setInvoiceCost] = useState("");
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
 
   async function refresh(nextId?: string) {
     const [directory, ledger] = await Promise.all([listProcurementSuppliers(), listLifecycleOrders()]);
@@ -116,6 +124,7 @@ export default function PurchasingPage() {
   }, [selectedSupplier, draftBottles, draftCost]);
 
   const selected = orders.find((row) => row.id === selectedId) || null;
+  const receiving = selected?.status === "sent" || selected?.status === "part_received";
 
   async function run(task: () => Promise<void>) {
     setBusy(true);
@@ -414,7 +423,10 @@ export default function PurchasingPage() {
               data-testid="po-card"
               data-po={order.po_number || ""}
               data-status={order.status}
-              onClick={() => setSelectedId(order.id)}
+              onClick={() => {
+                setSelectedId(order.id);
+                setInvoice(null);
+              }}
             >
               <span className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-medium">{order.po_number}</span>
@@ -461,6 +473,124 @@ export default function PurchasingPage() {
                 </li>
               ))}
             </ul>
+            {selected && receiving ? (
+              <section className="min-w-0" data-testid="receive-delivery" aria-labelledby="receive-heading">
+                <h3 id="receive-heading" className="text-base font-medium">
+                  Receive delivery
+                </h3>
+                <form
+                  className="mt-3 grid gap-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!invoiceFile) {
+                      setError("Choose an invoice photo or PDF.");
+                      return;
+                    }
+                    const cost = invoiceCost.trim() ? Number(invoiceCost) : null;
+                    const lines =
+                      cost != null && Number.isFinite(cost)
+                        ? selected.lines.map((line) => ({
+                            sku: line.sku,
+                            product_name: line.product_name || line.name,
+                            quantity: line.quantity_ordered,
+                            unit_cost_cents: cost,
+                            vintage: line.vintage,
+                            po_line_id: line.id,
+                          }))
+                        : undefined;
+                    void run(async () => {
+                      const uploaded = await uploadInvoice(selected.id, {
+                        file: invoiceFile,
+                        invoice_number: invoiceNumber,
+                        invoice_date: invoiceDate,
+                        lines,
+                      });
+                      setInvoice(uploaded);
+                      setInvoiceFile(null);
+                    });
+                  }}
+                >
+                  <label className="lbl" htmlFor="invoice-number">
+                    Invoice number
+                    <input
+                      id="invoice-number"
+                      data-testid="invoice-number"
+                      className="field w-full"
+                      value={invoiceNumber}
+                      onChange={(event) => setInvoiceNumber(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label className="lbl" htmlFor="invoice-date">
+                    Invoice date
+                    <input
+                      id="invoice-date"
+                      data-testid="invoice-date"
+                      className="field w-full"
+                      type="date"
+                      value={invoiceDate}
+                      onChange={(event) => setInvoiceDate(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label className="lbl" htmlFor="invoice-cost">
+                    Invoice unit cost (cents)
+                    <input
+                      id="invoice-cost"
+                      data-testid="invoice-unit-cost"
+                      className="field w-full"
+                      inputMode="numeric"
+                      value={invoiceCost}
+                      onChange={(event) => setInvoiceCost(event.target.value)}
+                      placeholder="Leave blank to use the PO price"
+                    />
+                  </label>
+                  <label className="lbl" htmlFor="invoice-file">
+                    Invoice photo or PDF
+                    <input
+                      id="invoice-file"
+                      data-testid="invoice-file"
+                      className="field-file w-full"
+                      type="file"
+                      accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
+                      onChange={(event) => setInvoiceFile(event.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  <button type="submit" className="btn btn-secondary w-full" data-testid="invoice-upload" disabled={busy}>
+                    Upload invoice
+                  </button>
+                </form>
+                {invoice ? (
+                  <div className="mt-3 min-w-0" data-testid="invoice-lines">
+                    <p className="text-sm">
+                      {invoice.invoice_number} · {invoice.extraction_mode} · {invoice.status}
+                    </p>
+                    <a
+                      className="btn btn-secondary mt-2"
+                      data-testid="invoice-document"
+                      href={`/madira-api/procurement/invoices/${invoice.id}/document`}
+                    >
+                      View vaulted invoice
+                    </a>
+                    <ul className="mt-2 space-y-1 text-sm">
+                      {invoice.extracted_lines.map((line) => (
+                        <li key={`${line.sku}-${line.po_line_id || ""}`} className="break-words">
+                          <span className="font-mono">{line.sku}</span> · {line.quantity} @ {money(line.unit_cost_cents)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <div className="mt-4">
+                  <ReceivingChecklist
+                    key={`${selected.id}:${selected.status}:${invoice?.id || "none"}:${selected.lines.map((line) => line.quantity_received).join(",")}`}
+                    purchaseOrder={selected}
+                    invoice={invoice}
+                    onUpdated={() => void refresh(selected.id)}
+                  />
+                </div>
+              </section>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               {selected.status === "approved" ? (
                 <button
@@ -516,7 +646,7 @@ export default function PurchasingPage() {
                     })
                   }
                 >
-                  Close
+                  Close PO
                 </button>
               ) : null}
             </div>

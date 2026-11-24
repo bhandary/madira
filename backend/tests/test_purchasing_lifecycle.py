@@ -290,7 +290,7 @@ from alembic import command
 from madira.db import _alembic_config
 
 cfg = _alembic_config()
-command.upgrade(cfg, "head")
+command.upgrade(cfg, "0012_purchasing_lifecycle")
 engine = sa.create_engine(os.environ["DATABASE_URL"])
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
@@ -319,7 +319,7 @@ with engine.connect() as conn:
     assert "po_number" not in order_cols
     sql = conn.execute(sa.text("SELECT sql FROM sqlite_master WHERE name = 'documents'")).scalar_one()
     assert "purchase_order" not in sql
-command.upgrade(cfg, "head")
+command.upgrade(cfg, "0012_purchasing_lifecycle")
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
     assert version == "0012_purchasing_lifecycle"

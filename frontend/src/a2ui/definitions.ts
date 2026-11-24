@@ -89,4 +89,12 @@ export const catalogDefinitions = {
       approval: "pending, approved, or rejected owner decision",
     },
   },
+  ReceivingChecklist: {
+    description: "Counted delivery against a purchase order and invoice, with short, over, vintage, and price flags.",
+    props: {
+      purchaseOrder: "purchase order being received",
+      receipt: "staged receipt and discrepancy summary",
+      lines: "counted lines with ordered, invoiced, and received quantities",
+    },
+  },
 };
