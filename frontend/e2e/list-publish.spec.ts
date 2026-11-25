@@ -1,16 +1,13 @@
 import { expect, test } from "@playwright/test";
+import { curateFromMenu, waitForListDesk } from "./listDesk";
 
 test.use({ viewport: { width: 390, height: 844 } });
 
 test("the sommelier submits, the owner approves, and the QR page loads logged out", async ({ page, browser }) => {
   await page.request.post("/madira-api/auth/demo-persona", { data: { slug: "lea" } });
   await page.goto("/list");
-  await expect(page.getByRole("heading", { name: "List curation" })).toBeVisible();
-  const curated = page.waitForResponse(
-    (res) => res.url().includes("/lists/curate") && res.request().method() === "POST" && res.ok(),
-  );
-  await page.getByTestId("list-curate").click();
-  await curated;
+  await waitForListDesk(page);
+  await curateFromMenu(page);
   const editor = page.getByTestId("list-editor");
   await expect(editor).toBeVisible({ timeout: 60_000 });
   await expect(editor.getByTestId("list-item").first()).toBeVisible();

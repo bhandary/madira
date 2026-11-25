@@ -34,6 +34,7 @@ export default function ListPage() {
   const [selectedId, setSelectedId] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deskReady, setDeskReady] = useState(false);
   const prompt = `Curate a wine, beer, spirit, and sake list to complement the Maison Madira autumn menu. Budget $${budget}. Target pour/bottle margin ${margin}x. Show coverage by category/region/style/price, gaps, and cost/margin math.`;
   const selected = lists.find((row) => row.list_id === selectedId) || null;
 
@@ -47,6 +48,9 @@ export default function ListPage() {
       })
       .catch(() => {
         if (live) setError("The lists could not be loaded.");
+      })
+      .finally(() => {
+        if (live) setDeskReady(true);
       });
     return () => {
       live = false;
@@ -143,7 +147,13 @@ export default function ListPage() {
           />
         </label>
       </div>
-      <button type="button" className="btn btn-primary mt-3 min-h-11" data-testid="list-curate" disabled={busy} onClick={() => void curate()}>
+      <button
+        type="button"
+        className="btn btn-primary mt-3 min-h-11"
+        data-testid="list-curate"
+        disabled={busy || !deskReady}
+        onClick={() => void curate()}
+      >
         {busy ? "Curating…" : "Curate from menu"}
       </button>
       {error && (

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { curateFromMenu, waitForListDesk } from "./listDesk";
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -26,18 +27,14 @@ async function acknowledgeDay(page: Page, day: string) {
 
 test("curate a list, Ana finishes a week of briefings and a quiz, and the report shows 7/7", async ({ page, browser }) => {
   await page.goto("/list");
-  await expect(page.getByRole("heading", { name: "List curation" })).toBeVisible();
+  await waitForListDesk(page);
   await page.getByTestId("list-budget").fill("9000");
   await page.getByTestId("list-margin").fill("3.2");
   await page.getByTestId("list-target-cost").fill("31.3");
   const curate = page.getByTestId("list-curate");
   const curateBox = await curate.boundingBox();
   expect(curateBox?.height ?? 0).toBeGreaterThanOrEqual(44);
-  const curated = page.waitForResponse(
-    (res) => res.url().includes("/lists/curate") && res.request().method() === "POST" && res.ok(),
-  );
-  await curate.click();
-  await curated;
+  await curateFromMenu(page);
   const editor = page.getByTestId("list-editor");
   await expect(editor).toBeVisible({ timeout: 60_000 });
   const before = await editor.getByTestId("list-item").count();
