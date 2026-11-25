@@ -10,7 +10,14 @@ from madira.agents.presenters.inventory import with_count_report, with_inventory
 from madira.agents.presenters.lists import with_list, with_list_approval
 from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
-from madira.agents.presenters.procurement import with_offers, with_price_history, with_scheduled, with_tasting_list
+from madira.agents.presenters.procurement import (
+    with_offers,
+    with_price_history,
+    with_sample,
+    with_scheduled,
+    with_session,
+    with_tasting_list,
+)
 from madira.agents.presenters.purchasing import with_drafted, with_orders, with_purchase_order, with_receipt
 from madira.agents.presenters.training import (
     with_lesson,
@@ -33,7 +40,8 @@ from madira.domain.menu import service as menu_service
 from madira.domain.procurement import offers as offer_service
 from madira.domain.procurement import orders as order_lifecycle
 from madira.domain.procurement import receiving as receiving_service
-from madira.domain.procurement import service as procurement_service
+from madira.domain.tastings import service as tasting_service
+from madira.domain.tastings.service import TastingError
 from madira.domain.procurement.offers import OfferError
 from madira.domain.procurement.orders import OrderError
 from madira.domain.procurement.receiving import ReceivingError
@@ -469,35 +477,64 @@ def get_price_history(product: str = "") -> str:
     return _dumps(body)
 
 
-def list_tastings() -> str:
-    """List scheduled supplier tastings (drafts only; nothing is sent)."""
-    body = with_tasting_list(procurement_service.list_tastings(_vid()))
+def plan_tasting(
+    supplier: str = "",
+    when: str = "",
+    title: str = "",
+    location: str = "Maison Madira cellar",
+    notes: str = "Draft hold — export .ics, do not send invites.",
+) -> str:
+    """Plan a tasting with a supplier. The .ics is a download, never an email or an invite."""
+    try:
+        payload = tasting_service.plan(
+            _vid(),
+            supplier=supplier,
+            when=when,
+            title=title,
+            location=location,
+            notes=notes,
+        )
+    except (NotFound, TastingError) as exc:
+        return _dumps({"error": exc.message})
+    if "error" in payload:
+        return _dumps({"error": payload["error"]})
+    body = with_scheduled(payload)
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("supplier-scheduler")
     return _dumps(body)
 
 
-def schedule_tasting(
-    supplier_name: str = "Kermit Lynch Wine Merchant",
-    title: str = "New Loire releases tasting",
-    starts_at: str = "",
-    ends_at: str = "",
-    location: str = "Maison Madira cellar",
-    notes: str = "Draft hold — export .ics, do not send invites.",
-) -> str:
-    """Schedule a tasting with an importer or distributor. Produces a draft .ics only — never sends email or calendar invites."""
-    payload = procurement_service.schedule(
-        _vid(),
-        supplier_name=supplier_name,
-        title=title,
-        starts_at=starts_at,
-        ends_at=ends_at,
-        location=location,
-        notes=notes,
-    )
-    if "error" in payload:
-        return _dumps({"error": payload["error"]})
-    body = with_scheduled(payload)
+def get_tasting(session_id: str = "") -> str:
+    """One tasting session, or the venue calendar when session_id is empty. Nothing is sent."""
+    text = (session_id or "").strip()
+    if not text:
+        body = with_tasting_list(tasting_service.list_sessions(_vid()))
+        tracker.record_operations(body["a2ui_operations"])
+        tracker.complete_delegation("supplier-scheduler")
+        return _dumps(body)
+    try:
+        payload = tasting_service.get_session(_vid(), uuid.UUID(text))
+    except ValueError:
+        return _dumps({"error": "tasting not found"})
+    except NotFound as exc:
+        return _dumps({"error": exc.message})
+    body = with_session(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("supplier-scheduler")
+    return _dumps(body)
+
+
+def score_sample(sample_id: str, score: int = 0, note: str = "") -> str:
+    """Record a 0-100 score and a note. The number is stored as given, not invented."""
+    try:
+        sample_uuid = uuid.UUID(sample_id)
+    except ValueError:
+        return _dumps({"error": "sample not found"})
+    try:
+        payload = tasting_service.score_sample(_vid(), sample_uuid, score, note if note else None)
+    except (NotFound, TastingError) as exc:
+        return _dumps({"error": exc.message})
+    body = with_sample(payload)
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("supplier-scheduler")
     return _dumps(body)
@@ -575,7 +612,7 @@ TRAINING_TOOLS = [
     score_roleplay,
     get_team_progress,
 ]
-SUPPLIER_TOOLS = [list_tastings, schedule_tasting, get_supplier_offers, get_price_history]
+SUPPLIER_TOOLS = [plan_tasting, get_tasting, score_sample, get_supplier_offers, get_price_history]
 COMPLIANCE_TOOLS = [get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status]
 
 ALL_TOOLS = (

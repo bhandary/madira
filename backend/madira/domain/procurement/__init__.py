@@ -1,1 +1,1 @@
-"""Suppliers and tasting drafts."""
+"""Suppliers, offers, and purchase orders."""

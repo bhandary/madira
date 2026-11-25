@@ -127,6 +127,38 @@ def swap(venue_id: uuid.UUID, menu_id: uuid.UUID, pairing_id: uuid.UUID, sku_id:
         return payload
 
 
+def dishes_for_profile(session: Session, venue_id: uuid.UUID, profile) -> list[dict]:
+    """Current confirmed dishes this drink pairs with.
+
+    The score is the same typed match the grid uses. A low score is left off
+    the list. There is no model number in the result.
+    """
+
+    menu = _menu(session, venue_id, None)
+    if menu is None:
+        return []
+    version = _confirmed(session, menu)
+    if version is None:
+        return []
+    found: list[dict] = []
+    for dish in _dishes(session, version):
+        points = score(dish_profile(dish), profile)
+        band = confidence_for(points)
+        if band == "low":
+            continue
+        found.append(
+            {
+                "dish_id": str(dish.id),
+                "name": dish.name,
+                "course": dish.course or "",
+                "score": points,
+                "confidence": band,
+            }
+        )
+    found.sort(key=lambda row: (-int(row["score"]), row["name"], row["dish_id"]))
+    return found
+
+
 def pairing_view(pairing: Pairing) -> dict:
     if pairing.sku is None:
         category = name = producer = region = style = ""

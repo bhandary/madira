@@ -1,4 +1,5 @@
 import type { AuditChain, AuditEventRow } from "@/a2ui/auditTableSchema";
+import type { SampleCardData } from "@/a2ui/sampleCardSchema";
 import { readCachedJson } from "@/lib/offline";
 import type { LookupPack } from "@/lib/lookupOffline";
 
@@ -961,9 +962,114 @@ export async function setDemoPersona(slug: string): Promise<void> {
   if (!res.ok) throw new Error("The demo persona could not be changed.");
 }
 
-export async function getTastings() {
-  const res = await fetch(`${API}/tastings`, { cache: "no-store" });
-  return res.json();
+export type TastingSessionRow = {
+  id: string;
+  supplier_id: string | null;
+  supplier: string;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  location: string;
+  status: string;
+  notes: string;
+  sample_count: number;
+};
+
+export async function listTastingSessions(): Promise<{ sessions: TastingSessionRow[] }> {
+  const res = await fetch(`${API}/tastings`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function createTastingSession(body: {
+  supplier_id?: string;
+  supplier_name?: string;
+  title?: string;
+  starts_at?: string;
+  ends_at?: string;
+  location?: string;
+  notes?: string;
+}): Promise<{ draft: { id: string; title: string; ics: string; sent: boolean } }> {
+  const res = await fetch(`${API}/tastings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function getTastingSession(sessionId: string): Promise<{ session: TastingSessionRow; samples: SampleCardData[] }> {
+  const res = await fetch(`${API}/tastings/${sessionId}`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function addSample(sessionId: string): Promise<{ sample: SampleCardData }> {
+  const res = await fetch(`${API}/tastings/${sessionId}/samples`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({}),
+  });
+  return readJson(res);
+}
+
+export async function updateSample(
+  sessionId: string,
+  sampleId: string,
+  body: { product_id?: string | null; note?: string; quoted_price_cents?: number | null; currency?: string | null },
+): Promise<{ sample: SampleCardData }> {
+  const res = await fetch(`${API}/tastings/${sessionId}/samples/${sampleId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function scoreSample(
+  sessionId: string,
+  sampleId: string,
+  score: number | null,
+  note?: string,
+): Promise<{ sample: SampleCardData }> {
+  const res = await fetch(`${API}/tastings/${sessionId}/samples/${sampleId}/score`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ score, note }),
+  });
+  return readJson(res);
+}
+
+export async function setSampleDecision(
+  sessionId: string,
+  sampleId: string,
+  decision: "undecided" | "buy" | "list" | "pass",
+): Promise<{ sample: SampleCardData }> {
+  const res = await fetch(`${API}/tastings/${sessionId}/samples/${sampleId}/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ decision }),
+  });
+  return readJson(res);
+}
+
+export async function scanSampleLabel(sessionId: string, sampleId: string, file: File): Promise<{ sample: SampleCardData }> {
+  const body = new FormData();
+  body.set("file", file);
+  const res = await fetch(`${API}/tastings/${sessionId}/samples/${sampleId}/label`, {
+    method: "POST",
+    body,
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function getProducts(): Promise<{ products: { id: string; name: string }[] }> {
+  const res = await fetch(`${API}/products`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
 }
 
 export async function getLists(): Promise<{ lists: BeverageListDetail[] }> {

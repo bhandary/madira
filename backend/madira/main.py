@@ -19,6 +19,7 @@ from madira.api.offers import router as offers_router
 from madira.api.procurement import router as procurement_router
 from madira.api.purchasing import router as purchasing_router
 from madira.api.settings import router as settings_router
+from madira.api.tastings import router as tastings_router
 from madira.api.team import router as team_router
 from madira.api.tonight import router as tonight_router
 from madira.api.training import router as training_router
@@ -57,6 +58,7 @@ app.include_router(training_router)
 app.include_router(team_router)
 app.include_router(tonight_router)
 app.include_router(procurement_router)
+app.include_router(tastings_router)
 app.include_router(offers_router)
 app.include_router(fixtures_router)
 

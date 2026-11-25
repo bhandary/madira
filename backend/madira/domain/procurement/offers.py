@@ -325,6 +325,22 @@ def list_offers(venue_id: uuid.UUID, *, product_id: uuid.UUID | None = None, sup
         return {"offers": [_offer_public(session, row) for row in rows]}
 
 
+def current_offer(
+    session: Session,
+    venue_id: uuid.UUID,
+    product_id: uuid.UUID,
+    supplier_id: uuid.UUID | None = None,
+) -> SupplierOffer | None:
+    """The current offer for a product, preferring one supplier when it is named."""
+
+    rows = _select_current(session, venue_id, product_id=product_id, supplier_id=supplier_id)
+    if not rows and supplier_id is not None:
+        rows = _select_current(session, venue_id, product_id=product_id)
+    if not rows:
+        return None
+    return min(rows, key=lambda row: (int(row.price_cents or 0), str(row.id)))
+
+
 def list_current_offers(
     venue_id: uuid.UUID,
     *,
