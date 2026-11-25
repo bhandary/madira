@@ -13,6 +13,7 @@ from madira.agents.tools import (
     LIST_TOOLS,
     MENU_ANALYST_TOOLS,
     PAIRING_TOOLS,
+    BUYER_TOOLS,
     SUPPLIER_TOOLS,
     TRAINING_TOOLS,
 )
@@ -28,6 +29,7 @@ You do not do specialist work yourself. You ALWAYS delegate with the `task` tool
 - inventory-purchasing — stock, par, depletion, low-stock alerts, count variance, par proposals, draft purchase orders (never transmit)
 - staff-trainer — lessons by role, quizzes, spaced reviews, tonight's briefing, floor lookup, guest roleplay, and team progress. Scores, dates, citations, and stock come from tools. Do not invent them and do not show cost or margin.
 - supplier-scheduler — plan tastings and score samples (.ics download only, never send email or invites); current supplier offers and price history. Amounts, margins, and scores come from those tools.
+- buyer — sourcing briefs from list gaps, post-tasting decisions, rep follow-up drafts, and tasted-versus-bought history. Buy and list create drafts only. Nothing is sent.
 - compliance-auditor — read-only audit pack summary, missing-invoice gaps, hash-chain status, and storage-zone conditions. Never write.
 
 For a new menu, call menu-analyst first, then pairing-sommelier.
@@ -99,17 +101,31 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "supplier-scheduler",
-        "description": "Plan tastings, score samples, and read supplier offers and price history. Produce an .ics download only — never send email or calendar invites. Do not ingest price sheets. Do not turn a sample decision into an order.",
+        "description": "Plan tastings, score samples, and read supplier offers and price history. Produce an .ics download only — never send email or calendar invites. Do not ingest price sheets.",
         "system_prompt": (
             "You are the Supplier Scheduler. Use plan_tasting(supplier, when) to plan a tasting. "
             "Use get_tasting(session_id) for one session, or with an empty session_id for the calendar. "
             "Use score_sample(sample_id, score, note) to record a score. "
             "Use get_supplier_offers for current offers and get_price_history for a product's price history. "
             "Prices, margins, and scores come from those tools. Do not invent a price or a score. "
-            "Do not ingest a price sheet. A sample decision is stored only. Do not create an order. "
+            "Do not ingest a price sheet. Post-tasting decisions belong to the buyer. "
             "The calendar file is a download. Never send email or invites."
         ),
         "tools": SUPPLIER_TOOLS,
+    },
+    {
+        "name": "buyer",
+        "description": "Turn list gaps into a sourcing brief, apply a tasting decision as a draft, and draft an unsent rep follow-up.",
+        "system_prompt": (
+            "You are the Buyer. Call build_sourcing_brief for a want list. "
+            "Call decide_sample(sample_id, decision, reason) to buy, list, or pass a sample. "
+            "Buy adds a line to a draft purchase order. List adds the bottle to a draft list version. "
+            "Pass stores a reason. Do not approve a purchase order, publish a list, or send email. "
+            "Call draft_rep_followup(session_id) for a draft note. It is stored only. "
+            "Call get_tasting_history for tasted versus bought. "
+            "Quantities, prices, margins, and purchase-order numbers come from those tools. Do not invent them."
+        ),
+        "tools": BUYER_TOOLS,
     },
     {
         "name": "compliance-auditor",

@@ -27,6 +27,7 @@ SPECIALISTS = (
     "inventory-purchasing",
     "staff-trainer",
     "supplier-scheduler",
+    "buyer",
     "compliance-auditor",
 )
 
@@ -38,6 +39,7 @@ INTENT_FLOW = {
     "inventory": ["inventory-purchasing"],
     "training": ["staff-trainer"],
     "supplier": ["supplier-scheduler"],
+    "buyer": ["buyer"],
     "compliance": ["compliance-auditor"],
 }
 
@@ -69,6 +71,23 @@ def classify_intent(text: str) -> str:
         return "training"
     if any(k in t for k in ("quiz", "training", "lesson", "etiquette", "roleplay", "briefing", "flashcard", "waitstaff")):
         return "training"
+    if any(
+        k in t
+        for k in (
+            "sourcing brief",
+            "want list",
+            "sourcing",
+            "follow-up",
+            "follow up",
+            "rep email",
+            "tasting history",
+            "tasted versus",
+            "tasted vs",
+            "decide the sample",
+            "post-tasting",
+        )
+    ):
+        return "buyer"
     if any(k in t for k in ("inventory", "stock", "par level", "reorder", "purchase order", "on-hand", "on hand", "sku", "propose par", "par proposal", "count variance", "count session")):
         return "inventory"
     if any(
@@ -183,6 +202,10 @@ class DemoChatModel(BaseChatModel):
             return _ai(content=price_sheet_json(last_human(messages)))
         if self.role == "label-scanner":
             return _ai(content=_label_match(last_human(messages)))
+        if self.role == "buyer-phrasing":
+            return _ai(content=_buyer_rationales(last_human(messages)))
+        if self.role == "rep-drafter":
+            return _ai(content='{"thanks":"Thank you for pouring with us."}')
         text = last_human(messages)
         if self.role == "briefing-intro":
             return self._briefing_intro(messages)
@@ -323,6 +346,8 @@ class DemoChatModel(BaseChatModel):
                 return "Find compliance gaps: missing invoices and hash-chain integrity. Read only."
             start, end = _audit_dates(text)
             return f"Summarize the audit pack from {start} to {end}. Read only."
+        if specialist == "buyer":
+            return text
         if specialist == "supplier-scheduler":
             lowered = text.lower()
             if "score" in lowered and "sample" in lowered:
@@ -554,7 +579,57 @@ class DemoChatModel(BaseChatModel):
                 return _ai([_call("get_tasting", {"session_id": ""})])
             return finish("Supplier tasting is a draft only. The .ics is a download; nothing was sent.")
 
+        if role == "buyer":
+            lowered = text.lower()
+            if ("follow" in lowered or "rep email" in lowered) and "draft_rep_followup" not in done:
+                return _ai([_call("draft_rep_followup", {"session_id": _extract_product_id(text)})])
+            if "history" in lowered and "get_tasting_history" not in done:
+                return _ai([_call("get_tasting_history", {"supplier": "", "product": ""})])
+            if _wants_decision(lowered) and "decide_sample" not in done:
+                decision = "pass" if "pass" in lowered else "list" if "list" in lowered else "buy"
+                return _ai(
+                    [
+                        _call(
+                            "decide_sample",
+                            {
+                                "sample_id": _extract_product_id(text),
+                                "decision": decision,
+                                "reason": _marked(text, "reason"),
+                            },
+                        )
+                    ]
+                )
+            if "build_sourcing_brief" not in done:
+                return _ai([_call("build_sourcing_brief", {})])
+            return finish("Sourcing brief and tasting decisions are drafts. Nothing was sent or approved.")
+
         return finish("Done.")
+
+
+def _wants_decision(lowered: str) -> bool:
+    if "decide" in lowered:
+        return True
+    return "sample" in lowered and any(word in lowered for word in ("buy", "list", "pass"))
+
+
+def _buyer_rationales(text: str) -> str:
+    rows = []
+    started = False
+    for line in text.splitlines():
+        if line.strip() == "GAPS":
+            started = True
+            continue
+        if line.strip() == "END":
+            break
+        if not started or "\t" not in line:
+            continue
+        parts = line.split("\t")
+        if len(parts) < 5 or not parts[0].isdigit():
+            continue
+        style = parts[2].strip() or "that style"
+        dishes = parts[4].strip() or "the cellar"
+        rows.append({"index": int(parts[0]), "rationale": f"This covers {style} for {dishes}."})
+    return json.dumps({"lines": rows})
 
 
 def _audit_dates(text: str) -> tuple[str, str]:

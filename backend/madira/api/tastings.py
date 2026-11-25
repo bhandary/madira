@@ -1,4 +1,4 @@
-"""Tasting sessions and samples. Decisions are stored; orders are a later step."""
+"""Tasting sessions and samples. A decision opens a draft order, a draft list, or a pass."""
 
 from __future__ import annotations
 
@@ -9,8 +9,9 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
-from madira.agents.presenters.procurement import with_sample, with_scheduled, with_session, with_tasting_list
+from madira.agents.presenters.procurement import with_followup, with_sample, with_scheduled, with_session, with_tasting_list
 from madira.domain.errors import DraftFailed, NotFound
+from madira.domain.sourcing.service import draft_followup, get_followup
 from madira.domain.tastings.service import (
     TastingError,
     add_sample,
@@ -85,6 +86,7 @@ class ScoreBody(BaseModel):
 
 class DecisionBody(BaseModel):
     decision: str
+    reason: str = ""
 
 
 def _fail(exc: Exception) -> HTTPException:
@@ -217,11 +219,20 @@ async def sample_label(session_id: uuid.UUID, sample_id: uuid.UUID, file: Upload
 
 @router.patch("/tastings/{session_id}/samples/{sample_id}", dependencies=[require(Capability.TASTINGS_MANAGE)])
 def samples_patch(session_id: uuid.UUID, sample_id: uuid.UUID, body: SamplePatch) -> dict[str, Any]:
+    fields = body.model_dump(exclude_unset=True)
+    decision = fields.pop("decision", None)
     try:
-        return with_sample(
-            update_sample(active_venue_id(), session_id, sample_id, body.model_dump(exclude_unset=True))
+        payload = (
+            update_sample(active_venue_id(), session_id, sample_id, fields)
+            if fields
+            else {"sample": next(row for row in get_session(active_venue_id(), session_id)["samples"] if row["id"] == str(sample_id))}
         )
-    except (NotFound, TastingError) as exc:
+        if decision is not None:
+            payload = set_decision(active_venue_id(), session_id, sample_id, str(decision))
+        return with_sample(payload if "sample" in payload else {"sample": payload})
+    except (NotFound, TastingError, DraftFailed, StopIteration) as exc:
+        if isinstance(exc, StopIteration):
+            raise HTTPException(404, "sample not found") from exc
         raise _fail(exc) from exc
 
 
@@ -250,6 +261,25 @@ def samples_score(session_id: uuid.UUID, sample_id: uuid.UUID, body: ScoreBody) 
 @router.post("/tastings/{session_id}/samples/{sample_id}/decision", dependencies=[require(Capability.TASTINGS_MANAGE)])
 def samples_decision(session_id: uuid.UUID, sample_id: uuid.UUID, body: DecisionBody) -> dict[str, Any]:
     try:
-        return with_sample(set_decision(active_venue_id(), session_id, sample_id, body.decision))
+        return with_sample(set_decision(active_venue_id(), session_id, sample_id, body.decision, body.reason))
+    except (NotFound, TastingError, DraftFailed) as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/tastings/{session_id}/follow-up", dependencies=[require(Capability.RECORDS)])
+def tasting_followup(session_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        payload = get_followup(active_venue_id(), session_id)
+        if payload.get("followup") is None:
+            return payload
+        return with_followup(payload)
     except (NotFound, TastingError) as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/tastings/{session_id}/follow-up", dependencies=[require(Capability.TASTINGS_MANAGE)])
+def tasting_followup_draft(session_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        return with_followup(draft_followup(active_venue_id(), session_id))
+    except (NotFound, TastingError, DraftFailed) as exc:
         raise _fail(exc) from exc

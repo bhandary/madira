@@ -11,6 +11,9 @@ from madira.agents.presenters.lists import with_list, with_list_approval
 from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
 from madira.agents.presenters.procurement import (
+    with_brief,
+    with_followup,
+    with_history,
     with_offers,
     with_price_history,
     with_sample,
@@ -40,6 +43,7 @@ from madira.domain.menu import service as menu_service
 from madira.domain.procurement import offers as offer_service
 from madira.domain.procurement import orders as order_lifecycle
 from madira.domain.procurement import receiving as receiving_service
+from madira.domain.sourcing import service as sourcing_service
 from madira.domain.tastings import service as tasting_service
 from madira.domain.tastings.service import TastingError
 from madira.domain.procurement.offers import OfferError
@@ -612,7 +616,113 @@ TRAINING_TOOLS = [
     score_roleplay,
     get_team_progress,
 ]
+def build_sourcing_brief() -> str:
+    """Turn list gaps into a want list. Quantities and price bands come from the list service."""
+    try:
+        payload = sourcing_service.build_brief(_vid())
+    except (NotFound, TastingError, DraftFailed) as exc:
+        return _dumps({"error": exc.message})
+    body = with_brief(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("buyer")
+    return _dumps(body)
+
+
+def decide_sample(sample_id: str, decision: str = "undecided", reason: str = "") -> str:
+    """Apply a tasting decision. Buy and list create drafts only. Pass stores a reason."""
+    try:
+        sample_uuid = uuid.UUID(sample_id)
+    except ValueError:
+        return _dumps({"error": "sample not found"})
+    try:
+        payload = sourcing_service.apply_decision(_vid(), _sample_session(sample_uuid), sample_uuid, decision, reason or None)
+    except (NotFound, TastingError, DraftFailed) as exc:
+        return _dumps({"error": exc.message})
+    body = with_sample(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("buyer")
+    return _dumps(body)
+
+
+def draft_rep_followup(session_id: str) -> str:
+    """Draft a follow-up note for the supplier rep. The note is stored and not sent."""
+    try:
+        session_uuid = uuid.UUID(session_id)
+    except ValueError:
+        return _dumps({"error": "tasting not found"})
+    try:
+        payload = sourcing_service.draft_followup(_vid(), session_uuid)
+    except (NotFound, TastingError, DraftFailed) as exc:
+        return _dumps({"error": exc.message})
+    body = with_followup(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("buyer")
+    return _dumps(body)
+
+
+def get_tasting_history(supplier: str = "", product: str = "") -> str:
+    """Tasted samples against bought lines. Counts and amounts come from services."""
+    try:
+        payload = sourcing_service.tasting_history(
+            _vid(),
+            supplier_id=_named_supplier(supplier),
+            product_id=_named_product(product),
+        )
+    except (NotFound, TastingError) as exc:
+        return _dumps({"error": exc.message})
+    body = with_history(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("buyer")
+    return _dumps(body)
+
+
+def _sample_session(sample_id: uuid.UUID) -> uuid.UUID:
+    from madira.models import Sample
+
+    with session_scope() as session:
+        sample = session.get(Sample, sample_id)
+        if sample is None or sample.venue_id != _vid():
+            raise NotFound("sample not found")
+        return sample.session_id
+
+
+def _named_supplier(name: str) -> uuid.UUID | None:
+    text = " ".join((name or "").split()).casefold()
+    if not text:
+        return None
+    from sqlalchemy import select
+
+    from madira.models import Supplier
+
+    with session_scope() as session:
+        rows = session.scalars(select(Supplier).where(Supplier.venue_id == _vid())).all()
+    matches = [row for row in rows if " ".join(row.name.split()).casefold() == text]
+    if len(matches) != 1:
+        raise NotFound("supplier not found")
+    return matches[0].id
+
+
+def _named_product(name: str) -> uuid.UUID | None:
+    text = " ".join((name or "").split()).casefold()
+    if not text:
+        return None
+    from sqlalchemy import select
+
+    from madira.models import Product, Venue
+
+    with session_scope() as session:
+        venue = session.get(Venue, _vid())
+        if venue is None:
+            raise NotFound("venue not found")
+        rows = session.scalars(select(Product).where(Product.organization_id == venue.organization_id)).all()
+    matches = [row for row in rows if " ".join(row.name.split()).casefold() == text]
+    if len(matches) != 1:
+        raise NotFound("product not found")
+    return matches[0].id
+
+
 SUPPLIER_TOOLS = [plan_tasting, get_tasting, score_sample, get_supplier_offers, get_price_history]
+BUYER_TOOLS = [build_sourcing_brief, decide_sample, draft_rep_followup, get_tasting_history]
 COMPLIANCE_TOOLS = [get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status]
 
 ALL_TOOLS = (
@@ -622,5 +732,6 @@ ALL_TOOLS = (
     + INVENTORY_TOOLS
     + TRAINING_TOOLS
     + SUPPLIER_TOOLS
+    + BUYER_TOOLS
     + COMPLIANCE_TOOLS
 )

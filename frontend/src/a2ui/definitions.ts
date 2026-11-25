@@ -85,8 +85,20 @@ export const catalogDefinitions = {
     props: { tastings: "array" },
   },
   SampleCard: {
-    description: "One tasting sample: label scan, score, list price and margin, and the dishes it pairs with.",
+    description: "One tasting sample: label scan, score, list price and margin, the dishes it pairs with, and buy, list, or pass.",
     props: { sample: "sample card" },
+  },
+  SourcingBrief: {
+    description: "Want list from list gaps: category, style, price band, quantity, dishes, and a rationale.",
+    props: { brief: "sourcing brief" },
+  },
+  RepFollowup: {
+    description: "Unsent draft note to a supplier rep, with the purchase order reference filled in by the service.",
+    props: { followup: "rep follow-up draft" },
+  },
+  TastingHistory: {
+    description: "Tasted samples against bought purchase-order lines and invoice lines.",
+    props: { history: "tasting history rows" },
   },
   TastingNoteCard: {
     description: "Tasting note with a server hook, guest description, technical note, and flavor profile.",

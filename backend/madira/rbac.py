@@ -51,8 +51,8 @@ class Capability(str, Enum):
     # Edit supplier profiles, allocations, and offers, and apply or reject a price sheet.
     # Owner, Manager, and Sommelier. Reads use RECORDS.
     SUPPLIERS_MANAGE = "suppliers_manage"
-    # Plan a tasting, edit samples, score them, and store a decision.
-    # Owner, Manager, and Sommelier. Reading the calendar uses RECORDS.
+    # Plan a tasting, edit samples, score them, and apply a decision.
+    # Buy and list stay drafts. Owner, Manager, and Sommelier. Reading uses RECORDS.
     TASTINGS_MANAGE = "tastings_manage"
 
 

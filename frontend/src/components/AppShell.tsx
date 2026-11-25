@@ -17,6 +17,7 @@ const SIDEBAR = [
   { href: "/training", label: "Staff training" },
   { href: "/suppliers", label: "Suppliers" },
   { href: "/tastings", label: "Tastings" },
+  { href: "/sourcing", label: "Sourcing" },
   { href: "/records", label: "Records" },
   { href: "/settings", label: "Settings" },
 ];
@@ -44,6 +45,7 @@ const STAFF_TABS = [
 const MORE = [
   { href: "/suppliers", label: "Suppliers" },
   { href: "/tastings", label: "Tastings" },
+  { href: "/sourcing", label: "Sourcing" },
   { href: "/records", label: "Records" },
   { href: "/settings", label: "Settings" },
 ];
@@ -167,6 +169,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const moreCurrent =
     pathname === "/suppliers" ||
     pathname === "/tastings" ||
+    pathname === "/sourcing" ||
     pathname === "/records" ||
     pathname === "/settings" ||
     pathname === "/login";

@@ -196,6 +196,66 @@ def create_purchase_order(venue_id: uuid.UUID, supplier_id: uuid.UUID, lines: li
         return body
 
 
+def place_draft_line(session: Session, venue_id: uuid.UUID, supplier_id: uuid.UUID, raw: dict, actor, notes: str | None = None) -> tuple[PurchaseOrder, POLine, bool]:
+    """Add one line to an open draft, or open a draft. Never approves or sends.
+
+    A draft that already has this SKU keeps that line. ``created`` is true when
+    a new line was inserted.
+    """
+
+    supplier = _supplier(session, venue_id, supplier_id)
+    sku_key = raw.get("sku_id")
+    sku_id = _uuid(sku_key, "sku_id") if sku_key else None
+    draft = session.scalar(
+        select(PurchaseOrder)
+        .where(
+            PurchaseOrder.venue_id == venue_id,
+            PurchaseOrder.supplier_id == supplier.id,
+            PurchaseOrder.status == "draft",
+        )
+        .order_by(PurchaseOrder.created_at.desc(), PurchaseOrder.id.desc())
+    )
+    if draft is not None and sku_id is not None:
+        held = session.scalar(
+            select(POLine).where(POLine.po_id == draft.id, POLine.venue_id == venue_id, POLine.sku_id == sku_id)
+        )
+        if held is not None:
+            return draft, held, False
+    if draft is None:
+        order = _create_in_session(session, venue_id, supplier.id, [raw], actor, notes)
+        line = session.scalar(select(POLine).where(POLine.po_id == order.id, POLine.venue_id == venue_id))
+        if line is None:
+            raise OrderError("The draft purchase order has no line.", 500)
+        return order, line, True
+    venue = _venue(session, venue_id)
+    built = _build_line(session, venue_id, supplier, raw)
+    built.po_id = draft.id
+    session.add(built)
+    session.flush()
+    totals = session.scalars(select(POLine).where(POLine.po_id == draft.id, POLine.venue_id == venue_id)).all()
+    subtotal = sum(int(line.line_total_cents or 0) for line in totals)
+    draft.subtotal_cents = subtotal
+    draft.minimum_met = subtotal >= int(draft.order_minimum_cents or 0)
+    draft.updated_at = datetime.now(timezone.utc)
+    _audit(
+        session,
+        venue,
+        draft,
+        "purchase_order.line_added",
+        actor,
+        before={"subtotal_cents": None},
+        after={
+            "status": "draft",
+            "po_number": draft.po_number,
+            "sku_id": None if built.sku_id is None else str(built.sku_id),
+            "line_total_cents": int(built.line_total_cents or 0),
+            "subtotal_cents": subtotal,
+            "minimum_met": draft.minimum_met,
+        },
+    )
+    return draft, built, True
+
+
 def draft_orders_from_reorder(venue_id: uuid.UUID, actor) -> dict:
     with session_scope() as session:
         _venue(session, venue_id)

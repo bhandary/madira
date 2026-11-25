@@ -10,13 +10,6 @@ import {
   updateSample,
 } from "@/lib/api";
 
-const DECISIONS = [
-  ["undecided", "Undecided"],
-  ["buy", "Buy"],
-  ["list", "List"],
-  ["pass", "Pass"],
-] as const;
-
 export function SampleCard({
   sample,
   products = [],
@@ -28,12 +21,16 @@ export function SampleCard({
 }) {
   const [row, setRow] = useState(sample);
   const [score, setScore] = useState(sample.score == null ? "" : String(sample.score));
+  const [quote, setQuote] = useState(sample.quoted_price_cents == null ? "" : String(sample.quoted_price_cents));
+  const [reason, setReason] = useState(sample.pass_reason || "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   function apply(next: SampleCardData) {
     setRow(next);
     setScore(next.score == null ? "" : String(next.score));
+    setQuote(next.quoted_price_cents == null ? "" : String(next.quoted_price_cents));
+    setReason(next.pass_reason || "");
     onChange?.(next);
   }
 
@@ -155,25 +152,86 @@ export function SampleCard({
         ) : null}
       </div>
 
-      <label className="block text-sm">
-        Decision
-        <select
-          className="field mt-1 min-h-11 w-full"
-          data-testid="sample-decision"
-          value={row.decision}
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="block min-w-0 flex-1 text-sm">
+          Quoted price (cents)
+          <input
+            className="field mt-1 min-h-11 w-full"
+            data-testid="sample-quote"
+            inputMode="numeric"
+            value={quote}
+            disabled={busy}
+            onChange={(event) => setQuote(event.target.value)}
+          />
+        </label>
+        <button
+          type="button"
+          className="btn min-h-11"
+          data-testid="sample-quote-save"
           disabled={busy}
-          onChange={(event) => {
-            const decision = event.target.value as SampleCardData["decision"];
-            void run(async () => (await setSampleDecision(row.session_id, row.id, decision)).sample);
+          onClick={() => {
+            const parsed = quote.trim() === "" ? null : Number(quote);
+            void run(async () => (await updateSample(row.session_id, row.id, { quoted_price_cents: parsed })).sample);
           }}
         >
-          {DECISIONS.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+          Save price
+        </button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <button
+          type="button"
+          className="btn btn-primary min-h-11"
+          data-testid="sample-buy"
+          disabled={busy}
+          onClick={() => void run(async () => (await setSampleDecision(row.session_id, row.id, "buy")).sample)}
+        >
+          Buy
+        </button>
+        <button
+          type="button"
+          className="btn min-h-11"
+          data-testid="sample-list"
+          disabled={busy}
+          onClick={() => void run(async () => (await setSampleDecision(row.session_id, row.id, "list")).sample)}
+        >
+          List
+        </button>
+        <button
+          type="button"
+          className="btn min-h-11"
+          data-testid="sample-pass"
+          disabled={busy || reason.trim() === ""}
+          onClick={() => void run(async () => (await setSampleDecision(row.session_id, row.id, "pass", reason.trim())).sample)}
+        >
+          Pass
+        </button>
+      </div>
+      <label className="block text-sm">
+        Pass reason
+        <input
+          className="field mt-1 min-h-11 w-full"
+          data-testid="sample-pass-reason"
+          value={reason}
+          disabled={busy}
+          onChange={(event) => setReason(event.target.value)}
+        />
       </label>
+      {row.purchase_order_id ? (
+        <a className="btn inline-flex min-h-11 items-center" data-testid="sample-po" data-po={row.purchase_order_number} href="/purchasing">
+          Draft {row.purchase_order_number || "purchase order"}
+        </a>
+      ) : null}
+      {row.list_version_id ? (
+        <a className="btn inline-flex min-h-11 items-center" data-testid="sample-list-link" href="/list">
+          Draft list v{row.list_version_number ?? ""}
+        </a>
+      ) : null}
+      {row.decision === "pass" && row.pass_reason ? (
+        <p className="text-sm" data-testid="sample-passed">
+          Passed: {row.pass_reason}
+        </p>
+      ) : null}
       {row.note ? <p className="text-sm text-muted">{row.note}</p> : null}
       {error ? <p className="text-sm text-alert">{error}</p> : null}
     </article>

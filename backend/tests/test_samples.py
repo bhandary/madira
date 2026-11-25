@@ -6,13 +6,14 @@ import base64
 import uuid
 from datetime import date, datetime, timezone
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from madira.auth import SESSION_COOKIE, issue_session
 from madira.db import SessionLocal, init_db
 from madira.domain.lists.pricing import economics, load_rules, price_for
-from madira.domain.tastings.service import add_sample, create_session, get_session, score_sample, set_decision, set_label_completer
+from madira.domain.tastings.service import TastingError, add_sample, create_session, get_session, score_sample, set_decision, set_label_completer
 from madira.llm_runtime import resolve_runtime
 from madira.main import app
 from madira.models import (
@@ -62,7 +63,7 @@ def _bottle(session, venue, organization_id, supplier_id, name, *, body="", acid
     return product, sku
 
 
-def test_score_and_decision_are_stored_without_an_order():
+def test_score_is_stored_and_an_unmatched_buy_does_not_open_an_order():
     demo = _demo()
     created = create_session(
         demo.venue_id,
@@ -81,8 +82,8 @@ def test_score_and_decision_are_stored_without_an_order():
         before = session.scalar(select(func.count()).select_from(PurchaseOrder).where(PurchaseOrder.venue_id == demo.venue_id))
     finally:
         session.close()
-    decided = set_decision(demo.venue_id, session_id, uuid.UUID(sample["id"]), "buy")
-    assert decided["sample"]["decision"] == "buy"
+    with pytest.raises(TastingError, match="catalog product"):
+        set_decision(demo.venue_id, session_id, uuid.UUID(sample["id"]), "buy")
     session = SessionLocal()
     try:
         after = session.scalar(select(func.count()).select_from(PurchaseOrder).where(PurchaseOrder.venue_id == demo.venue_id))
@@ -98,7 +99,7 @@ def test_score_and_decision_are_stored_without_an_order():
         session.close()
     assert after == before
     assert "sample.scored" in actions
-    assert "sample.decision" in actions
+    assert "sample.decision" not in actions
 
 
 def test_list_price_comes_from_the_quote_or_the_current_offer():

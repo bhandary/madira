@@ -21,6 +21,7 @@ import { zoneConditionCardProps } from "./zoneConditionCardSchema";
 import { supplierOffersProps } from "./supplierOffersSchema";
 import { priceHistoryProps } from "./priceHistorySchema";
 import { sampleCardProps } from "./sampleCardSchema";
+import { repFollowupProps, sourcingBriefProps, tastingHistoryProps } from "./sourcingSchema";
 import { MADIRA_CATALOG_ID, catalogDefinitions } from "./definitions";
 
 /**
@@ -85,7 +86,13 @@ const definitions = Object.fromEntries(
                             ? priceHistoryProps.describe(def.description)
                             : name === "SampleCard"
                               ? sampleCardProps.describe(def.description)
-                              : schemaFor(def.props).describe(def.description),
+                              : name === "SourcingBrief"
+                                ? sourcingBriefProps.describe(def.description)
+                                : name === "RepFollowup"
+                                  ? repFollowupProps.describe(def.description)
+                                  : name === "TastingHistory"
+                                    ? tastingHistoryProps.describe(def.description)
+                                    : schemaFor(def.props).describe(def.description),
     },
   ]),
 );
