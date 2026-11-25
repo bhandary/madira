@@ -4,21 +4,34 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AgentWorkbench } from "@/components/AgentWorkbench";
 import { LessonCard } from "@/components/LessonCard";
+import { RoleplayPanel } from "@/components/RoleplayPanel";
+import { TeamDesk } from "@/components/TeamDesk";
 import {
   ApiError,
   draftTrainingLesson,
   getDueReviews,
   getTrainingLessons,
+  startRoleplay,
   type DueReview,
+  type RoleplaySession,
   type TrainingLessons,
 } from "@/lib/api";
 
 const POSITIONS = ["server", "bartender", "barback", "host", "all"] as const;
+const PERSONAS = [
+  ["skeptic", "Skeptic"],
+  ["budget-conscious", "Budget-conscious"],
+  ["connoisseur", "Connoisseur"],
+  ["celebration", "Celebration"],
+] as const;
 
 export default function TrainingPage() {
   const [data, setData] = useState<TrainingLessons | null>(null);
   const [due, setDue] = useState<DueReview[]>([]);
-  const [tab, setTab] = useState<"lessons" | "due" | "drafts">("lessons");
+  const [tab, setTab] = useState<"lessons" | "due" | "practice" | "team" | "drafts">("lessons");
+  const [persona, setPersona] = useState<(typeof PERSONAS)[number][0]>("skeptic");
+  const [dish, setDish] = useState("");
+  const [session, setSession] = useState<RoleplaySession | null>(null);
   const [position, setPosition] = useState<(typeof POSITIONS)[number]>("server");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -60,6 +73,20 @@ export default function TrainingPage() {
     }
   }
 
+  async function beginRoleplay() {
+    setBusy(true);
+    setError("");
+    try {
+      const next = await startRoleplay(persona, dish);
+      setSession(next.session);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "The roleplay could not start.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canManage = data?.role === "Owner" || data?.role === "Manager";
   const lessons = tab === "drafts" ? data?.drafts || [] : data?.lessons || [];
 
   return (
@@ -79,6 +106,14 @@ export default function TrainingPage() {
         <button type="button" className="btn btn-segment w-full" data-testid="tab-due" aria-pressed={tab === "due"} onClick={() => setTab("due")}>
           Due for review{due.length ? ` (${due.length})` : ""}
         </button>
+        <button type="button" className="btn btn-segment w-full" data-testid="tab-practice" aria-pressed={tab === "practice"} onClick={() => setTab("practice")}>
+          Practice
+        </button>
+        {canManage && (
+          <button type="button" className="btn btn-segment w-full" data-testid="tab-team" aria-pressed={tab === "team"} onClick={() => setTab("team")}>
+            Team
+          </button>
+        )}
         {data?.can_author && (
           <button type="button" className="btn btn-segment w-full" data-testid="tab-drafts" aria-pressed={tab === "drafts"} onClick={() => setTab("drafts")}>
             Drafts
@@ -116,7 +151,34 @@ export default function TrainingPage() {
           {error}
         </p>
       )}
-      {tab === "due" ? (
+      {tab === "practice" ? (
+        <div className="mt-4 space-y-3">
+          <div className="flex flex-col gap-2">
+            {PERSONAS.map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className="btn btn-segment w-full"
+                data-testid={`roleplay-persona-${value}`}
+                aria-pressed={persona === value}
+                onClick={() => setPersona(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <label className="lbl" htmlFor="roleplay-dish">
+            Dish
+            <input id="roleplay-dish" className="field" data-testid="roleplay-dish" value={dish} onChange={(event) => setDish(event.target.value)} />
+          </label>
+          <button type="button" className="btn btn-primary w-full" data-testid="roleplay-start" disabled={busy} onClick={() => void beginRoleplay()}>
+            Start roleplay
+          </button>
+          {session && <RoleplayPanel session={session} onSession={setSession} />}
+        </div>
+      ) : tab === "team" && canManage && data ? (
+        <TeamDesk role={data.role} />
+      ) : tab === "due" ? (
         <ul className="mt-4 space-y-2">
           {due.length === 0 && <li className="text-sm text-muted">Nothing is due.</li>}
           {due.map((review) => (

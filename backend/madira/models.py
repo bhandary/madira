@@ -28,6 +28,10 @@ from madira.money import DEFAULT_CURRENCY
 from madira.timestamps import AwareDateTime
 
 ROLES = ("Owner", "Sommelier", "Manager", "Staff", "Auditor")
+INVITE_POSITIONS = ("server", "bartender", "barback", "host")
+ROLEPLAY_PERSONAS = ("skeptic", "budget-conscious", "connoisseur", "celebration")
+ROLEPLAY_STATUSES = ("open", "scored")
+CERTIFICATE_KINDS = ("responsible_service", "food_handler", "other")
 
 
 def _pk():
@@ -1297,4 +1301,99 @@ class ConditionExcursion(Base):
     acknowledged_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
     acknowledged_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+
+
+class VenueInvite(Base):
+    """An invitation to join a venue. Nothing is emailed. Sign-in accepts it."""
+
+    __tablename__ = "venue_invites"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('Owner', 'Sommelier', 'Manager', 'Staff', 'Auditor')",
+            name="ck_venue_invites_role",
+        ),
+        CheckConstraint(
+            "position IS NULL OR position IN ('server', 'bartender', 'barback', 'host')",
+            name="ck_venue_invites_position",
+        ),
+        CheckConstraint(
+            "(accepted_at IS NULL AND accepted_user_id IS NULL) OR "
+            "(accepted_at IS NOT NULL AND accepted_user_id IS NOT NULL)",
+            name="ck_venue_invites_acceptance",
+        ),
+        Index(
+            "uq_venue_invites_active_email",
+            "venue_id",
+            "email",
+            unique=True,
+            sqlite_where=text("accepted_at IS NULL AND revoked_at IS NULL"),
+            postgresql_where=text("accepted_at IS NULL AND revoked_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    email: Mapped[str] = mapped_column(String(320))
+    role: Mapped[str] = mapped_column(String(32))
+    position: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    invited_by_user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    created_at: Mapped[datetime] = _stamp()
+    accepted_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    accepted_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class RoleplaySession(Base):
+    """One staff-trainer roleplay. The service writes the 0-4 score."""
+
+    __tablename__ = "roleplay_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "persona IN ('skeptic', 'budget-conscious', 'connoisseur', 'celebration')",
+            name="ck_roleplay_sessions_persona",
+        ),
+        CheckConstraint("status IN ('open', 'scored')", name="ck_roleplay_sessions_status"),
+        CheckConstraint("score IS NULL OR (score >= 0 AND score <= 4)", name="ck_roleplay_sessions_score_range"),
+        CheckConstraint(
+            "(status = 'open' AND score IS NULL AND scored_at IS NULL) OR "
+            "(status = 'scored' AND score IS NOT NULL AND scored_at IS NOT NULL)",
+            name="ck_roleplay_sessions_scored",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    persona: Mapped[str] = mapped_column(String(32))
+    dish_id: Mapped[uuid.UUID | None] = _fk("dishes.id", nullable=True, index=True)
+    transcript: Mapped[list] = mapped_column(JSON, default=list)
+    rubric: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="open", server_default=text("'open'"))
+    started_at: Mapped[datetime] = _stamp()
+    scored_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class Certificate(Base):
+    """A staff certificate. Reminders start 30 days before expires_on."""
+
+    __tablename__ = "certificates"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('responsible_service', 'food_handler', 'other')",
+            name="ck_certificates_kind",
+        ),
+        CheckConstraint("expires_on >= issued_on", name="ck_certificates_dates"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    label: Mapped[str] = mapped_column(String(200))
+    issued_on: Mapped[date] = mapped_column(Date)
+    expires_on: Mapped[date] = mapped_column(Date)
+    document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True, index=True)
+    created_by_user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
     created_at: Mapped[datetime] = _stamp()

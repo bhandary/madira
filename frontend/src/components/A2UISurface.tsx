@@ -9,6 +9,8 @@ import { BriefingCards } from "@/components/BriefingCards";
 import { FloorLookup } from "@/components/FloorLookup";
 import { LessonCard } from "@/components/LessonCard";
 import { QuizCard } from "@/components/QuizCard";
+import { RoleplayPanel } from "@/components/RoleplayPanel";
+import { roleplaySession } from "@/a2ui/roleplayPanelSchema";
 import type { ApprovalPurchaseOrder, ApprovalRecord } from "@/components/ApprovalCard";
 import { ReceivingChecklist } from "@/components/ReceivingChecklist";
 import type { ReceivingLineView, ReceivingOrder, ReceivingReceiptView } from "@/components/ReceivingChecklist";
@@ -293,6 +295,11 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
     const quiz = p.quiz as QuizPayload | undefined;
     if (!quiz || typeof quiz !== "object" || !Array.isArray(quiz.questions)) return null;
     return <QuizCard quiz={quiz} />;
+  },
+  RoleplayPanel: (p) => {
+    const parsed = roleplaySession.safeParse(p.session);
+    if (!parsed.success) return null;
+    return <RoleplayPanel session={parsed.data} />;
   },
   LessonCard: (p) => {
     const lesson = p.lesson as LessonPayload | undefined;

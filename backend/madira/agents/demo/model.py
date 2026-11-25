@@ -65,6 +65,8 @@ def classify_intent(text: str) -> str:
         return "training"
     if "tonight" in t and "briefing" in t:
         return "training"
+    if "team progress" in t or "weak topic" in t or "expiring certificate" in t:
+        return "training"
     if any(k in t for k in ("quiz", "training", "lesson", "etiquette", "roleplay", "briefing", "flashcard", "waitstaff")):
         return "training"
     if any(k in t for k in ("inventory", "stock", "par level", "reorder", "purchase order", "on-hand", "on hand", "sku", "propose par", "par proposal", "count variance", "count session")):
@@ -277,8 +279,10 @@ class DemoChatModel(BaseChatModel):
                 return f"Look up this floor question: {text}"
             if "tonight" in lowered and "briefing" in lowered:
                 return "Get tonight's briefing for the floor."
+            if "team progress" in lowered or "weak topic" in lowered or "expiring certificate" in lowered:
+                return "Show team progress, weak topics, and expiring certificates."
             if "roleplay" in lowered:
-                return "Start diner roleplay as a skeptical guest who ordered the ribeye."
+                return "Start diner roleplay as a skeptical guest."
             if "draft" in lowered and "lesson" in lowered:
                 return f"Draft a lesson. {text}"
             if "due" in lowered and "review" in lowered:
@@ -407,8 +411,30 @@ class DemoChatModel(BaseChatModel):
                 return _ai([_call("floor_lookup", {"query": query or text})])
             if "tonight" in lowered and "briefing" in lowered and "get_tonight_briefing" not in done:
                 return _ai([_call("get_tonight_briefing", {})])
+            if ("team progress" in lowered or "weak topic" in lowered or "expiring certificate" in lowered) and "get_team_progress" not in done:
+                return _ai([_call("get_team_progress", {})])
+            session_match = re.search(
+                r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+                text,
+            )
+            session_id = session_match.group(0) if session_match else ""
+            if session_id and re.search(r"\bscore\b", lowered) and "score_roleplay" not in done:
+                return _ai([_call("score_roleplay", {"session_id": session_id})])
+            if session_id and "reply" in lowered and "roleplay_reply" not in done:
+                marker = "reply:"
+                reply = text[lowered.index(marker) + len(marker) :].strip() if marker in lowered else text
+                return _ai([_call("roleplay_reply", {"session_id": session_id, "text": reply or text})])
             if "roleplay" in lowered and "start_roleplay" not in done:
-                return _ai([_call("start_roleplay", {})])
+                persona = "skeptic"
+                if "budget" in lowered:
+                    persona = "budget-conscious"
+                elif "connoisseur" in lowered:
+                    persona = "connoisseur"
+                elif "celebrat" in lowered:
+                    persona = "celebration"
+                elif "skeptic" in lowered:
+                    persona = "skeptic"
+                return _ai([_call("start_roleplay", {"persona": persona, "dish": ""})])
             if "due" in lowered and "review" in lowered and "get_due_reviews" not in done:
                 return _ai([_call("get_due_reviews", {})])
             if "draft" in lowered and "lesson" in lowered and "draft_lesson" not in done:

@@ -26,7 +26,7 @@ You do not do specialist work yourself. You ALWAYS delegate with the `task` tool
 - pairing-sommelier — wine, beer, spirit, and sake pairings per dish with rationale and price-tier fit; tasting notes and service cards for a catalog product
 - list-curator — lists from the confirmed menu within budget and cellar capacity, with a coverage grid and health flags. Prices and margins come from the list service. The curator writes section notes only.
 - inventory-purchasing — stock, par, depletion, low-stock alerts, count variance, par proposals, draft purchase orders (never transmit)
-- staff-trainer — lessons by role, quizzes, spaced reviews, tonight's briefing, and floor lookup. Scores, dates, citations, and stock come from tools. Do not invent them and do not show cost or margin.
+- staff-trainer — lessons by role, quizzes, spaced reviews, tonight's briefing, floor lookup, guest roleplay, and team progress. Scores, dates, citations, and stock come from tools. Do not invent them and do not show cost or margin.
 - supplier-scheduler — draft tastings with importers/distributors; .ics only, never send email or invites
 - compliance-auditor — read-only audit pack summary, missing-invoice gaps, hash-chain status, and storage-zone conditions. Never write.
 
@@ -85,9 +85,12 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
             "Call get_due_reviews for questions that are due. "
             "Call get_tonight_briefing for the daily briefing. "
             "Call floor_lookup with the guest's words for a dish, a bottle, or a preference. "
+            "Call start_roleplay with a persona (skeptic, budget-conscious, connoisseur, or celebration) and an optional dish. "
+            "Call roleplay_reply with the session id and the staff line. "
+            "Call score_roleplay when the exchange should be scored. The service writes the 0-4 score. Do not invent it. "
+            "Call get_team_progress for completion, weak topics, and certificate expiry. "
             "Scores, next review dates, citations, and stock come from those tools. Do not invent them. "
-            "Do not show cost or margin. The push reason is already in words. "
-            "Call start_roleplay only for diner roleplay."
+            "Do not show cost or margin. The push reason is already in words."
         ),
         "tools": TRAINING_TOOLS,
     },
@@ -103,6 +106,7 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
         "system_prompt": (
             "You are the compliance auditor. You are strictly read-only. "
             "Call get_audit_pack_summary, find_compliance_gaps, or get_storage_zones_status. "
+            "find_compliance_gaps includes certificate expiry. "
             "get_storage_zones_status returns ZoneConditionCard surfaces. "
             "Never create zones, readings, acknowledgements, orders, or exports."
         ),

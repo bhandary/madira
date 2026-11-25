@@ -344,6 +344,8 @@ code {
   .field,
   .field-area {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     min-height: 44px;
     border: 1px solid var(--md-input-border);
     border-radius: 4px;

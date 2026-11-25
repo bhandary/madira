@@ -305,8 +305,10 @@ def upsert_google_user(profile: dict[str, str]) -> str:
             session.add(user)
             try:
                 from madira.tenancy import grant_configured_owner
+                from madira.domain.team.service import accept_invites_for_user
 
                 grant_configured_owner(session, user)
+                accept_invites_for_user(session, user)
                 session.commit()
                 return sub
             except IntegrityError:
@@ -319,8 +321,10 @@ def upsert_google_user(profile: dict[str, str]) -> str:
         user.picture = profile["picture"]
         user.last_login_at = now
         from madira.tenancy import grant_configured_owner
+        from madira.domain.team.service import accept_invites_for_user
 
         grant_configured_owner(session, user)
+        accept_invites_for_user(session, user)
         session.commit()
         return sub
     except AuthError:

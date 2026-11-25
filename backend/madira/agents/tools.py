@@ -12,7 +12,14 @@ from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
 from madira.agents.presenters.procurement import with_scheduled, with_tasting_list
 from madira.agents.presenters.purchasing import with_drafted, with_orders, with_purchase_order, with_receipt
-from madira.agents.presenters.training import with_lesson, with_lessons, with_lookup, with_quiz, with_tonight_briefing
+from madira.agents.presenters.training import (
+    with_lesson,
+    with_lessons,
+    with_lookup,
+    with_quiz,
+    with_roleplay,
+    with_tonight_briefing,
+)
 from madira.domain.catalog import notes as notes_service
 from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.inventory import counts as count_service
@@ -30,8 +37,9 @@ from madira.domain.purchasing import service as purchasing_service
 from madira.domain.training import briefing as briefing_service
 from madira.domain.training import lessons as lessons_service
 from madira.domain.training import lookup as lookup_service
+from madira.domain.training import manager as manager_service
 from madira.domain.training import quizzes as quizzes_service
-from madira.domain.training import service as training_service
+from madira.domain.training import roleplay as roleplay_service
 from madira.domain.session import session_scope
 from madira.tenancy import active_venue_id, current_request
 
@@ -332,9 +340,72 @@ def floor_lookup(query: str) -> str:
     return _dumps(body)
 
 
-def start_roleplay() -> str:
-    """Start diner roleplay: the agent plays a skeptical guest at Maison Madira."""
-    payload = training_service.roleplay()
+def _roleplay_id(session_id: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(session_id)
+    except ValueError as exc:
+        raise NotFound("roleplay not found") from exc
+
+
+def start_roleplay(persona: str = "skeptic", dish: str = "") -> str:
+    """Start a roleplay. persona is skeptic, budget-conscious, connoisseur, or celebration. dish is optional."""
+    dish_id = None
+    name = (dish or "").strip()
+    if name:
+        try:
+            dish_id = uuid.UUID(name)
+            name = ""
+        except ValueError:
+            dish_id = None
+    try:
+        payload = roleplay_service.start(persona, dish_id=dish_id, dish=name)
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": exc.message})
+    body = with_roleplay(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def roleplay_reply(session_id: str, text: str) -> str:
+    """Send the staff line for an open roleplay. The guest reply comes from the service."""
+    try:
+        payload = roleplay_service.reply(_roleplay_id(session_id), text)
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": exc.message})
+    body = with_roleplay(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def score_roleplay(session_id: str) -> str:
+    """Score a roleplay. The service checks evidence quotes and writes the 0-4 score."""
+    try:
+        payload = roleplay_service.finish(_roleplay_id(session_id))
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": exc.message})
+    body = with_roleplay(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def get_team_progress() -> str:
+    """Team completion, weak topics, and expiring certificates. Role-checked. No model numbers."""
+    from madira.domain.training.access import actor
+    from madira.rbac import MATRIX, Capability
+
+    try:
+        ctx = actor()
+    except DraftFailed as exc:
+        return _dumps({"error": exc.message})
+    if ctx.role not in MATRIX[Capability.TEAM_VIEW]:
+        return _dumps({"error": "This role cannot do that."})
+    try:
+        payload = manager_service.progress()
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": exc.message})
     tracker.complete_delegation("staff-trainer")
     return _dumps(payload)
 
@@ -397,7 +468,7 @@ def get_audit_pack_summary(start_date: str = "", end_date: str = "") -> str:
 
 
 def find_compliance_gaps() -> str:
-    """Find missing invoices, hash-chain status, and open storage excursions. Read only."""
+    """Find missing invoices, hash-chain status, open storage excursions, and certificate expiry. Read only."""
     from madira.domain.compliance.audit_pack import compliance_gaps
 
     with session_scope() as session:
@@ -441,6 +512,9 @@ TRAINING_TOOLS = [
     get_tonight_briefing,
     floor_lookup,
     start_roleplay,
+    roleplay_reply,
+    score_roleplay,
+    get_team_progress,
 ]
 SUPPLIER_TOOLS = [list_tastings, schedule_tasting]
 COMPLIANCE_TOOLS = [get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status]

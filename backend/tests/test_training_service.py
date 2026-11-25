@@ -12,7 +12,7 @@ from sqlalchemy import select
 from madira.db import SessionLocal, init_db
 from madira.domain.errors import NotFound
 from madira.domain.training.quizzes import grade, progress
-from madira.domain.training.service import briefing, roleplay
+from madira.domain.training.service import briefing
 from madira.main import app
 from madira.models import Quiz, Venue
 from madira.seed import seed
@@ -101,10 +101,14 @@ def test_training_routes_emit_lessons_and_score_a_named_quiz():
         assert quiz["score"] == 100.0
         assert quiz["score_bp"] == 10000
         assert all("answer" not in question for question in quiz["questions"])
-        played = client.post("/training/roleplay")
-        assert played.status_code == 200
-        assert played.json() == roleplay()
-        assert "a2ui_operations" not in played.json()
+        played = client.post("/training/roleplay", json={"persona": "skeptic"})
+        assert played.status_code == 200, played.text
+        session = played.json()["session"]
+        assert session["persona"] == "skeptic"
+        assert session["status"] == "open"
+        assert session["score"] is None
+        assert session["transcript"][0]["role"] == "guest"
+        assert "RoleplayPanel" in json.dumps(played.json()["a2ui_operations"])
         progress_response = client.get("/training/progress")
         assert progress_response.status_code == 200
         assert progress_response.json()["attempts"][0]["name"] == "Demo Owner"

@@ -117,9 +117,15 @@ def _wipe() -> None:
         session.execute(delete(Invoice))
         session.execute(update(PurchaseOrder).values(pdf_document_id=None))
         session.execute(delete(AuditEvent))
+        bind = session.get_bind()
+        if bind is not None and inspect(bind).has_table("certificates"):
+            session.execute(text("DELETE FROM certificates"))
+        if bind is not None and inspect(bind).has_table("roleplay_sessions"):
+            session.execute(text("DELETE FROM roleplay_sessions"))
+        if bind is not None and inspect(bind).has_table("venue_invites"):
+            session.execute(text("DELETE FROM venue_invites"))
         session.execute(delete(Document))
         session.execute(delete(Approval))
-        bind = session.get_bind()
         if bind is not None and inspect(bind).has_table("condition_readings"):
             session.execute(text("UPDATE condition_readings SET recorded_by_user_id = NULL"))
         if bind is not None and inspect(bind).has_table("condition_excursions"):

@@ -43,7 +43,7 @@ from madira.models import (
     User,
     Venue,
 )
-from madira.tenancy import OWNER, SOMMELIER, active_venue_id, current_request, demo_posture
+from madira.tenancy import MANAGER, OWNER, SOMMELIER, active_venue_id, current_request, demo_posture
 
 _DEFAULT_ZONE = "America/Los_Angeles"
 _LEAK = re.compile(r"\b(margin|cost|wholesale)\b|\$", re.I)
@@ -928,6 +928,12 @@ def tonight() -> dict:
         board["storage_alerts"] = alerts
         board["deliveries_due"] = deliveries
         board["approvals"] = waiting
+        from madira.domain.team.certificates import due_certificates
+
+        if ctx is not None and ctx.role in {OWNER, MANAGER}:
+            board["expiring_certificates"] = due_certificates(session, venue_id)
+        else:
+            board["expiring_certificates"] = []
         _ = zone
         return _strip(board)
 

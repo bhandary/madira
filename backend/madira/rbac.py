@@ -40,6 +40,10 @@ class Capability(str, Enum):
     TRAINING_LEARN = "training_learn"
     # Edit standards and draft or approve lessons. Owner and Sommelier.
     TRAINING_AUTHOR = "training_author"
+    # Invite, change roles, remove memberships, and write certificates. Owner and Manager.
+    TEAM_MANAGE = "team_manage"
+    # Read the roster and team progress. Owner, Sommelier, and Manager.
+    TEAM_VIEW = "team_view"
 
 
 MATRIX: dict[Capability, frozenset[str]] = {
@@ -59,6 +63,8 @@ MATRIX: dict[Capability, frozenset[str]] = {
     Capability.AUDIT_PACK: frozenset({OWNER, MANAGER, AUDITOR}),
     Capability.TRAINING_LEARN: frozenset({OWNER, SOMMELIER, MANAGER, STAFF}),
     Capability.TRAINING_AUTHOR: frozenset({OWNER, SOMMELIER}),
+    Capability.TEAM_MANAGE: frozenset({OWNER, MANAGER}),
+    Capability.TEAM_VIEW: frozenset({OWNER, SOMMELIER, MANAGER}),
 }
 
 

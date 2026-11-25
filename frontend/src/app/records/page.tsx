@@ -191,13 +191,13 @@ export default function RecordsPage() {
           Briefing completion
         </h2>
         <p className="mt-1 text-sm text-muted">Published briefings in the range, and who acknowledged them.</p>
-        <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={loadReport}>
+        <form className="mt-3 flex flex-col gap-3" onSubmit={loadReport}>
           <label className="lbl" htmlFor="briefing-report-start">
             From
             <input
               id="briefing-report-start"
               data-testid="briefing-report-start"
-              className="field min-h-11 w-40"
+              className="field min-h-11 w-full min-w-0"
               type="date"
               value={reportStart}
               onChange={(event) => setReportStart(event.target.value)}
@@ -208,7 +208,7 @@ export default function RecordsPage() {
             <input
               id="briefing-report-end"
               data-testid="briefing-report-end"
-              className="field min-h-11 w-40"
+              className="field min-h-11 w-full min-w-0"
               type="date"
               value={reportEnd}
               onChange={(event) => setReportEnd(event.target.value)}
@@ -222,7 +222,7 @@ export default function RecordsPage() {
           <ul className="mt-3 space-y-2">
             {completions.map((row) => (
               <li key={row.id} className="panel flex min-h-11 items-center justify-between gap-3 px-3 text-sm" data-testid="briefing-report-person">
-                <span>{row.name}</span>
+                <span className="min-w-0 break-all">{row.name}</span>
                 <span>
                   {row.acked}/{row.total}
                 </span>
