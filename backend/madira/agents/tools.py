@@ -8,6 +8,7 @@ import uuid
 from madira.agents import tracker
 from madira.agents.presenters.inventory import with_count_report, with_inventory
 from madira.agents.presenters.pos import with_status, with_unmapped
+from madira.agents.presenters.sensors import with_reminders, with_sensors
 from madira.agents.presenters.lists import with_list, with_list_approval
 from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
@@ -625,6 +626,33 @@ def find_compliance_gaps() -> str:
     return _dumps(payload)
 
 
+def get_sensor_status() -> str:
+    """Return each sensor's last reading and whether it is stale. Read only. The secret is not included."""
+    from madira.domain.errors import NotFound
+    from madira.domain.sensors.service import SensorError, list_sensors
+
+    try:
+        body = with_sensors(list_sensors(_vid()))
+    except (NotFound, SensorError) as exc:
+        return _dumps({"error": exc.message})
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("compliance-auditor")
+    return _dumps(body)
+
+
+def list_reminders() -> str:
+    """List open in-app reminders. Does not acknowledge them and does not send anything."""
+    from madira.domain.reminders.service import ReminderError, list_reminders as reminders_for
+
+    try:
+        body = with_reminders(reminders_for(_vid()))
+    except (NotFound, ReminderError) as exc:
+        return _dumps({"error": exc.message})
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("compliance-auditor")
+    return _dumps(body)
+
+
 def get_storage_zones_status() -> str:
     """Return storage zones with ZoneConditionCard surfaces. Read only."""
     from madira.agents.presenters.compliance import with_zones
@@ -773,7 +801,13 @@ def _named_product(name: str) -> uuid.UUID | None:
 
 SUPPLIER_TOOLS = [plan_tasting, get_tasting, propose_tasting_invite, score_sample, get_supplier_offers, get_price_history]
 BUYER_TOOLS = [build_sourcing_brief, decide_sample, draft_rep_followup, get_tasting_history]
-COMPLIANCE_TOOLS = [get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status]
+COMPLIANCE_TOOLS = [
+    get_audit_pack_summary,
+    find_compliance_gaps,
+    get_storage_zones_status,
+    get_sensor_status,
+    list_reminders,
+]
 
 ALL_TOOLS = (
     MENU_ANALYST_TOOLS

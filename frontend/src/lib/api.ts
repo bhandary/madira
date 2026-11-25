@@ -809,6 +809,8 @@ export type TonightBoard = {
   deliveries_due: { po_number: string; supplier: string; expected_delivery_date: string | null; status: string }[];
   approvals: { id: string; kind: string; title: string; status: string; href?: string }[];
   pos_alerts?: { kind: string; title: string; href?: string }[];
+  sensors?: SensorRecord[];
+  reminders?: ReminderRecord[];
   expiring_certificates: {
     id: string;
     user_id: string;
@@ -2114,6 +2116,112 @@ export type StorageZone = {
   status: string;
   excursion?: ZoneExcursion | null;
 };
+
+export type SensorRecord = {
+  id: string;
+  name: string;
+  zone_id: string;
+  zone_name: string;
+  location_name: string;
+  metric: string;
+  external_id: string;
+  sensor_key: string;
+  secret_last4: string;
+  masked: string;
+  last_value: string;
+  last_at: string | null;
+  stale: boolean;
+  stale_after_hours: number;
+  secret?: string;
+};
+
+export type SensorImportRow = {
+  line: number;
+  sensor: string;
+  external_id: string;
+  at: string;
+  metric: string;
+  value: string;
+  zone: string;
+  excursion: string;
+  duplicate: boolean;
+  error: string;
+};
+
+export type SensorImport = {
+  id: string;
+  filename: string;
+  status: string;
+  rows: SensorImportRow[];
+  posted?: number;
+  skipped?: number;
+  excursions?: number;
+};
+
+export type ReminderRecord = {
+  source_type: string;
+  source_id: string;
+  rule_code: string;
+  title: string;
+  detail: string;
+  due_on: string;
+  days_left: number;
+  label: string;
+  channel: string;
+};
+
+export async function getSensors(): Promise<{ sensors: SensorRecord[]; stale_after_hours: number }> {
+  const res = await fetch(`${API}/sensors`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function createSensor(body: {
+  name: string;
+  zone_id: string;
+  metric: string;
+  external_id: string;
+}): Promise<SensorRecord> {
+  const res = await fetch(`${API}/sensors`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function previewSensorCsv(file: File): Promise<SensorImport> {
+  const body = new FormData();
+  body.set("file", file);
+  body.set("filename", file.name);
+  const res = await fetch(`${API}/sensors/imports`, { method: "POST", credentials: "same-origin", body });
+  return readJson(res);
+}
+
+export async function applySensorImport(importId: string): Promise<SensorImport> {
+  const res = await fetch(`${API}/sensors/imports/${importId}/apply`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function rejectSensorImport(importId: string): Promise<SensorImport> {
+  const res = await fetch(`${API}/sensors/imports/${importId}/reject`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function decideReminder(body: {
+  source_type: string;
+  source_id: string;
+  action: "acknowledge" | "snooze";
+  snooze_days?: number;
+}): Promise<{ status: string; channel: string }> {
+  const res = await fetch(`${API}/reminders/decide`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
 
 export async function listStorageZones(): Promise<{ zones: StorageZone[] }> {
   const res = await fetch(`${API}/inventory/storage-zones`, { cache: "no-store", credentials: "same-origin" });

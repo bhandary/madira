@@ -161,6 +161,18 @@ def _wipe() -> None:
             session.execute(text("DELETE FROM pos_connections"))
         if bind is not None and inspect(bind).has_table("pos_credentials"):
             session.execute(text("DELETE FROM pos_credentials"))
+        if bind is not None and inspect(bind).has_table("sensor_readings"):
+            session.execute(text("DELETE FROM sensor_readings"))
+        if bind is not None and inspect(bind).has_table("sensor_imports"):
+            session.execute(text("DELETE FROM sensor_imports"))
+        if bind is not None and inspect(bind).has_table("sensors"):
+            session.execute(text("DELETE FROM sensors"))
+        if bind is not None and inspect(bind).has_table("reminder_states"):
+            session.execute(text("DELETE FROM reminder_states"))
+        if bind is not None and inspect(bind).has_table("venue_licenses"):
+            session.execute(text("DELETE FROM venue_licenses"))
+        if bind is not None and inspect(bind).has_table("reminder_rules"):
+            session.execute(text("DELETE FROM reminder_rules"))
         session.execute(delete(Document))
         session.execute(delete(Approval))
         if bind is not None and inspect(bind).has_table("condition_readings"):

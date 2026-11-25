@@ -338,6 +338,9 @@ def _exempt(path: str) -> bool:
     # The guest list is a projection. It does not use a venue session.
     if path.startswith("/public/lists/"):
         return True
+    # Signed by the sensor secret. There is no session, and the venue comes from the sensor row.
+    if path.startswith("/sensors/webhook/"):
+        return True
     return False
 
 

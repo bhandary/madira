@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BriefingCards } from "@/components/BriefingCards";
 import { SommelierChat } from "@/components/SommelierChat";
-import { getTonight, getTonightBriefing, type TonightBoard, type TonightEnvelope } from "@/lib/api";
+import { decideReminder, getTonight, getTonightBriefing, type TonightBoard, type TonightEnvelope } from "@/lib/api";
 
 function boardFromEnvelope(envelope: TonightEnvelope): TonightBoard {
   return {
@@ -20,6 +20,8 @@ function boardFromEnvelope(envelope: TonightEnvelope): TonightBoard {
     approvals: [],
     expiring_certificates: [],
     pos_alerts: [],
+    sensors: [],
+    reminders: [],
   };
 }
 
@@ -27,6 +29,7 @@ export default function HomePage() {
   const [board, setBoard] = useState<TonightBoard | null>(null);
   const [partial, setPartial] = useState(false);
   const [error, setError] = useState("");
+  const [reminderBusy, setReminderBusy] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -112,13 +115,81 @@ export default function HomePage() {
         {board && board.storage_alerts.length ? (
           <ul className="mt-2 space-y-1 text-sm">
             {board.storage_alerts.map((row) => (
-              <li key={row.id}>
+              <li key={row.id} data-testid="tonight-storage-alert" className="min-w-0 break-words">
                 {row.zone} · {row.metric} · {row.status}
               </li>
             ))}
           </ul>
         ) : (
           <p className="mt-2 text-sm text-[var(--muted)]">No open excursions.</p>
+        )}
+      </section>
+      )}
+      {partial ? null : (
+      <section className="panel" data-testid="tonight-sensors">
+        <h2 className="text-base font-semibold">Sensors</h2>
+        {board && board.sensors && board.sensors.length ? (
+          <ul className="mt-2 space-y-1 text-sm">
+            {board.sensors.map((row) => (
+              <li key={row.id} data-testid="tonight-sensor" className="min-w-0 break-words">
+                {row.name} · {row.last_value || "no reading"}
+                {row.stale ? ` · stale after ${row.stale_after_hours}h` : ""}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-[var(--muted)]">No sensors yet.</p>
+        )}
+      </section>
+      )}
+      {partial || (board?.role !== "Owner" && board?.role !== "Manager") ? null : (
+      <section className="panel" data-testid="tonight-reminders">
+        <h2 className="text-base font-semibold">Reminders</h2>
+        {board && board.reminders && board.reminders.length ? (
+          <ul className="mt-2 space-y-3 text-sm">
+            {board.reminders.map((row) => (
+              <li key={`${row.source_type}-${row.source_id}`} data-testid="tonight-reminder" className="min-w-0">
+                <p className="break-words font-medium">{row.title}</p>
+                <p className="break-words text-[var(--muted)]">{row.detail}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn min-h-11 whitespace-normal"
+                    data-testid="reminder-ack"
+                    disabled={reminderBusy === row.source_id}
+                    onClick={() => {
+                      setReminderBusy(row.source_id);
+                      decideReminder({ source_type: row.source_type, source_id: row.source_id, action: "acknowledge" })
+                        .then(() => getTonight())
+                        .then((next) => setBoard(next))
+                        .catch((exc: unknown) => setError(exc instanceof Error ? exc.message : "The reminder could not be updated."))
+                        .finally(() => setReminderBusy(""));
+                    }}
+                  >
+                    Acknowledge
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary min-h-11 whitespace-normal"
+                    data-testid="reminder-snooze"
+                    disabled={reminderBusy === row.source_id}
+                    onClick={() => {
+                      setReminderBusy(row.source_id);
+                      decideReminder({ source_type: row.source_type, source_id: row.source_id, action: "snooze", snooze_days: 7 })
+                        .then(() => getTonight())
+                        .then((next) => setBoard(next))
+                        .catch((exc: unknown) => setError(exc instanceof Error ? exc.message : "The reminder could not be updated."))
+                        .finally(() => setReminderBusy(""));
+                    }}
+                  >
+                    Snooze 7 days
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-[var(--muted)]">No reminders are due.</p>
         )}
       </section>
       )}

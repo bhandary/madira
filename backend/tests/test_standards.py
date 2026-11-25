@@ -153,7 +153,7 @@ with engine.begin() as conn:
 command.upgrade(cfg, "head")
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert version == "0024_pos"
+    assert version == "0025_sensors_reminders"
     tables = set(sa.inspect(conn).get_table_names())
     assert {"standards", "quiz_reviews"} <= tables
     lesson_row = conn.execute(sa.text("SELECT position, status FROM lessons")).one()
@@ -180,7 +180,7 @@ with engine.connect() as conn:
 command.upgrade(cfg, "head")
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert version == "0024_pos"
+    assert version == "0025_sensors_reminders"
 print("migration-ok")
 '''
     proc = subprocess.run([sys.executable, "-c", script], cwd=ROOT, env=env, capture_output=True, text=True)

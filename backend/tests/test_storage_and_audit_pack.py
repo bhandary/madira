@@ -376,7 +376,13 @@ def test_seeded_zones_stay_in_range_and_do_not_grow_on_a_second_seed():
 
 def test_compliance_auditor_tools_are_read_only():
     names = [tool.__name__ for tool in COMPLIANCE_TOOLS]
-    assert names == ["get_audit_pack_summary", "find_compliance_gaps", "get_storage_zones_status"]
+    assert names == [
+        "get_audit_pack_summary",
+        "find_compliance_gaps",
+        "get_storage_zones_status",
+        "get_sensor_status",
+        "list_reminders",
+    ]
     spec = next(row for row in SUBAGENT_SPECS if row["name"] == "compliance-auditor")
     assert [tool.__name__ for tool in spec["tools"]] == names
     assert "read-only" in spec["system_prompt"].lower()

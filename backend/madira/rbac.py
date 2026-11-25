@@ -58,6 +58,10 @@ class Capability(str, Enum):
     INVITE_DECIDE = "invite_decide"
     # Connect a register, map items, and sync sales. Owner and Manager. Reads use RECORDS.
     POS_MANAGE = "pos_manage"
+    # Register a sensor, rotate its secret, and apply a CSV. Owner and Manager. Reads use RECORDS.
+    SENSORS_MANAGE = "sensors_manage"
+    # Acknowledge or snooze an in-app reminder. Owner and Manager. Reads use RECORDS.
+    REMINDERS_ACK = "reminders_ack"
 
 
 MATRIX: dict[Capability, frozenset[str]] = {
@@ -85,6 +89,8 @@ MATRIX: dict[Capability, frozenset[str]] = {
     Capability.TASTINGS_MANAGE: frozenset({OWNER, MANAGER, SOMMELIER}),
     Capability.INVITE_DECIDE: frozenset({OWNER, MANAGER}),
     Capability.POS_MANAGE: frozenset({OWNER, MANAGER}),
+    Capability.SENSORS_MANAGE: frozenset({OWNER, MANAGER}),
+    Capability.REMINDERS_ACK: frozenset({OWNER, MANAGER}),
 }
 
 

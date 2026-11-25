@@ -405,7 +405,7 @@ command.upgrade(cfg, "head")
 engine = sa.create_engine(os.environ["DATABASE_URL"])
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert version == "0024_pos"
+    assert version == "0025_sensors_reminders"
     tables = set(sa.inspect(conn).get_table_names())
     assert "pos_credentials" in tables
     assert "pos_connections" in tables
@@ -422,7 +422,7 @@ with engine.connect() as conn:
 
 command.upgrade(cfg, "head")
 with engine.connect() as conn:
-    assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0024_pos"
+    assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0025_sensors_reminders"
 print("migration-ok")
 '''
     proc = subprocess.run([sys.executable, "-c", script], cwd=ROOT, env=env, capture_output=True, text=True)

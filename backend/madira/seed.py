@@ -34,6 +34,9 @@ def seed(session: Session | None = None) -> None:
             from madira.domain.compliance.service import ensure_demo_records
 
             ensure_demo_records(session, ctx)
+            from madira.domain.reminders.service import ensure_demo_license
+
+            ensure_demo_license(session, ctx)
             _ensure_demo_ledger(session, venue_id)
             from madira.domain.inventory.storage import ensure_demo_zones
 

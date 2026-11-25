@@ -32,6 +32,8 @@ import { SampleCard } from "@/components/SampleCard";
 import { RepFollowupView, SourcingBriefView, TastingHistoryView } from "@/components/SourcingViews";
 import { posStatus, unmappedPosItem } from "@/a2ui/posSchema";
 import { PosStatusView, UnmappedPosView } from "@/components/PosViews";
+import { reminderItem, sensorStatusItem } from "@/a2ui/sensorSchema";
+import { ReminderListView, SensorStatusView } from "@/components/SensorViews";
 
 function money(n: unknown, currency?: unknown) {
   const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
@@ -357,6 +359,16 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
     const parsed = unmappedPosItem.array().safeParse(p.items);
     if (!parsed.success) return null;
     return <UnmappedPosView items={parsed.data} />;
+  },
+  SensorStatus: (p) => {
+    const parsed = sensorStatusItem.array().safeParse(p.sensors);
+    if (!parsed.success) return null;
+    return <SensorStatusView sensors={parsed.data} />;
+  },
+  ReminderList: (p) => {
+    const parsed = reminderItem.array().safeParse(p.reminders);
+    if (!parsed.success) return null;
+    return <ReminderListView reminders={parsed.data} />;
   },
   TastingHistory: (p) => {
     const parsed = tastingHistory.safeParse(p.history);
