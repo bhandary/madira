@@ -348,6 +348,44 @@ def list_excursions(session: Session, venue_id: uuid.UUID, status: str | None = 
     return [excursion_public(row) for row in session.scalars(stmt).all()]
 
 
+def excursion_metric(zone: StorageZone, temp_c, humidity_pct) -> str | None:
+    """The existing band check. None means the reading is inside the zone."""
+
+    return _metric(_number(temp_c, "Temperature"), _number(humidity_pct, "Humidity"), zone)
+
+
+def paired_reading(zone: StorageZone, metric: str, value, last: ConditionReading | None) -> tuple[Decimal, Decimal, str]:
+    """Pair one sensor metric with an in-band companion so the existing check can run.
+
+    The companion is the previous in-range reading for that metric, or the
+    middle of the target band. An alert can open only for the metric that
+    was actually measured.
+    """
+
+    if metric not in {"temperature_c", "humidity_pct"}:
+        raise Rejected("Metric must be temperature_c or humidity_pct")
+    measured = _number(value, "Value")
+    if metric == "temperature_c":
+        humidity = _companion(
+            None if last is None else last.humidity_pct,
+            zone.target_humidity_min_pct,
+            zone.target_humidity_max_pct,
+        )
+        return measured, humidity, "humidity_pct was not measured on this reading"
+    temp = _companion(
+        None if last is None else last.temp_c,
+        zone.target_temp_min_c,
+        zone.target_temp_max_c,
+    )
+    return temp, measured, "temperature_c was not measured on this reading"
+
+
+def _companion(current: Decimal | None, low: Decimal, high: Decimal) -> Decimal:
+    if current is not None and _side(current, low, high) is None:
+        return current
+    return _number((Decimal(low) + Decimal(high)) / Decimal(2), "Companion")
+
+
 def record_condition_reading(
     session: Session,
     venue_id: uuid.UUID,
@@ -357,6 +395,7 @@ def record_condition_reading(
     actor,
     notes: str | None = None,
     source: str = "manual",
+    recorded_at: datetime | None = None,
 ) -> dict:
     venue = _venue(session, venue_id)
     zone = _zone(session, venue_id, zone_id)
@@ -364,7 +403,10 @@ def record_condition_reading(
     humidity = _number(humidity_pct, "Humidity")
     origin = _text(source, 32, "Source") or "manual"
     user_id, email = _actor(actor)
-    now = datetime.now(timezone.utc)
+    when = datetime.now(timezone.utc)
+    if recorded_at is not None:
+        when = recorded_at if recorded_at.tzinfo is not None else recorded_at.replace(tzinfo=timezone.utc)
+        when = when.astimezone(timezone.utc)
     reading = ConditionReading(
         venue_id=venue_id,
         zone_id=zone.id,
@@ -372,7 +414,7 @@ def record_condition_reading(
         humidity_pct=humidity,
         source=origin,
         recorded_by_user_id=user_id,
-        recorded_at=now,
+        recorded_at=when,
         notes=_text(notes, 4000, "Notes"),
     )
     session.add(reading)

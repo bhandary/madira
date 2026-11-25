@@ -955,6 +955,15 @@ def tonight() -> dict:
             board["pos_alerts"] = gap_alerts(session, venue_id)
         else:
             board["pos_alerts"] = []
+        from madira.domain.sensors.service import sensor_board
+
+        board["sensors"] = sensor_board(session, venue_id)
+        from madira.domain.reminders.service import open_reminders
+
+        if ctx is not None and ctx.role in {OWNER, MANAGER}:
+            board["reminders"] = open_reminders(session, venue_id)
+        else:
+            board["reminders"] = []
         _ = zone
         return _strip(board)
 

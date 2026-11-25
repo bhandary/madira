@@ -55,6 +55,7 @@ def classify_intent(text: str) -> str:
             "storage zone",
             "condition excursion",
             "excursion",
+            "sensor",
             "journal entry",
             "qbo",
             "xero",
@@ -69,6 +70,8 @@ def classify_intent(text: str) -> str:
         return "training"
     if "team progress" in t or "weak topic" in t or "expiring certificate" in t:
         return "training"
+    if "reminder" in t:
+        return "compliance"
     if any(k in t for k in ("quiz", "training", "lesson", "etiquette", "roleplay", "briefing", "flashcard", "waitstaff")):
         return "training"
     if any(
@@ -348,6 +351,10 @@ class DemoChatModel(BaseChatModel):
             return "List the lessons for this role."
         if specialist == "compliance-auditor":
             lowered = text.lower()
+            if "sensor" in lowered:
+                return "Report sensor status. Read only. Do not reveal a signing secret."
+            if "reminder" in lowered:
+                return "List open reminders. Read only. Do not send anything."
             if "storage" in lowered or "zone" in lowered or "excursion" in lowered:
                 return "Report storage zone conditions. Read only."
             if "gap" in lowered or "missing invoice" in lowered:
@@ -531,6 +538,14 @@ class DemoChatModel(BaseChatModel):
 
         if role == "compliance-auditor":
             lowered = text.lower()
+            if "sensor" in lowered and "get_sensor_status" not in done:
+                return _ai([_call("get_sensor_status", {})])
+            if "sensor" in lowered:
+                return finish("Sensor status is on the card. The signing secret stays on the server.")
+            if "reminder" in lowered and "list_reminders" not in done:
+                return _ai([_call("list_reminders", {})])
+            if "reminder" in lowered:
+                return finish("Reminders are on the card. Nothing was sent.")
             if "audit pack" in lowered and "get_audit_pack_summary" not in done:
                 start, end = _audit_dates(text)
                 return _ai([_call("get_audit_pack_summary", {"start_date": start, "end_date": end})])

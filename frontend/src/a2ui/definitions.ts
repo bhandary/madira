@@ -104,6 +104,14 @@ export const catalogDefinitions = {
     description: "POS items that sold without a SKU mapping.",
     props: { items: "array of unmapped POS items" },
   },
+  SensorStatus: {
+    description: "Sensor last reading and whether it is stale. The signing secret is not shown.",
+    props: { sensors: "array of sensor status rows" },
+  },
+  ReminderList: {
+    description: "Open in-app reminders for licenses and certificates. Nothing is sent.",
+    props: { reminders: "array of reminder rows" },
+  },
   TastingHistory: {
     description: "Tasted samples against bought purchase-order lines and invoice lines.",
     props: { history: "tasting history rows" },

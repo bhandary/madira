@@ -17,6 +17,8 @@ from madira.api.menus import router as menus_router
 from madira.api.notes import router as notes_router
 from madira.api.offers import router as offers_router
 from madira.api.pos import router as pos_router
+from madira.api.reminders import router as reminders_router
+from madira.api.sensors import router as sensors_router
 from madira.api.procurement import router as procurement_router
 from madira.api.purchasing import router as purchasing_router
 from madira.api.settings import router as settings_router
@@ -64,6 +66,8 @@ app.include_router(tastings_router)
 app.include_router(sourcing_router)
 app.include_router(offers_router)
 app.include_router(pos_router)
+app.include_router(sensors_router)
+app.include_router(reminders_router)
 app.include_router(fixtures_router)
 
 

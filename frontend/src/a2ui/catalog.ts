@@ -23,6 +23,7 @@ import { priceHistoryProps } from "./priceHistorySchema";
 import { sampleCardProps } from "./sampleCardSchema";
 import { repFollowupProps, sourcingBriefProps, tastingHistoryProps } from "./sourcingSchema";
 import { posStatusProps, unmappedPosProps } from "./posSchema";
+import { reminderListProps, sensorStatusProps } from "./sensorSchema";
 import { MADIRA_CATALOG_ID, catalogDefinitions } from "./definitions";
 
 /**
@@ -97,7 +98,11 @@ const definitions = Object.fromEntries(
                                       ? posStatusProps.describe(def.description)
                                       : name === "UnmappedPos"
                                         ? unmappedPosProps.describe(def.description)
-                                        : schemaFor(def.props).describe(def.description),
+                                        : name === "SensorStatus"
+                                          ? sensorStatusProps.describe(def.description)
+                                          : name === "ReminderList"
+                                            ? reminderListProps.describe(def.description)
+                                            : schemaFor(def.props).describe(def.description),
     },
   ]),
 );

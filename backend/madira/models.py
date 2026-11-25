@@ -86,6 +86,10 @@ class Venue(Base):
     invite_delivery: Mapped[str] = mapped_column(
         String(16), default="draft_only", server_default=text("'draft_only'")
     )
+    # Launch market. Seeded reminder rules are chosen from this code.
+    jurisdiction: Mapped[str] = mapped_column(
+        String(16), default="US-CA", server_default=text("'US-CA'")
+    )
 
 
 class Membership(Base):
@@ -1691,6 +1695,144 @@ class ConditionExcursion(Base):
     acknowledged_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = _stamp()
+
+
+SENSOR_METRICS = ("temperature_c", "humidity_pct")
+SENSOR_IMPORT_STATUSES = ("pending_review", "applied", "rejected")
+REMINDER_SOURCE_TYPES = ("license", "certificate")
+REMINDER_STATUSES = ("acknowledged", "snoozed")
+
+
+class Sensor(Base):
+    """A venue probe. The signing secret is ciphertext; the API returns the last four characters."""
+
+    __tablename__ = "sensors"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "external_id", name="uq_sensors_venue_external"),
+        UniqueConstraint("sensor_key", name="uq_sensors_key"),
+        CheckConstraint(
+            "metric IN ('temperature_c', 'humidity_pct')",
+            name="ck_sensors_metric",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    zone_id: Mapped[uuid.UUID] = _fk("storage_zones.id", index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    metric: Mapped[str] = mapped_column(String(32))
+    external_id: Mapped[str] = mapped_column(String(120))
+    sensor_key: Mapped[str] = mapped_column(String(80))
+    secret_ciphertext: Mapped[str] = mapped_column(Text)
+    secret_last4: Mapped[str] = mapped_column(String(8), default="", server_default=text("''"))
+    created_at: Mapped[datetime] = _stamp()
+
+
+class SensorReading(Base):
+    """One accepted sensor sample. The same sensor and timestamp are stored once."""
+
+    __tablename__ = "sensor_readings"
+    __table_args__ = (
+        UniqueConstraint("sensor_id", "recorded_at", name="uq_sensor_readings_sensor_at"),
+        CheckConstraint(
+            "metric IN ('temperature_c', 'humidity_pct')",
+            name="ck_sensor_readings_metric",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    sensor_id: Mapped[uuid.UUID] = _fk("sensors.id", index=True)
+    condition_reading_id: Mapped[uuid.UUID] = _fk("condition_readings.id", index=True)
+    metric: Mapped[str] = mapped_column(String(32))
+    value: Mapped[Decimal] = mapped_column(Numeric(8, 2))
+    recorded_at: Mapped[datetime] = mapped_column(AwareDateTime)
+
+
+class SensorImport(Base):
+    """A CSV review. Rows are previewed, then applied or rejected."""
+
+    __tablename__ = "sensor_imports"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending_review', 'applied', 'rejected')",
+            name="ck_sensor_imports_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    filename: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    status: Mapped[str] = mapped_column(String(32), default="pending_review", server_default=text("'pending_review'"))
+    rows_json: Mapped[list] = mapped_column(JSON, default=list)
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    decided_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    decided_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class VenueLicense(Base):
+    """A recorded license expiry. The vault file has no date of its own."""
+
+    __tablename__ = "venue_licenses"
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True, index=True)
+    rule_code: Mapped[str] = mapped_column(String(64))
+    label: Mapped[str] = mapped_column(String(200))
+    expires_on: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = _stamp()
+
+
+class ReminderRule(Base):
+    """A venue copy of a seeded reminder. Wording stays neutral."""
+
+    __tablename__ = "reminder_rules"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "code", name="uq_reminder_rules_venue_code"),
+        CheckConstraint("lead_days >= 1 AND lead_days <= 365", name="ck_reminder_rules_lead"),
+        CheckConstraint(
+            "applies_to IN ('license', 'certificate')",
+            name="ck_reminder_rules_applies",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    jurisdiction: Mapped[str] = mapped_column(String(16))
+    code: Mapped[str] = mapped_column(String(64))
+    title: Mapped[str] = mapped_column(String(200))
+    detail: Mapped[str] = mapped_column(Text)
+    lead_days: Mapped[int] = mapped_column(Integer)
+    applies_to: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = _stamp()
+
+
+class ReminderState(Base):
+    """An in-app acknowledgement or snooze. Nothing is sent."""
+
+    __tablename__ = "reminder_states"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "source_type", "source_id", name="uq_reminder_states_source"),
+        CheckConstraint(
+            "source_type IN ('license', 'certificate')",
+            name="ck_reminder_states_source",
+        ),
+        CheckConstraint(
+            "status IN ('acknowledged', 'snoozed')",
+            name="ck_reminder_states_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    source_type: Mapped[str] = mapped_column(String(32))
+    source_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
+    status: Mapped[str] = mapped_column(String(32))
+    snooze_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    actor_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    updated_at: Mapped[datetime] = _stamp()
 
 
 class VenueInvite(Base):
