@@ -606,6 +606,184 @@ export async function getDueReviews(): Promise<{ reviews: DueReview[] }> {
   return readJson(res);
 }
 
+export type RoleplayTurn = { role: "guest" | "staff"; text: string; product_ids?: string[] };
+export type RoleplayCriterion = { pass: boolean; evidence: string };
+export type RoleplaySession = {
+  id: string;
+  persona: string;
+  dish_id: string | null;
+  dish_name: string;
+  status: "open" | "scored";
+  transcript: RoleplayTurn[];
+  rubric: {
+    listened: RoleplayCriterion;
+    offered_two_options: RoleplayCriterion;
+    described_structure: RoleplayCriterion;
+    handled_price: RoleplayCriterion;
+  } | null;
+  score: number | null;
+  started_at: string | null;
+  scored_at: string | null;
+};
+export type RoleplayResponse = { session: RoleplaySession };
+
+export async function startRoleplay(persona: string, dish = ""): Promise<RoleplayResponse> {
+  const res = await fetch(`${API}/training/roleplay`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ persona, dish }),
+  });
+  return readJson(res);
+}
+
+export async function replyRoleplay(sessionId: string, text: string): Promise<RoleplayResponse> {
+  const res = await fetch(`${API}/training/roleplay/${sessionId}/reply`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  return readJson(res);
+}
+
+export async function scoreRoleplay(sessionId: string): Promise<RoleplayResponse> {
+  const res = await fetch(`${API}/training/roleplay/${sessionId}/score`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export type TeamMember = {
+  membership_id: string;
+  user_id: string;
+  name: string;
+  email: string;
+  role: string;
+  position: string | null;
+};
+export type TeamInvite = {
+  id: string;
+  email: string;
+  role: string;
+  position: string | null;
+  invited_by_user_id: string;
+  created_at: string | null;
+  accepted_at: string | null;
+  revoked_at: string | null;
+};
+export type TeamRoster = { members: TeamMember[]; invites: TeamInvite[] };
+export type TeamPerson = {
+  user_id: string;
+  name: string;
+  email: string;
+  role: string;
+  position: string | null;
+  briefing_ack: { acked: number; published: number; rate_bp: number | null; label: string };
+  lessons_done: number;
+  quiz_average_bp: number | null;
+  quiz_average_label: string;
+  roleplay_average_bp: number | null;
+  roleplay_average_label: string;
+};
+export type WeakTopic = { topic: string; correct: number; total: number; accuracy_bp: number; label: string };
+export type CertificateRecord = {
+  id: string;
+  user_id: string;
+  name: string;
+  kind: string;
+  label: string;
+  issued_on: string;
+  expires_on: string;
+  document_id: string | null;
+  document_filename: string;
+  created_by_user_id: string;
+  created_at: string | null;
+  days_left: number;
+  expired: boolean;
+  expiring: boolean;
+  due: boolean;
+  gap_type: string;
+  status_label: string;
+};
+export type TeamProgress = {
+  week: { start: string; end: string };
+  people: TeamPerson[];
+  weak_topics: WeakTopic[];
+  expiring_certificates: CertificateRecord[];
+};
+
+export async function getTeam(): Promise<TeamRoster> {
+  const res = await fetch(`${API}/team`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getTeamProgress(): Promise<TeamProgress> {
+  const res = await fetch(`${API}/team/progress`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function inviteTeamMember(body: { email: string; role: string; position: string | null }): Promise<TeamInvite> {
+  const res = await fetch(`${API}/team/invites`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function revokeTeamInvite(inviteId: string): Promise<TeamInvite> {
+  const res = await fetch(`${API}/team/invites/${inviteId}/revoke`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function updateTeamMember(userId: string, body: { role: string; position: string | null }): Promise<TeamMember> {
+  const res = await fetch(`${API}/team/members/${userId}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function removeTeamMember(userId: string): Promise<{ removed: boolean; user_id: string }> {
+  const res = await fetch(`${API}/team/members/${userId}`, { method: "DELETE", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getTeamCertificates(): Promise<{ certificates: CertificateRecord[] }> {
+  const res = await fetch(`${API}/team/certificates`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function createCertificate(input: {
+  userId: string;
+  kind: string;
+  label: string;
+  issuedOn: string;
+  expiresOn: string;
+  file: File | null;
+}): Promise<CertificateRecord> {
+  const body = new FormData();
+  body.set("user_id", input.userId);
+  body.set("kind", input.kind);
+  body.set("label", input.label);
+  body.set("issued_on", input.issuedOn);
+  body.set("expires_on", input.expiresOn);
+  if (input.file) body.set("file", input.file);
+  const res = await fetch(`${API}/team/certificates`, { method: "POST", credentials: "same-origin", body });
+  const payload = await readJson<{ certificate: CertificateRecord }>(res);
+  return payload.certificate;
+}
+
+export async function deleteCertificate(certificateId: string): Promise<{ removed: boolean }> {
+  const res = await fetch(`${API}/team/certificates/${certificateId}`, { method: "DELETE", credentials: "same-origin" });
+  return readJson(res);
+}
+
 export type BriefingItem = { title: string; detail: string };
 export type BriefingCard = { kind: string; title: string; body: string; items: BriefingItem[] };
 export type TonightBriefing = {
@@ -629,6 +807,17 @@ export type TonightBoard = {
   storage_alerts: { id: string; zone: string; metric: string; status: string }[];
   deliveries_due: { po_number: string; supplier: string; expected_delivery_date: string | null; status: string }[];
   approvals: { id: string; kind: string; title: string; status: string }[];
+  expiring_certificates: {
+    id: string;
+    user_id: string;
+    name: string;
+    kind: string;
+    label: string;
+    issued_on: string;
+    expires_on: string;
+    days_left: number;
+    status_label: string;
+  }[];
 };
 export type LookupHit = {
   name: string;

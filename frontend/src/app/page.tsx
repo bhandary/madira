@@ -18,6 +18,7 @@ function boardFromEnvelope(envelope: TonightEnvelope): TonightBoard {
     storage_alerts: [],
     deliveries_due: [],
     approvals: [],
+    expiring_certificates: [],
   };
 }
 
@@ -133,6 +134,22 @@ export default function HomePage() {
           </ul>
         ) : (
           <p className="mt-2 text-sm text-[var(--muted)]">No deliveries are due.</p>
+        )}
+      </section>
+      )}
+      {partial || (board?.role !== "Owner" && board?.role !== "Manager") ? null : (
+      <section className="panel" data-testid="tonight-certificates">
+        <h2 className="text-base font-semibold">Certificates</h2>
+        {board && board.expiring_certificates.length ? (
+          <ul className="mt-2 space-y-1 text-sm">
+            {board.expiring_certificates.map((row) => (
+              <li key={row.id} data-testid="tonight-certificate">
+                {row.name} · {row.label} · {row.status_label}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-[var(--muted)]">No certificates are due.</p>
         )}
       </section>
       )}

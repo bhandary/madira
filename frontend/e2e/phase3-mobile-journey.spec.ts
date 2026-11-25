@@ -76,6 +76,16 @@ test("curate a list, Ana finishes a week of briefings and a quiz, and the report
   await page.getByTestId("quiz-submit").click();
   await expect(page.getByTestId("quiz-score")).toBeVisible();
 
+  await page.getByTestId("tab-practice").click();
+  await page.getByTestId("roleplay-persona-skeptic").click();
+  await page.getByTestId("roleplay-start").click();
+  await page.getByTestId("roleplay-reply").fill("I hear you. Two glasses: one bright, one deeper. The bright one has more acidity. By the glass is the easier price.");
+  await page.getByTestId("roleplay-send").click();
+  await expect(page.getByTestId("roleplay-guest").last()).toBeVisible();
+  await page.getByTestId("roleplay-finish").click();
+  await expect(page.getByTestId("roleplay-rubric")).toBeVisible();
+  await expect(page.getByTestId("roleplay-score")).toBeVisible();
+
   await page.request.post("/madira-api/auth/demo-persona", { data: { slug: "owner" } });
   await page.goto("/records");
   await expect(page.getByRole("heading", { level: 1, name: "Records" })).toBeVisible();

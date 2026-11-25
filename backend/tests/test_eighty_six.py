@@ -164,7 +164,7 @@ with engine.connect() as conn:
     tables = set(sa.inspect(conn).get_table_names())
     assert "briefings" not in tables
 
-command.upgrade(cfg, "head")
+command.upgrade(cfg, "0017_briefings")
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
     assert version == "0017_briefings"
@@ -192,7 +192,7 @@ with engine.connect() as conn:
     assert "briefings" not in tables
     assert "briefing_acks" not in tables
 
-command.upgrade(cfg, "head")
+command.upgrade(cfg, "0017_briefings")
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
     assert version == "0017_briefings"

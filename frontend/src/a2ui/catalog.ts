@@ -15,6 +15,7 @@ import { floorLookupProps } from "./floorLookupSchema";
 import { lessonCardProps } from "./lessonCardSchema";
 import { pairingGridProps } from "./pairingGridSchema";
 import { quizCardProps } from "./quizCardSchema";
+import { roleplayPanelProps } from "./roleplayPanelSchema";
 import { varianceReportProps } from "./varianceReportSchema";
 import { zoneConditionCardProps } from "./zoneConditionCardSchema";
 import { MADIRA_CATALOG_ID, catalogDefinitions } from "./definitions";
@@ -51,6 +52,8 @@ const definitions = Object.fromEntries(
             ? pairingGridProps.describe(def.description)
             : name === "QuizCard"
               ? quizCardProps.describe(def.description)
+              : name === "RoleplayPanel"
+                ? roleplayPanelProps.describe(def.description)
               : name === "LessonCard"
                 ? lessonCardProps.describe(def.description)
                 : name === "BriefingCards"

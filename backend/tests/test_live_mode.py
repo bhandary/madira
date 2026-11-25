@@ -71,10 +71,17 @@ def test_live_tools_raise_instead_of_returning_fixtures(monkeypatch):
         assert "The list notes failed (RuntimeError)." in curated.value.message
         for marker in _FIXTURE_MARKERS:
             assert marker not in curated.value.message
-        with pytest.raises(Unavailable) as played:
-            start_roleplay()
-        assert "Diner roleplay has no live backend yet" in played.value.message
-        assert "skeptical of sommeliers" not in played.value.message
+        def roleplay_boom(_prompt: str) -> str:
+            raise RuntimeError("connection refused")
+
+        def scripted_boom(*_args, **_kwargs):
+            raise AssertionError("scripted guest")
+
+        monkeypatch.setattr("madira.domain.training.roleplay.live_complete", roleplay_boom)
+        monkeypatch.setattr("madira.domain.training.roleplay._scripted_guest", scripted_boom)
+        played = json.loads(start_roleplay())
+        assert played["error"] == "Roleplay failed (RuntimeError)."
+        assert "skeptical of sommeliers" not in played["error"]
         with pytest.raises(DraftFailed) as photo:
             extract_upload_text("plate.png", b"\x89PNG\r\n")
         assert photo.value.status == 415

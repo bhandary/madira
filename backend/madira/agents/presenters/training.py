@@ -113,3 +113,19 @@ def with_lesson(payload: dict) -> dict:
     body = dict(payload)
     body["a2ui_operations"] = lesson_surface(payload, "lesson-draft")
     return body
+
+
+ROLEPLAY_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "panel"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "panel", "component": "RoleplayPanel", "session": {"path": "/session"}},
+]
+
+
+def roleplay_surface(session: dict) -> list[dict[str, Any]]:
+    persona = session.get("persona") or "guest"
+    return surface("roleplay", ROLEPLAY_SCHEMA, {"title": f"Roleplay · {persona}", "session": session})
+
+
+def with_roleplay(session: dict) -> dict:
+    return {"session": session, "a2ui_operations": roleplay_surface(session)}

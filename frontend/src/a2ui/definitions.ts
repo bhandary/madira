@@ -52,6 +52,10 @@ export const catalogDefinitions = {
     description: "Draft purchase orders by supplier.",
     props: { orders: "array" },
   },
+  RoleplayPanel: {
+    description: "A guest roleplay with the service-written score and rubric.",
+    props: { session: "object" },
+  },
   QuizCard: {
     description: "Training quiz. The score and the next review date come from the quiz service.",
     props: { quiz: "object" },
