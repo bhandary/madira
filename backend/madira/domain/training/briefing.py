@@ -901,11 +901,15 @@ def tonight() -> dict:
                 .order_by(Approval.created_at.asc())
             ).all()
             for row in pending:
+                if row.entity_type == "list_version":
+                    title = f"List publish awaiting {ctx.role}"
+                else:
+                    title = f"{row.entity_type} awaiting {ctx.role}"
                 waiting.append(
                     {
                         "id": str(row.id),
                         "kind": row.entity_type or "approval",
-                        "title": f"{row.entity_type} awaiting {ctx.role}",
+                        "title": title,
                         "status": row.decision,
                     }
                 )

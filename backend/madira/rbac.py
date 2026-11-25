@@ -44,6 +44,10 @@ class Capability(str, Enum):
     TEAM_MANAGE = "team_manage"
     # Read the roster and team progress. Owner, Sommelier, and Manager.
     TEAM_VIEW = "team_view"
+    # Submit a list version for publication. Owner and Sommelier.
+    LIST_PUBLISH_SUBMIT = "list_publish_submit"
+    # Approve or reject a list version. Owner only.
+    LIST_PUBLISH_DECIDE = "list_publish_decide"
 
 
 MATRIX: dict[Capability, frozenset[str]] = {
@@ -65,6 +69,8 @@ MATRIX: dict[Capability, frozenset[str]] = {
     Capability.TRAINING_AUTHOR: frozenset({OWNER, SOMMELIER}),
     Capability.TEAM_MANAGE: frozenset({OWNER, MANAGER}),
     Capability.TEAM_VIEW: frozenset({OWNER, SOMMELIER, MANAGER}),
+    Capability.LIST_PUBLISH_SUBMIT: frozenset({OWNER, SOMMELIER}),
+    Capability.LIST_PUBLISH_DECIDE: frozenset({OWNER}),
 }
 
 

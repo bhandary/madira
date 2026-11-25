@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    event,
     func,
     text,
 )
@@ -1397,3 +1398,87 @@ class Certificate(Base):
     document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True, index=True)
     created_by_user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
     created_at: Mapped[datetime] = _stamp()
+
+
+LIST_VERSION_STATUSES = ("draft", "pending_approval", "published", "superseded", "rejected")
+
+
+class ListVersion(Base):
+    """One immutable publication of a beverage list. Entries do not change after insert."""
+
+    __tablename__ = "list_versions"
+    __table_args__ = (
+        UniqueConstraint("list_id", "number", name="uq_list_versions_list_number"),
+        UniqueConstraint("public_token", name="uq_list_versions_public_token"),
+        CheckConstraint(
+            "status IN ('draft', 'pending_approval', 'published', 'superseded', 'rejected')",
+            name="ck_list_versions_status",
+        ),
+        CheckConstraint("number >= 1", name="ck_list_versions_number"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    list_id: Mapped[uuid.UUID] = _fk("beverage_lists.id", index=True)
+    number: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(32), default="draft", server_default=text("'draft'"))
+    approval_id: Mapped[uuid.UUID | None] = _fk("approvals.id", nullable=True, index=True)
+    submitted_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    published_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True)
+    public_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    public_revoked_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    beverage_list: Mapped[BeverageList] = relationship()
+    entries: Mapped[list["ListEntry"]] = relationship(
+        back_populates="version",
+        order_by="ListEntry.position",
+        viewonly=True,
+    )
+
+
+class ListEntry(Base):
+    """Insert-only snapshot of one list row. Prices and guest text stay as they were."""
+
+    __tablename__ = "list_entries"
+    __table_args__ = (
+        CheckConstraint("position >= 0", name="ck_list_entries_position"),
+        CheckConstraint("bottle_price_cents >= 0", name="ck_list_entries_bottle_price"),
+        CheckConstraint("glass_price_cents >= 0", name="ck_list_entries_glass_price"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    version_id: Mapped[uuid.UUID] = _fk("list_versions.id", index=True)
+    section_name: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
+    bottle_price_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    glass_price_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    currency: Mapped[str] = _currency()
+    display_name: Mapped[str] = mapped_column(String(200), default="")
+    display_detail: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    version: Mapped[ListVersion] = relationship(back_populates="entries")
+
+
+class PublicListSnapshot(Base):
+    """Guest projection. The anonymous route reads only this table."""
+
+    __tablename__ = "public_list_snapshots"
+
+    token: Mapped[str] = mapped_column(String(128), primary_key=True)
+    venue_name: Mapped[str] = mapped_column(String(200))
+    rendered: Mapped[dict] = mapped_column(JSON)
+    published_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+@event.listens_for(ListEntry, "before_update")
+def _list_entries_are_insert_only(_mapper, _connection, _target) -> None:
+    raise ValueError("List entries are a snapshot and cannot change.")
+
+
+@event.listens_for(ListEntry, "before_delete")
+def _list_entries_are_not_deleted(_mapper, _connection, _target) -> None:
+    raise ValueError("List entries are a snapshot and cannot be deleted.")

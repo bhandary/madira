@@ -23,8 +23,17 @@ export const approvalRecord = z.object({
   decided_at: z.string().nullable().optional(),
 });
 
+export const approvalListVersion = z.object({
+  id: z.string(),
+  list_id: z.string().optional(),
+  list_name: z.string().optional(),
+  number: z.number().optional(),
+  status: z.string().optional(),
+});
+
 /** An owner decision card, or A2UI path bindings resolved before render. */
 export const approvalCardProps = z.object({
   purchaseOrder: z.union([approvalPurchaseOrder, pathBinding]),
   approval: z.union([approvalRecord, pathBinding]),
+  listVersion: z.union([approvalListVersion, pathBinding]).optional(),
 });

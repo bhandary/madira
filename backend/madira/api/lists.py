@@ -4,10 +4,13 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from madira.agents.presenters.lists import with_list
 from madira.domain.errors import DraftFailed, NotFound
+from madira.domain.lists.versions import ListVersionError
+from madira.domain.lists import versions as list_versions
 from madira.domain.lists.csv_import import ImportRejected, import_csv
 from madira.domain.lists.service import (
     add_item,
@@ -85,9 +88,15 @@ class SectionsBody(BaseModel):
     sections: list[SectionBody] = Field(min_length=1)
 
 
+class DecisionBody(BaseModel):
+    comment: str | None = None
+
+
 def _fail(exc: Exception) -> HTTPException:
     if isinstance(exc, NotFound):
         return HTTPException(404, exc.message)
+    if isinstance(exc, ListVersionError):
+        return HTTPException(exc.status, exc.message)
     if isinstance(exc, DraftFailed):
         return HTTPException(exc.status, exc.message)
     raise exc
@@ -226,3 +235,100 @@ def import_list(
         raise HTTPException(exc.status, exc.message) from exc
     except NotFound as exc:
         raise HTTPException(404, exc.message) from exc
+
+
+@router.post("/lists/{list_id}/versions", dependencies=[require(Capability.EDIT)])
+def post_list_version(list_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        return list_versions.snapshot_draft(active_venue_id(), list_id, current_request())
+    except (NotFound, ListVersionError) as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/lists/{list_id}/versions", dependencies=[require(Capability.RECORDS)])
+def get_list_versions(list_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        return list_versions.list_versions(active_venue_id(), list_id, current_request())
+    except NotFound as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/lists/versions/{version_id}", dependencies=[require(Capability.RECORDS)])
+def get_list_version(version_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        return list_versions.get_version(active_venue_id(), version_id, current_request())
+    except NotFound as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/lists/versions/{version_id}/diff", dependencies=[require(Capability.RECORDS)])
+def get_list_version_diff(version_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        return list_versions.diff_version(active_venue_id(), version_id)
+    except NotFound as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/lists/versions/{version_id}/submit", dependencies=[require(Capability.LIST_PUBLISH_SUBMIT)])
+def post_list_version_submit(version_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        return list_versions.submit_version(active_venue_id(), version_id, current_request())
+    except (NotFound, ListVersionError) as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/lists/versions/{version_id}/approve", dependencies=[require(Capability.LIST_PUBLISH_DECIDE)])
+def post_list_version_approve(version_id: uuid.UUID, body: DecisionBody | None = None) -> dict[str, Any]:
+    comment = None if body is None else body.comment
+    try:
+        return list_versions.approve(active_venue_id(), version_id, current_request(), comment)
+    except (NotFound, ListVersionError) as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/lists/versions/{version_id}/reject", dependencies=[require(Capability.LIST_PUBLISH_DECIDE)])
+def post_list_version_reject(version_id: uuid.UUID, body: DecisionBody | None = None) -> dict[str, Any]:
+    comment = None if body is None else body.comment
+    try:
+        return list_versions.reject(active_venue_id(), version_id, current_request(), comment)
+    except (NotFound, ListVersionError) as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/lists/versions/{version_id}/pdf", dependencies=[require(Capability.RECORDS)])
+def get_list_version_pdf(version_id: uuid.UUID) -> Response:
+    try:
+        filename, payload = list_versions.version_pdf(active_venue_id(), version_id)
+    except NotFound as exc:
+        raise _fail(exc) from exc
+    quoted = filename.replace('"', "")
+    return Response(
+        content=payload,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{quoted}"'},
+    )
+
+
+@router.get("/lists/versions/{version_id}/qr.png", dependencies=[require(Capability.EDIT)])
+def get_list_version_qr(version_id: uuid.UUID) -> Response:
+    try:
+        payload = list_versions.version_qr(active_venue_id(), version_id)
+    except NotFound as exc:
+        raise _fail(exc) from exc
+    return Response(content=payload, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+@router.post("/lists/versions/{version_id}/revoke-public", dependencies=[require(Capability.EDIT)])
+def post_list_version_revoke(version_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        return list_versions.revoke_public(active_venue_id(), version_id, current_request())
+    except (NotFound, ListVersionError) as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/public/lists/{token}")
+def get_public_list(token: str) -> dict[str, Any]:
+    try:
+        return list_versions.public_list(token)
+    except NotFound as exc:
+        raise HTTPException(404, "Not found.") from exc

@@ -71,7 +71,21 @@ def classify_intent(text: str) -> str:
         return "training"
     if any(k in t for k in ("inventory", "stock", "par level", "reorder", "purchase order", "on-hand", "on hand", "sku", "propose par", "par proposal", "count variance", "count session")):
         return "inventory"
-    if any(k in t for k in ("budget", "margin", "wine list", "curate", "beverage list", "coverage")):
+    if any(
+        k in t
+        for k in (
+            "budget",
+            "margin",
+            "wine list",
+            "curate",
+            "beverage list",
+            "coverage",
+            "submit for publish",
+            "diff the list",
+            "list diff",
+            "list version",
+        )
+    ):
         return "list"
     if any(k in t for k in ("menu", "dish", "pairing", "parse", "upload", "yuzu", "ribeye", "tasting menu")):
         return "menu"
@@ -257,6 +271,11 @@ class DemoChatModel(BaseChatModel):
                 )
             return "Recommend wine, beer, spirit, and sake pairings for each parsed dish, with rationale and price-tier fit."
         if specialist == "list-curator":
+            lowered = text.lower()
+            if "submit" in lowered and "publish" in lowered:
+                return f"Submit this list for publish. Call submit_list_for_publish. Do not publish it. {text}"
+            if "diff" in lowered:
+                return f"Diff the list against the published list. Call diff_list. {text}"
             budget = _extract_budget(text)
             margin = _extract_margin(text)
             return f"Curate a balanced beverage list. Budget ${budget:.0f}. Target pour/bottle margin {margin}x. Complement the current menu."
@@ -350,6 +369,10 @@ class DemoChatModel(BaseChatModel):
             lowered = text.lower()
             # A curate already returns the coverage grid and the health payload.
             # A second surface would paint a second budget summary.
+            if "submit" in lowered and "publish" in lowered and "submit_list_for_publish" not in done:
+                return _ai([_call("submit_list_for_publish", {"list_id": _extract_list_id(text)})])
+            if "diff" in lowered and "diff_list" not in done:
+                return _ai([_call("diff_list", {"list_id": _extract_list_id(text)})])
             if "curate_beverage_list" not in done and ("curate" in lowered or "budget" in lowered):
                 return _ai(
                     [

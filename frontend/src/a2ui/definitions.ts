@@ -113,10 +113,11 @@ export const catalogDefinitions = {
     },
   },
   ApprovalCard: {
-    description: "Owner approval for a purchase order, with comment, approve, and reject.",
+    description: "Owner approval for a purchase order or a list publish, with comment, approve, and reject.",
     props: {
       purchaseOrder: "purchase order number, supplier, totals, and delivery date",
       approval: "pending, approved, or rejected owner decision",
+      listVersion: "list version id, name, number, and status when the card is a list publish",
     },
   },
   ReceivingChecklist: {

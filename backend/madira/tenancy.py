@@ -41,6 +41,7 @@ _DEMO_PERSONAS = (
     ("ana", "madira-demo-ana", "ana@maison-madira.demo", "Ana", STAFF, "server"),
     ("ben", "madira-demo-ben", "ben@maison-madira.demo", "Ben", STAFF, "bartender"),
     ("mia", "madira-demo-mia", "mia@maison-madira.demo", "Mia", MANAGER, None),
+    ("lea", "madira-demo-lea", "lea@maison-madira.demo", "Lea", SOMMELIER, None),
 )
 
 _request: ContextVar[RequestContext | None] = ContextVar("madira_request_context", default=None)
@@ -333,6 +334,9 @@ def _exempt(path: str) -> bool:
     if path != "/" and path.endswith("/"):
         path = path.rstrip("/")
     if path in _EXEMPT or path.startswith("/auth"):
+        return True
+    # The guest list is a projection. It does not use a venue session.
+    if path.startswith("/public/lists/"):
         return True
     return False
 

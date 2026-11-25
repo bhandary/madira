@@ -77,3 +77,56 @@ def with_list(payload: dict) -> dict:
     body = dict(payload)
     body["a2ui_operations"] = list_surface(body)
     return body
+
+
+LIST_APPROVAL_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "card"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {
+        "id": "card",
+        "component": "ApprovalCard",
+        "purchaseOrder": {"path": "/purchaseOrder"},
+        "approval": {"path": "/approval"},
+        "listVersion": {"path": "/listVersion"},
+    },
+]
+
+
+def with_list_approval(version: dict) -> dict:
+    """An ApprovalCard for a list version. Publishing stays on the REST approve route."""
+
+    number = int(version.get("number") or 0)
+    name = version.get("list_name") or "List"
+    approval = version.get("approval") or {}
+    body = {
+        "version": version,
+        "a2ui_operations": surface(
+            "list-publish-approval",
+            LIST_APPROVAL_SCHEMA,
+            {
+                "title": f"{name} v{number}",
+                "purchaseOrder": {
+                    "id": str(version.get("id") or ""),
+                    "po_number": f"{name} v{number}",
+                    "status": version.get("status") or "pending_approval",
+                    "currency": version.get("currency") or "USD",
+                    "minimum_met": True,
+                },
+                "approval": {
+                    "id": str(approval.get("id") or ""),
+                    "decision": approval.get("decision") or "pending",
+                    "required_role": approval.get("required_role") or "owner",
+                    "comment": approval.get("comment") or "",
+                    "decided_at": approval.get("decided_at") or "",
+                },
+                "listVersion": {
+                    "id": str(version.get("id") or ""),
+                    "list_id": str(version.get("list_id") or ""),
+                    "list_name": name,
+                    "number": number,
+                    "status": version.get("status") or "pending_approval",
+                },
+            },
+        ),
+    }
+    return body

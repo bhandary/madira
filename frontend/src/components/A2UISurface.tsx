@@ -11,7 +11,7 @@ import { LessonCard } from "@/components/LessonCard";
 import { QuizCard } from "@/components/QuizCard";
 import { RoleplayPanel } from "@/components/RoleplayPanel";
 import { roleplaySession } from "@/a2ui/roleplayPanelSchema";
-import type { ApprovalPurchaseOrder, ApprovalRecord } from "@/components/ApprovalCard";
+import type { ApprovalListVersion, ApprovalPurchaseOrder, ApprovalRecord } from "@/components/ApprovalCard";
 import { ReceivingChecklist } from "@/components/ReceivingChecklist";
 import type { ReceivingLineView, ReceivingOrder, ReceivingReceiptView } from "@/components/ReceivingChecklist";
 import { asAudit, AuditTable } from "@/components/AuditTable";
@@ -325,9 +325,14 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
   CountSheet: (p) => <CountSheet session={p.session} lines={p.lines} />,
   VarianceReport: (p) => <VarianceReport report={p.report} />,
   ApprovalCard: (p) => {
+    const listVersion = p.listVersion as ApprovalListVersion | undefined;
+    const approval = (p.approval as ApprovalRecord) || null;
+    if (listVersion && typeof listVersion === "object" && listVersion.id) {
+      return <ApprovalCard listVersion={listVersion} approval={approval} />;
+    }
     const order = p.purchaseOrder as ApprovalPurchaseOrder | undefined;
     if (!order || typeof order !== "object" || !order.id) return null;
-    return <ApprovalCard purchaseOrder={order} approval={(p.approval as ApprovalRecord) || null} />;
+    return <ApprovalCard purchaseOrder={order} approval={approval} />;
   },
   ReceivingChecklist: (p) => {
     const order = p.purchaseOrder as ReceivingOrder | undefined;

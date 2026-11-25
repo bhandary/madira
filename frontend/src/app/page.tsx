@@ -159,7 +159,7 @@ export default function HomePage() {
         {board && board.approvals.length ? (
           <ul className="mt-2 space-y-1 text-sm">
             {board.approvals.map((row) => (
-              <li key={row.id}>
+              <li key={row.id} data-testid="tonight-approval">
                 {row.title}
               </li>
             ))}

@@ -7,7 +7,7 @@ import uuid
 
 from madira.agents import tracker
 from madira.agents.presenters.inventory import with_count_report, with_inventory
-from madira.agents.presenters.lists import with_list
+from madira.agents.presenters.lists import with_list, with_list_approval
 from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
 from madira.agents.presenters.procurement import with_scheduled, with_tasting_list
@@ -27,6 +27,8 @@ from madira.domain.inventory import par as par_service
 from madira.domain.inventory import service as inventory_service
 from madira.domain.inventory.ledger import Rejected
 from madira.domain.lists import service as lists_service
+from madira.domain.lists import versions as list_versions
+from madira.domain.lists.versions import ListVersionError
 from madira.domain.menu import service as menu_service
 from madira.domain.procurement import orders as order_lifecycle
 from madira.domain.procurement import receiving as receiving_service
@@ -126,6 +128,35 @@ def get_list_health(list_id: str = "") -> str:
         return _dumps({"error": getattr(exc, "message", "list not found")})
     tracker.complete_delegation("list-curator")
     return _dumps(payload)
+
+
+def submit_list_for_publish(list_id: str = "") -> str:
+    """Snapshot the list and open an Owner approval. This does not publish."""
+
+    try:
+        payload = list_versions.submit_list(_vid(), _list_key(list_id), _actor())
+    except (NotFound, ListVersionError, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "list not found")})
+    body = with_list_approval(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("list-curator")
+    return _dumps(body)
+
+
+def diff_list(list_id: str = "") -> str:
+    """Diff the current list against the published version. Added, removed, repriced, and moved."""
+
+    try:
+        key = _list_key(list_id)
+        payload = list_versions.diff_live(_vid(), key)
+        listed = lists_service.get_list(_vid(), key)
+    except (NotFound, ListVersionError, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "list not found")})
+    body = with_list(listed)
+    body["diff"] = payload
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("list-curator")
+    return _dumps(body)
 
 
 def get_coverage(list_id: str = "") -> str:
@@ -492,7 +523,7 @@ def get_storage_zones_status() -> str:
 
 MENU_ANALYST_TOOLS = [parse_menu]
 PAIRING_TOOLS = [recommend_pairings, draft_tasting_note]
-LIST_TOOLS = [curate_beverage_list, get_list_health, get_coverage]
+LIST_TOOLS = [curate_beverage_list, get_list_health, get_coverage, submit_list_for_publish, diff_list]
 INVENTORY_TOOLS = [
     get_inventory,
     update_stock,

@@ -522,7 +522,7 @@ def _score_curation(venue_id) -> tuple[dict, list[str]]:
     try:
         created = curate(venue_id, budget=12000, target_margin=3.2, name="Eval house list")
     except DraftFailed as exc:
-        return {"items": 0, "grounded": 0, "margin_ok": 0, "spent": 0, "budget": 0}, [exc.message]
+        return {"items": 0, "grounded": 0, "margin_ok": 0, "spent": 0, "budget": 0, "published": 0}, [exc.message]
     stored = list_lists(venue_id)["lists"]
     imported = next((row for row in stored if row.get("source_filename") == "sample_list.csv"), None)
     examined = [created]
@@ -553,12 +553,14 @@ def _score_curation(venue_id) -> tuple[dict, list[str]]:
         for cell in row.get("suggestions") or []:
             if cell.get("product_id"):
                 problems.append(f"buying suggestion {cell.get('name')} names a product")
+    published = _score_published_list(venue_id, created.get("list_id"), problems)
     return {
         "items": items,
         "grounded": grounded,
         "margin_ok": margin_ok,
         "spent": int(created.get("spent") or 0),
         "budget": int(created.get("budget") or 0),
+        "published": published,
     }, problems
 
 
@@ -638,6 +640,53 @@ def _print_training(counts: dict) -> None:
     )
 
 
+def _guest_field_problems(value, path: str = "") -> list[str]:
+    """Guest JSON may carry names, descriptions, and prices. Costs and margins stay out."""
+
+    found = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            lowered = str(key).lower()
+            if "cost" in lowered or "margin" in lowered:
+                found.append(f"{path}/{key}")
+            found.extend(_guest_field_problems(child, f"{path}/{key}"))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            found.extend(_guest_field_problems(child, f"{path}/{index}"))
+    return found
+
+
+def _score_published_list(venue_id, list_id, problems: list[str]) -> int:
+    """Publish the curated list through the Owner approval and check the guest page."""
+
+    import uuid
+
+    from madira.domain.errors import NotFound
+    from madira.domain.lists import versions as list_versions
+
+    if not list_id:
+        problems.append("curated list has no id to publish")
+        return 0
+    try:
+        pending = list_versions.submit_list(venue_id, uuid.UUID(str(list_id)))
+        if pending.get("status") != "pending_approval" or pending.get("public_token"):
+            problems.append("submit_list published a list before the Owner approved it")
+            return 0
+        published = list_versions.approve(venue_id, uuid.UUID(str(pending["id"])))
+        guest = list_versions.public_list(published.get("public_token") or "")
+    except (NotFound, list_versions.ListVersionError, ValueError) as exc:
+        problems.append(getattr(exc, "message", "the curated list could not be published"))
+        return 0
+    leaked = _guest_field_problems(guest)
+    if leaked:
+        problems.append("guest list includes " + ", ".join(leaked))
+        return 0
+    if published.get("status") != "published":
+        problems.append("approved list version is not published")
+        return 0
+    return 1
+
+
 def _print_curation(counts: dict) -> None:
     print(
         "curation summary  "
@@ -645,7 +694,8 @@ def _print_curation(counts: dict) -> None:
         f"grounded={counts['grounded']}  "
         f"margin_ok={counts['margin_ok']}  "
         f"spent={counts['spent']}  "
-        f"budget={counts['budget']}"
+        f"budget={counts['budget']}  "
+        f"published={counts.get('published', 0)}"
     )
 
 

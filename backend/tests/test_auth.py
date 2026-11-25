@@ -124,6 +124,12 @@ def _wipe() -> None:
             session.execute(text("DELETE FROM roleplay_sessions"))
         if bind is not None and inspect(bind).has_table("venue_invites"):
             session.execute(text("DELETE FROM venue_invites"))
+        if bind is not None and inspect(bind).has_table("list_entries"):
+            session.execute(text("DELETE FROM list_entries"))
+        if bind is not None and inspect(bind).has_table("list_versions"):
+            session.execute(text("DELETE FROM list_versions"))
+        if bind is not None and inspect(bind).has_table("public_list_snapshots"):
+            session.execute(text("DELETE FROM public_list_snapshots"))
         session.execute(delete(Document))
         session.execute(delete(Approval))
         if bind is not None and inspect(bind).has_table("condition_readings"):
@@ -196,7 +202,7 @@ def _load(sub: str = "google-sub-1"):
 
 
 def _count() -> int:
-    seeded = {DEMO_USER_SUB, "madira-demo-ana", "madira-demo-ben", "madira-demo-mia"}
+    seeded = {DEMO_USER_SUB, "madira-demo-ana", "madira-demo-ben", "madira-demo-mia", "madira-demo-lea"}
     session = SessionLocal()
     try:
         return int(

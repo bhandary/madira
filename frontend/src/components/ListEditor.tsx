@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   candidate as candidateSchema,
   listEditorProps,
@@ -11,9 +11,17 @@ import {
 import {
   ApiError,
   addListItem,
+  createListVersion,
+  decideListVersion,
   deleteListItem,
+  listQrPath,
+  listVersions,
+  revokePublicList,
+  submitListVersion,
   updateListItem,
   type BeverageListDetail,
+  type ListDiff,
+  type ListVersionRecord,
 } from "@/lib/api";
 
 function money(minor: number, currency: string) {
@@ -65,6 +73,31 @@ export function ListEditor(props: {
   const [candidates, setCandidates] = useState<EditorCandidate[]>(incoming?.candidates || []);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const [version, setVersion] = useState<ListVersionRecord | null>(null);
+  const [diff, setDiff] = useState<ListDiff | null>(null);
+  const [canSubmit, setCanSubmit] = useState(true);
+  const versionTicket = useRef(0);
+
+  useEffect(() => {
+    if (!listId) return;
+    const ticket = versionTicket.current;
+    let live = true;
+    listVersions(listId)
+      .then((body) => {
+        if (!live || ticket !== versionTicket.current) return;
+        const latest = body.versions[0] || null;
+        setVersion(latest);
+        setDiff(latest?.diff || null);
+        setCanSubmit(body.can_submit);
+      })
+      .catch((exc) => {
+        if (!live) return;
+        if (exc instanceof ApiError && exc.status === 403) setCanSubmit(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [listId]);
 
   if (revision !== signature && incoming) {
     setRevision(signature);
@@ -96,6 +129,22 @@ export function ListEditor(props: {
       apply(await action());
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "The list could not be updated.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function runVersion(key: string, action: () => Promise<ListVersionRecord>) {
+    setBusy(key);
+    setError("");
+    versionTicket.current += 1;
+    try {
+      const next = await action();
+      setVersion(next);
+      setDiff(next.diff);
+      setCanSubmit(next.can_submit);
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "The list version could not be saved.");
     } finally {
       setBusy("");
     }
@@ -195,6 +244,142 @@ export function ListEditor(props: {
           </ul>
         </div>
       )}
+      <section className="mt-4" data-testid="list-publish">
+        <div className="kicker">Publish</div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn min-h-11"
+            data-testid="list-diff-load"
+            disabled={busy !== ""}
+            onClick={() =>
+              void runVersion("diff", async () => {
+                const next = await createListVersion(listId);
+                return next;
+              })
+            }
+          >
+            Review changes
+          </button>
+          {canSubmit ? (
+            <button
+              type="button"
+              className="btn btn-primary min-h-11"
+              data-testid="list-submit"
+              disabled={busy !== ""}
+              onClick={() =>
+                void runVersion("submit", async () => {
+                  const draft = version?.status === "draft" ? version : await createListVersion(listId);
+                  return submitListVersion(draft.id);
+                })
+              }
+            >
+              Submit for publish
+            </button>
+          ) : null}
+          {version?.can_decide ? (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary min-h-11"
+                data-testid="list-approve"
+                disabled={busy !== ""}
+                onClick={() => {
+                  const current = version;
+                  if (!current) return;
+                  void runVersion("approve", () => decideListVersion(current.id, "approve"));
+                }}
+              >
+                Approve and publish
+              </button>
+              <button
+                type="button"
+                className="btn min-h-11"
+                data-testid="list-reject"
+                disabled={busy !== ""}
+                onClick={() => {
+                  const current = version;
+                  if (!current) return;
+                  void runVersion("reject", () => decideListVersion(current.id, "reject"));
+                }}
+              >
+                Reject
+              </button>
+            </>
+          ) : null}
+          {version?.public_path ? (
+            <button
+              type="button"
+              className="btn min-h-11"
+              data-testid="list-revoke"
+              disabled={busy !== ""}
+              onClick={() => {
+                const current = version;
+                if (!current) return;
+                void runVersion("revoke", () => revokePublicList(current.id));
+              }}
+            >
+              Revoke QR
+            </button>
+          ) : null}
+        </div>
+        {version?.status === "pending_approval" && !version.can_decide ? (
+          <p className="mt-2 text-sm text-muted" data-testid="list-pending">
+            Waiting for the Owner
+          </p>
+        ) : null}
+        {diff ? (
+          <div className="mt-3" data-testid="list-diff">
+            <p className="text-sm text-ink" data-testid="list-diff-added">
+              Added {diff.added.length}
+            </p>
+            <p className="text-sm text-ink" data-testid="list-diff-removed">
+              Removed {diff.removed.length}
+            </p>
+            <p className="text-sm text-ink" data-testid="list-diff-repriced">
+              Repriced {diff.repriced.length}
+            </p>
+            <p className="text-sm text-ink" data-testid="list-diff-moved">
+              Moved {diff.moved.length}
+            </p>
+            <ul className="mt-2 grid gap-1">
+              {diff.added.map((row) => (
+                <li key={`added-${row.sku_id}`} className="text-sm text-muted" data-testid="list-diff-row">
+                  {row.name} added
+                </li>
+              ))}
+              {diff.removed.map((row) => (
+                <li key={`removed-${row.sku_id}`} className="text-sm text-muted" data-testid="list-diff-row">
+                  {row.name} removed
+                </li>
+              ))}
+              {diff.repriced.map((row) => (
+                <li key={`price-${row.sku_id}`} className="text-sm text-muted" data-testid="list-diff-row">
+                  {row.name} repriced
+                </li>
+              ))}
+              {diff.moved.map((row) => (
+                <li key={`moved-${row.sku_id}`} className="text-sm text-muted" data-testid="list-diff-row">
+                  {row.name} moved
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {version?.public_path ? (
+          <div className="mt-3">
+            <a className="text-link inline-flex min-h-11 items-center" data-testid="list-public-url" href={version.public_path}>
+              Guest list
+            </a>
+            <img
+              className="mt-2 h-40 w-40"
+              data-testid="list-qr"
+              alt="QR code for the guest list"
+              src={listQrPath(version.id)}
+            />
+          </div>
+        ) : null}
+      </section>
       {error && (
         <p className="banner-error mt-3" role="alert">
           {error}
