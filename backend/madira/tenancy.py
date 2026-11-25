@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from madira.auth import SESSION_COOKIE, session_subject, utcnow
+from madira.csrf import reject as reject_csrf
 from madira.db import SessionLocal
 from madira.models import ROLES, Membership, Organization, User, Venue
 
@@ -356,6 +357,10 @@ class TenancyMiddleware:
             return
         request = Request(scope, receive)
         path = request.url.path
+        blocked = reject_csrf(request)
+        if blocked is not None:
+            await blocked(scope, receive, send)
+            return
         if _exempt(path):
             await self.app(scope, receive, send)
             return

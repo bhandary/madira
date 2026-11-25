@@ -8,7 +8,8 @@ is first-party: HttpOnly, SameSite=Lax, and Secure when that URL is https.
 The flow is the authorization code grant with S256 PKCE, `state`, and
 `nonce`. joserfc checks the ID token (RS256, issuer, audience, expiry,
 nonce) before a User row is written. The cookie is an HMAC of the Google
-subject, not the Google token. Settings is limited to the Owner role.
+subject, not the Google token. A signed CSRF cookie is set with the session
+and sent back in a header on writes. Settings is limited to the Owner role.
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ from joserfc.jwk import KeySet
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from madira.csrf import CSRF_COOKIE
 from madira.db import SessionLocal
 from madira.models import User
 
@@ -462,8 +464,31 @@ def _set_cookie(response: JSONResponse | RedirectResponse, name: str, value: str
     )
 
 
-def _clear_cookie(response: JSONResponse | RedirectResponse, name: str) -> None:
-    response.delete_cookie(name, path="/", secure=cookie_secure(), httponly=True, samesite="lax")
+def _clear_cookie(response: JSONResponse | RedirectResponse, name: str, *, httponly: bool = True) -> None:
+    response.delete_cookie(name, path="/", secure=cookie_secure(), httponly=httponly, samesite="lax")
+
+
+def _set_csrf_cookie(response: JSONResponse | RedirectResponse, value: str) -> None:
+    # Readable by the page so it can copy the value into the CSRF header.
+    response.set_cookie(
+        CSRF_COOKIE,
+        value,
+        max_age=SESSION_TTL,
+        httponly=False,
+        secure=cookie_secure(),
+        samesite="lax",
+        path="/",
+    )
+
+
+def _attach_csrf(response: JSONResponse | RedirectResponse, session_token: str | None) -> None:
+    from madira.csrf import sign_csrf
+
+    if not session_subject(session_token):
+        return
+    token = sign_csrf(session_token or "")
+    if token:
+        _set_csrf_cookie(response, token)
 
 
 def _fail(code: str) -> RedirectResponse:
@@ -481,7 +506,22 @@ def auth_config() -> JSONResponse:
 
 @router.get("/auth/me")
 def auth_me(request: Request) -> JSONResponse:
-    return _no_store(JSONResponse({"user": user_from_session(request.cookies.get(SESSION_COOKIE))}))
+    session_token = request.cookies.get(SESSION_COOKIE)
+    response = JSONResponse({"user": user_from_session(session_token)})
+    _attach_csrf(response, session_token)
+    return _no_store(response)
+
+
+@router.get("/auth/csrf")
+def auth_csrf(request: Request) -> JSONResponse:
+    """Set the CSRF cookie for a session that was issued before this cookie existed."""
+
+    session_token = request.cookies.get(SESSION_COOKIE)
+    if not session_subject(session_token):
+        raise HTTPException(status_code=401, detail="Sign in required.")
+    response = JSONResponse({"ok": True})
+    _attach_csrf(response, session_token)
+    return _no_store(response)
 
 
 class PersonaBody(BaseModel):
@@ -525,6 +565,7 @@ def auth_logout() -> JSONResponse:
     _clear_cookie(response, SESSION_COOKIE)
     _clear_cookie(response, OIDC_COOKIE)
     _clear_cookie(response, DEMO_PERSONA_COOKIE)
+    _clear_cookie(response, CSRF_COOKIE, httponly=False)
     return _no_store(response)
 
 
@@ -555,5 +596,6 @@ def auth_callback(request: Request, code: str = "", state: str = "", error: str 
         return _fail(exc.code)
     response = RedirectResponse("/", status_code=302)
     _set_cookie(response, SESSION_COOKIE, session_token, SESSION_TTL)
+    _attach_csrf(response, session_token)
     _clear_cookie(response, OIDC_COOKIE)
     return _no_store(response)
