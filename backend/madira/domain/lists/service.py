@@ -611,18 +611,28 @@ def _candidate_public(pick: Pick) -> dict:
 
 
 def _candidates(session: Session, venue_id: uuid.UUID, rules: list[dict]) -> list[Pick]:
+    from madira.domain.procurement.offers import candidate_offer_costs
+
     stock = _on_hand(session, venue_id)
     notes = _approved(session, venue_id)
+    offer_costs = candidate_offer_costs(session, venue_id)
     found = []
     rows = session.scalars(select(Sku).where(Sku.venue_id == venue_id).order_by(Sku.id)).all()
     for sku in rows:
         product = sku.variant.product if sku.variant is not None else None
         if product is None:
             continue
-        cost = int(sku.cost or 0)
+        stock_cost = int(sku.cost or 0)
+        offer_cost = offer_costs.get(sku.id)
+        if offer_cost is not None and offer_cost > 0:
+            cost = offer_cost
+        else:
+            cost = stock_cost
+            if cost <= 0:
+                continue
+            if sku.id in stock and stock[sku.id] <= 0:
+                continue
         if cost <= 0:
-            continue
-        if sku.id in stock and stock[sku.id] <= 0:
             continue
         category = normalize_category(product.category)
         profile = derive_profile(product, notes.get(product.id))

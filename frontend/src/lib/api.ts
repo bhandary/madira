@@ -1428,6 +1428,201 @@ export async function addSupplierContact(
   return readJson(res);
 }
 
+export type SupplierProfile = {
+  id: string;
+  name: string;
+  kind: string;
+  rep_name: string;
+  rep_email: string;
+  rep_phone: string | null;
+  delivery_days: string[];
+  order_minimum_cents: number;
+  order_minimum_currency: string;
+  order_minimum_label: string;
+  payment_terms: string | null;
+  notes: string;
+  lead_time_days: number;
+  default_case_size: number;
+};
+
+export type CatalogChoice = {
+  product_id: string;
+  sku_id: string;
+  name: string;
+  producer: string;
+  barcode: string;
+};
+
+export type AllocationRecord = {
+  id: string;
+  supplier_id: string;
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  period_label: string;
+  period_start: string | null;
+  period_end: string | null;
+};
+
+export type OfferRecord = {
+  id: string;
+  supplier_id: string;
+  supplier: string;
+  product_id: string;
+  product_name: string;
+  sku_id: string | null;
+  sku: string;
+  unit: string;
+  case_size: number;
+  price_cents: number;
+  price_label: string;
+  currency: string;
+  valid_from: string;
+  valid_to: string | null;
+  source: string;
+};
+
+export type PriceSheetLine = {
+  line: number;
+  name: string;
+  producer: string;
+  sku: string;
+  unit: string;
+  case_size: number;
+  price_cents: number;
+  price_label: string;
+  currency: string;
+  valid_from: string;
+  valid_to: string | null;
+  product_id: string | null;
+  sku_id: string | null;
+  product_name: string;
+  status: string;
+  message: string;
+};
+
+export type PriceSheetRecord = {
+  id: string;
+  supplier_id: string;
+  supplier: string;
+  document_id: string;
+  status: string;
+  rows: PriceSheetLine[];
+  matched: number;
+  unmatched: number;
+  created_at: string | null;
+  reviewed_at: string | null;
+};
+
+export type SupplierDeskPayload = {
+  supplier: SupplierProfile;
+  allocations: AllocationRecord[];
+  offers: OfferRecord[];
+  current_offers: OfferRecord[];
+  price_sheets: PriceSheetRecord[];
+  products: CatalogChoice[];
+};
+
+export type PricePointRecord = {
+  date: string;
+  kind: string;
+  price_cents: number;
+  price_label: string;
+  currency: string;
+  supplier_id: string;
+  supplier: string;
+  source: string;
+  offer_id: string | null;
+  invoice_id: string | null;
+};
+
+export async function getSupplierDesk(supplierId: string): Promise<SupplierDeskPayload> {
+  const res = await fetch(`${API}/procurement/suppliers/${supplierId}/desk`, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function saveSupplierProfile(
+  supplierId: string,
+  body: {
+    rep_name: string;
+    rep_email: string;
+    rep_phone: string;
+    delivery_days: string[];
+    order_minimum_cents: number;
+    order_minimum_currency: string;
+    payment_terms: string;
+    notes: string;
+  },
+): Promise<{ supplier: SupplierProfile }> {
+  const res = await fetch(`${API}/procurement/suppliers/${supplierId}/profile`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function createAllocation(
+  supplierId: string,
+  body: { product_id: string; quantity: number; period_label: string; period_start?: string; period_end?: string },
+): Promise<{ allocation: AllocationRecord }> {
+  const res = await fetch(`${API}/procurement/suppliers/${supplierId}/allocations`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function deleteAllocation(allocationId: string): Promise<{ deleted: string }> {
+  const res = await fetch(`${API}/procurement/allocations/${allocationId}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function uploadPriceSheet(supplierId: string, file: File): Promise<{ price_sheet: PriceSheetRecord }> {
+  const body = new FormData();
+  body.set("supplier_id", supplierId);
+  body.set("file", file);
+  const res = await fetch(`${API}/procurement/price-sheets`, {
+    method: "POST",
+    credentials: "same-origin",
+    body,
+  });
+  return readJson(res);
+}
+
+export async function applyPriceSheet(sheetId: string): Promise<{ price_sheet: PriceSheetRecord; offers: OfferRecord[] }> {
+  const res = await fetch(`${API}/procurement/price-sheets/${sheetId}/apply`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function rejectPriceSheet(sheetId: string): Promise<{ price_sheet: PriceSheetRecord; offers: OfferRecord[] }> {
+  const res = await fetch(`${API}/procurement/price-sheets/${sheetId}/reject`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function getPriceHistory(productId: string): Promise<{ product: { id: string; name: string; producer: string }; points: PricePointRecord[] }> {
+  const res = await fetch(`${API}/procurement/products/${productId}/price-history`, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
 export async function listLifecycleOrders(): Promise<{ orders: PurchaseOrderRow[] }> {
   const res = await fetch(`${API}/procurement/orders`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);

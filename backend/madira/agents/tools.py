@@ -10,7 +10,7 @@ from madira.agents.presenters.inventory import with_count_report, with_inventory
 from madira.agents.presenters.lists import with_list, with_list_approval
 from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
-from madira.agents.presenters.procurement import with_scheduled, with_tasting_list
+from madira.agents.presenters.procurement import with_offers, with_price_history, with_scheduled, with_tasting_list
 from madira.agents.presenters.purchasing import with_drafted, with_orders, with_purchase_order, with_receipt
 from madira.agents.presenters.training import (
     with_lesson,
@@ -30,9 +30,11 @@ from madira.domain.lists import service as lists_service
 from madira.domain.lists import versions as list_versions
 from madira.domain.lists.versions import ListVersionError
 from madira.domain.menu import service as menu_service
+from madira.domain.procurement import offers as offer_service
 from madira.domain.procurement import orders as order_lifecycle
 from madira.domain.procurement import receiving as receiving_service
 from madira.domain.procurement import service as procurement_service
+from madira.domain.procurement.offers import OfferError
 from madira.domain.procurement.orders import OrderError
 from madira.domain.procurement.receiving import ReceivingError
 from madira.domain.purchasing import service as purchasing_service
@@ -441,6 +443,32 @@ def get_team_progress() -> str:
     return _dumps(payload)
 
 
+def get_supplier_offers(product: str = "", supplier: str = "") -> str:
+    """Current offers for a product, a supplier, or both. Prices come from the offer service."""
+    try:
+        payload = offer_service.tool_offers(_vid(), product=product, supplier=supplier)
+    except (NotFound, OfferError) as exc:
+        return _dumps({"error": exc.message})
+    body = with_offers(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("supplier-scheduler")
+    return _dumps(body)
+
+
+def get_price_history(product: str = "") -> str:
+    """Dated offer and invoice costs for one product. Amounts come from the price history service."""
+    if not (product or "").strip():
+        return _dumps({"error": "Name a product."})
+    try:
+        payload = offer_service.tool_history(_vid(), product)
+    except (NotFound, OfferError) as exc:
+        return _dumps({"error": exc.message})
+    body = with_price_history(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("supplier-scheduler")
+    return _dumps(body)
+
+
 def list_tastings() -> str:
     """List scheduled supplier tastings (drafts only; nothing is sent)."""
     body = with_tasting_list(procurement_service.list_tastings(_vid()))
@@ -547,7 +575,7 @@ TRAINING_TOOLS = [
     score_roleplay,
     get_team_progress,
 ]
-SUPPLIER_TOOLS = [list_tastings, schedule_tasting]
+SUPPLIER_TOOLS = [list_tastings, schedule_tasting, get_supplier_offers, get_price_history]
 COMPLIANCE_TOOLS = [get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status]
 
 ALL_TOOLS = (

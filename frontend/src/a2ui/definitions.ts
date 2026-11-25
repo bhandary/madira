@@ -134,4 +134,18 @@ export const catalogDefinitions = {
       zone: "zone name, targets, latest reading, status, and excursion",
     },
   },
+  SupplierOffers: {
+    description: "Current supplier offers. Each price is the service price_label.",
+    props: {
+      offers: "array of current offers with price_label, supplier, and validity",
+      supplier: "supplier name when the list is filtered",
+    },
+  },
+  PriceHistory: {
+    description: "Dated offer and invoice costs for one product. Amounts are price_label from the service.",
+    props: {
+      product: "product id, name, and producer",
+      points: "array of dated price points",
+    },
+  },
 };

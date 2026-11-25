@@ -24,6 +24,8 @@ import { asCard, asNote, ServiceCard, TastingNoteCard } from "@/components/Tasti
 import { VarianceReport } from "@/components/VarianceReport";
 import { ZoneConditionCard } from "@/components/ZoneConditionCard";
 import type { StorageZone } from "@/lib/api";
+import type { SupplierOfferCard } from "@/a2ui/supplierOffersSchema";
+import type { PriceHistoryProduct, PricePoint } from "@/a2ui/priceHistorySchema";
 
 function money(n: unknown, currency?: unknown) {
   const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
@@ -349,6 +351,43 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
     const zone = p.zone as StorageZone | undefined;
     if (!zone || typeof zone !== "object" || !zone.id) return null;
     return <ZoneConditionCard zone={zone} />;
+  },
+  SupplierOffers: (p) => {
+    const offers = Array.isArray(p.offers) ? (p.offers as SupplierOfferCard[]) : [];
+    if (!offers.length) return <p className="text-sm text-muted">No current offer.</p>;
+    return (
+      <ul className="space-y-2" data-testid="a2ui-supplier-offers">
+        {offers.map((offer) => (
+          <li key={offer.id} className="rounded-md border border-line px-3 py-2">
+            <p className="font-medium">{offer.product_name}</p>
+            <p>
+              {offer.supplier} · {offer.price_label}
+            </p>
+            <p className="text-sm text-muted">
+              {offer.valid_from}
+              {offer.valid_to ? ` – ${offer.valid_to}` : ""} · {offer.unit || "unit"} · case {offer.case_size}
+            </p>
+          </li>
+        ))}
+      </ul>
+    );
+  },
+  PriceHistory: (p) => {
+    const product = p.product as PriceHistoryProduct | undefined;
+    const points = Array.isArray(p.points) ? (p.points as PricePoint[]) : [];
+    return (
+      <div data-testid="a2ui-price-history">
+        <p className="font-medium">{product?.name || "Product"}</p>
+        {points.length === 0 ? <p className="text-sm text-muted">No prices yet.</p> : null}
+        <ul className="mt-2 space-y-2">
+          {points.map((point, index) => (
+            <li key={`${point.kind}-${point.date}-${index}`}>
+              {point.date} · {point.kind} · {point.price_label} · {point.supplier}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
   },
 };
 
