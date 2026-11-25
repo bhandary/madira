@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { waitForListDesk } from "./listDesk";
 
 test.use({ viewport: { width: 390, height: 844 } });
 
 test("curate from the menu on a phone", async ({ page }) => {
   await page.goto("/list");
-  await expect(page.getByRole("heading", { name: "List curation" })).toBeVisible();
+  await waitForListDesk(page);
   await page.getByTestId("list-budget").fill("12000");
   await page.getByTestId("list-margin").fill("3.2");
   await page.getByTestId("list-target-cost").fill("31.3");
