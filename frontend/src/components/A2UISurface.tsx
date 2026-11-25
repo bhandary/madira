@@ -30,6 +30,8 @@ import { sampleCard } from "@/a2ui/sampleCardSchema";
 import { repFollowup, sourcingBrief, tastingHistory } from "@/a2ui/sourcingSchema";
 import { SampleCard } from "@/components/SampleCard";
 import { RepFollowupView, SourcingBriefView, TastingHistoryView } from "@/components/SourcingViews";
+import { posStatus, unmappedPosItem } from "@/a2ui/posSchema";
+import { PosStatusView, UnmappedPosView } from "@/components/PosViews";
 
 function money(n: unknown, currency?: unknown) {
   const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
@@ -345,6 +347,16 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
     const parsed = repFollowup.safeParse(p.followup);
     if (!parsed.success) return null;
     return <RepFollowupView followup={parsed.data} />;
+  },
+  PosStatus: (p) => {
+    const parsed = posStatus.safeParse(p.status);
+    if (!parsed.success) return null;
+    return <PosStatusView status={parsed.data} />;
+  },
+  UnmappedPos: (p) => {
+    const parsed = unmappedPosItem.array().safeParse(p.items);
+    if (!parsed.success) return null;
+    return <UnmappedPosView items={parsed.data} />;
   },
   TastingHistory: (p) => {
     const parsed = tastingHistory.safeParse(p.history);

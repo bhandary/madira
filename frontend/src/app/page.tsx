@@ -19,6 +19,7 @@ function boardFromEnvelope(envelope: TonightEnvelope): TonightBoard {
     deliveries_due: [],
     approvals: [],
     expiring_certificates: [],
+    pos_alerts: [],
   };
 }
 
@@ -134,6 +135,28 @@ export default function HomePage() {
           </ul>
         ) : (
           <p className="mt-2 text-sm text-[var(--muted)]">No deliveries are due.</p>
+        )}
+      </section>
+      )}
+      {partial || (board?.role !== "Owner" && board?.role !== "Manager") ? null : (
+      <section className="panel" data-testid="tonight-pos">
+        <h2 className="text-base font-semibold">POS</h2>
+        {board && board.pos_alerts && board.pos_alerts.length ? (
+          <ul className="mt-2 space-y-1 text-sm">
+            {board.pos_alerts.map((row) => (
+              <li key={`${row.kind}-${row.title}`} data-testid="tonight-pos-alert">
+                {row.href ? (
+                  <a className="inline-flex min-h-11 items-center" href={row.href}>
+                    {row.title}
+                  </a>
+                ) : (
+                  row.title
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-[var(--muted)]">No POS gaps.</p>
         )}
       </section>
       )}

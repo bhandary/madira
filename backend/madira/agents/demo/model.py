@@ -88,6 +88,8 @@ def classify_intent(text: str) -> str:
         )
     ):
         return "buyer"
+    if re.search(r"\bpos\b", t) or any(k in t for k in ("square", "unmapped item", "point of sale")):
+        return "inventory"
     if any(k in t for k in ("inventory", "stock", "par level", "reorder", "purchase order", "on-hand", "on hand", "sku", "propose par", "par proposal", "count variance", "count session")):
         return "inventory"
     if any(
@@ -312,6 +314,10 @@ class DemoChatModel(BaseChatModel):
             return f"Curate a balanced beverage list. Budget ${budget:.0f}. Target pour/bottle margin {margin}x. Complement the current menu."
         if specialist == "inventory-purchasing":
             lowered = text.lower()
+            if "unmapped" in lowered and "pos" in lowered:
+                return "List POS items that sold without a SKU mapping. Do not invent a mapping."
+            if re.search(r"\bpos\b", lowered) or "square" in lowered or "point of sale" in lowered:
+                return "Report the POS connection status. Do not invent a count or a mapping."
             if "propose par" in lowered or "par proposal" in lowered:
                 return "Propose par updates from 30-day depletion. Do not change par until a person accepts."
             if "count variance" in lowered or "variance report" in lowered or "count session" in lowered:
@@ -436,6 +442,13 @@ class DemoChatModel(BaseChatModel):
 
         if role == "inventory-purchasing":
             lowered = text.lower()
+            mentions_pos = re.search(r"\bpos\b", lowered) is not None or "square" in lowered or "point of sale" in lowered
+            if "unmapped" in lowered and mentions_pos and "list_unmapped_pos_items" not in done:
+                return _ai([_call("list_unmapped_pos_items", {})])
+            if mentions_pos and "get_pos_status" not in done:
+                return _ai([_call("get_pos_status", {})])
+            if mentions_pos and ("get_pos_status" in done or "list_unmapped_pos_items" in done):
+                return finish("POS status comes from the register. Mapping stays on the POS page.")
             if ("propose par" in lowered or "par proposal" in lowered or "par update" in lowered) and "propose_par_changes" not in done:
                 return _ai([_call("propose_par_changes", {"lead_time_days": 7, "safety_days": 4})])
             if ("variance" in lowered or "count sheet" in lowered) and "get_count_variance" not in done:

@@ -151,6 +151,16 @@ def _wipe() -> None:
             session.execute(text("DELETE FROM tasting_invite_slots"))
         if bind is not None and inspect(bind).has_table("tasting_invites"):
             session.execute(text("DELETE FROM tasting_invites"))
+        if bind is not None and inspect(bind).has_table("pos_sales"):
+            session.execute(text("DELETE FROM pos_sales"))
+        if bind is not None and inspect(bind).has_table("pos_item_mappings"):
+            session.execute(text("DELETE FROM pos_item_mappings"))
+        if bind is not None and inspect(bind).has_table("pos_sync_runs"):
+            session.execute(text("DELETE FROM pos_sync_runs"))
+        if bind is not None and inspect(bind).has_table("pos_connections"):
+            session.execute(text("DELETE FROM pos_connections"))
+        if bind is not None and inspect(bind).has_table("pos_credentials"):
+            session.execute(text("DELETE FROM pos_credentials"))
         session.execute(delete(Document))
         session.execute(delete(Approval))
         if bind is not None and inspect(bind).has_table("condition_readings"):

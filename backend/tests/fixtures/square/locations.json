@@ -1,0 +1,32 @@
+{
+  "locations": [
+    {
+      "id": "L8H2K0DEMO01",
+      "name": "Maison bar",
+      "address": {
+        "address_line_1": "1 Cellar Lane",
+        "locality": "San Francisco",
+        "administrative_district_level_1": "CA",
+        "postal_code": "94110",
+        "country": "US"
+      },
+      "timezone": "America/Los_Angeles",
+      "status": "ACTIVE",
+      "created_at": "2024-01-15T18:00:00Z",
+      "merchant_id": "MERCHANT01",
+      "country": "US",
+      "language_code": "en-US",
+      "currency": "USD",
+      "business_name": "Maison Madira",
+      "type": "PHYSICAL"
+    },
+    {
+      "id": "L8H2K0INACTIVE",
+      "name": "Closed counter",
+      "status": "INACTIVE",
+      "country": "US",
+      "currency": "USD",
+      "type": "PHYSICAL"
+    }
+  ]
+}

@@ -96,6 +96,14 @@ export const catalogDefinitions = {
     description: "Unsent draft note to a supplier rep, with the purchase order reference filled in by the service.",
     props: { followup: "rep follow-up draft" },
   },
+  PosStatus: {
+    description: "POS connection for this venue. The access token is not shown.",
+    props: { status: "provider, location, masked token, and last sync" },
+  },
+  UnmappedPos: {
+    description: "POS items that sold without a SKU mapping.",
+    props: { items: "array of unmapped POS items" },
+  },
   TastingHistory: {
     description: "Tasted samples against bought purchase-order lines and invoice lines.",
     props: { history: "tasting history rows" },

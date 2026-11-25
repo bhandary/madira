@@ -808,6 +808,7 @@ export type TonightBoard = {
   storage_alerts: { id: string; zone: string; metric: string; status: string }[];
   deliveries_due: { po_number: string; supplier: string; expected_delivery_date: string | null; status: string }[];
   approvals: { id: string; kind: string; title: string; status: string; href?: string }[];
+  pos_alerts?: { kind: string; title: string; href?: string }[];
   expiring_certificates: {
     id: string;
     user_id: string;
@@ -2444,6 +2445,128 @@ export function listQrPath(versionId: string) {
 
 export async function getPublicList(token: string): Promise<PublicList> {
   const res = await fetch(`${API}/public/lists/${encodeURIComponent(token)}`, { cache: "no-store" });
+  return readJson(res);
+}
+
+export type PosStatus = {
+  connected: boolean;
+  provider: string;
+  status: string;
+  location_id: string;
+  location_name: string;
+  key_last4: string;
+  masked: string;
+  last_synced_at: string | null;
+  watermark: string;
+  demo_mode: boolean;
+  locations?: { location_id: string; name: string }[];
+};
+
+export type PosCatalogItem = {
+  item_id: string;
+  variation_id: string;
+  name: string;
+  variation_name: string;
+  sku_hint: string;
+};
+
+export type PosMapping = {
+  id: string;
+  provider: string;
+  item_id: string;
+  variation_id: string;
+  sku_id: string;
+  sku: string;
+  pour_ml: number | null;
+  units_per_sale: number;
+};
+
+export type PosRun = {
+  id: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  posted: number;
+  skipped: number;
+  unmapped_count: number;
+  error: string;
+};
+
+export type PosGapItem = {
+  variation_id: string;
+  item_id: string;
+  name: string;
+  quantity: string;
+};
+
+export async function getPosStatus(): Promise<PosStatus> {
+  const res = await fetch(`${API}/pos/status`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getPosCatalog(): Promise<{ items: PosCatalogItem[] }> {
+  const res = await fetch(`${API}/pos/catalog`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getPosMappings(): Promise<{ mappings: PosMapping[] }> {
+  const res = await fetch(`${API}/pos/mappings`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getPosRuns(): Promise<{ runs: PosRun[] }> {
+  const res = await fetch(`${API}/pos/runs`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getPosGaps(): Promise<{ items: PosGapItem[] }> {
+  const res = await fetch(`${API}/pos/gaps`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function connectDemoPos(): Promise<PosStatus> {
+  const res = await fetch(`${API}/pos/connect/demo`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function connectSquarePos(accessToken: string, locationId = ""): Promise<PosStatus> {
+  const res = await fetch(`${API}/pos/connect/square`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ access_token: accessToken, location_id: locationId }),
+  });
+  return readJson(res);
+}
+
+export async function choosePosLocation(locationId: string): Promise<PosStatus> {
+  const res = await fetch(`${API}/pos/location`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ location_id: locationId }),
+  });
+  return readJson(res);
+}
+
+export async function savePosMapping(body: {
+  variation_id: string;
+  item_id: string;
+  sku: string;
+  pour_ml: number | null;
+  units_per_sale: string;
+}): Promise<{ mapping: PosMapping }> {
+  const res = await fetch(`${API}/pos/mappings`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function syncPos(): Promise<{ posted: number; skipped: number; unmapped: PosGapItem[] }> {
+  const res = await fetch(`${API}/pos/sync`, { method: "POST", credentials: "same-origin" });
   return readJson(res);
 }
 

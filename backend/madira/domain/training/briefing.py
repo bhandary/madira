@@ -44,7 +44,7 @@ from madira.models import (
     User,
     Venue,
 )
-from madira.tenancy import MANAGER, OWNER, SOMMELIER, active_venue_id, current_request, demo_posture
+from madira.tenancy import AUDITOR, MANAGER, OWNER, SOMMELIER, active_venue_id, current_request, demo_posture
 
 _DEFAULT_ZONE = "America/Los_Angeles"
 _LEAK = re.compile(r"\b(margin|cost|wholesale)\b|\$", re.I)
@@ -949,6 +949,12 @@ def tonight() -> dict:
             board["expiring_certificates"] = due_certificates(session, venue_id)
         else:
             board["expiring_certificates"] = []
+        from madira.domain.pos.service import gap_alerts
+
+        if ctx is not None and ctx.role in {OWNER, MANAGER, AUDITOR}:
+            board["pos_alerts"] = gap_alerts(session, venue_id)
+        else:
+            board["pos_alerts"] = []
         _ = zone
         return _strip(board)
 

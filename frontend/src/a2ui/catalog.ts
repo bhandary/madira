@@ -22,6 +22,7 @@ import { supplierOffersProps } from "./supplierOffersSchema";
 import { priceHistoryProps } from "./priceHistorySchema";
 import { sampleCardProps } from "./sampleCardSchema";
 import { repFollowupProps, sourcingBriefProps, tastingHistoryProps } from "./sourcingSchema";
+import { posStatusProps, unmappedPosProps } from "./posSchema";
 import { MADIRA_CATALOG_ID, catalogDefinitions } from "./definitions";
 
 /**
@@ -92,7 +93,11 @@ const definitions = Object.fromEntries(
                                   ? repFollowupProps.describe(def.description)
                                   : name === "TastingHistory"
                                     ? tastingHistoryProps.describe(def.description)
-                                    : schemaFor(def.props).describe(def.description),
+                                    : name === "PosStatus"
+                                      ? posStatusProps.describe(def.description)
+                                      : name === "UnmappedPos"
+                                        ? unmappedPosProps.describe(def.description)
+                                        : schemaFor(def.props).describe(def.description),
     },
   ]),
 );
