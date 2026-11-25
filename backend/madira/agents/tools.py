@@ -7,6 +7,7 @@ import uuid
 
 from madira.agents import tracker
 from madira.agents.presenters.inventory import with_count_report, with_inventory
+from madira.agents.presenters.pos import with_status, with_unmapped
 from madira.agents.presenters.lists import with_list, with_list_approval
 from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
@@ -201,6 +202,34 @@ def get_coverage(list_id: str = "") -> str:
 def get_inventory() -> str:
     """Return current stock, par levels, 30-day depletion, and low-stock alerts."""
     body = with_inventory(inventory_service.snapshot(_vid()))
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("inventory-purchasing")
+    return _dumps(body)
+
+
+def get_pos_status() -> str:
+    """Return the venue POS connection. The access token is not included."""
+    from madira.domain.pos.adapter import PosError
+    from madira.domain.pos.service import status as pos_status
+
+    try:
+        body = with_status(pos_status(_vid()))
+    except (NotFound, Rejected, PosError) as exc:
+        return _dumps({"error": exc.message})
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("inventory-purchasing")
+    return _dumps(body)
+
+
+def list_unmapped_pos_items() -> str:
+    """List POS variations that sold and have no SKU mapping. Mapping is not done here."""
+    from madira.domain.pos.adapter import PosError
+    from madira.domain.pos.service import unmapped_items
+
+    try:
+        body = with_unmapped(unmapped_items(_vid()))
+    except (NotFound, Rejected, PosError) as exc:
+        return _dumps({"error": exc.message})
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("inventory-purchasing")
     return _dumps(body)
@@ -614,6 +643,8 @@ PAIRING_TOOLS = [recommend_pairings, draft_tasting_note]
 LIST_TOOLS = [curate_beverage_list, get_list_health, get_coverage, submit_list_for_publish, diff_list]
 INVENTORY_TOOLS = [
     get_inventory,
+    get_pos_status,
+    list_unmapped_pos_items,
     update_stock,
     draft_purchase_orders,
     draft_case_purchase_orders,

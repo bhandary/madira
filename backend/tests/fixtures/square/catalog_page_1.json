@@ -1,0 +1,37 @@
+{
+  "objects": [
+    {
+      "type": "ITEM",
+      "id": "ITEM_MUSCADET",
+      "updated_at": "2024-06-01T12:00:00Z",
+      "version": 1717243200000,
+      "is_deleted": false,
+      "present_at_all_locations": true,
+      "item_data": {
+        "name": "Muscadet Domaine de l'Ecu",
+        "description": "Bottle",
+        "visibility": "PRIVATE",
+        "product_type": "REGULAR",
+        "variations": [
+          {
+            "type": "ITEM_VARIATION",
+            "id": "VAR_MUSCADET",
+            "updated_at": "2024-06-01T12:00:00Z",
+            "version": 1717243200000,
+            "is_deleted": false,
+            "present_at_all_locations": true,
+            "item_variation_data": {
+              "item_id": "ITEM_MUSCADET",
+              "name": "Bottle",
+              "sku": "W-MUS-01",
+              "ordinal": 0,
+              "pricing_type": "FIXED_PRICING",
+              "price_money": { "amount": 6400, "currency": "USD" }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "cursor": "catalog-page-2"
+}

@@ -1421,6 +1421,108 @@ class TastingInviteAttendee(Base):
     position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
 
 
+class PosCredential(Base):
+    """Fernet ciphertext for one venue's POS access token. The raw token is never stored."""
+
+    __tablename__ = "pos_credentials"
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    ciphertext: Mapped[str] = mapped_column(Text)
+    key_last4: Mapped[str] = mapped_column(String(8), default="", server_default=text("''"))
+    created_at: Mapped[datetime] = _stamp()
+
+
+class PosConnection(Base):
+    __tablename__ = "pos_connections"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "provider", name="uq_pos_connections_venue_provider"),
+        CheckConstraint(
+            "provider IN ('square', 'demo')",
+            name="ck_pos_connections_provider",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'active', 'disconnected', 'error')",
+            name="ck_pos_connections_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    provider: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default=text("'pending'"))
+    location_id: Mapped[str] = mapped_column(String(64), default="", server_default=text("''"))
+    location_name: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    credential_id: Mapped[uuid.UUID | None] = _fk("pos_credentials.id", nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    last_cursor: Mapped[str] = mapped_column(String(512), default="", server_default=text("''"))
+    watermark: Mapped[str] = mapped_column(String(64), default="", server_default=text("''"))
+    actor_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    updated_at: Mapped[datetime] = _stamp()
+
+
+class PosItemMapping(Base):
+    __tablename__ = "pos_item_mappings"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "provider", "variation_id", name="uq_pos_item_mappings_variation"),
+        CheckConstraint("units_per_sale > 0", name="ck_pos_item_mappings_units"),
+        CheckConstraint("pour_ml IS NULL OR pour_ml > 0", name="ck_pos_item_mappings_pour"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    provider: Mapped[str] = mapped_column(String(16))
+    item_id: Mapped[str] = mapped_column(String(128), default="", server_default=text("''"))
+    variation_id: Mapped[str] = mapped_column(String(128))
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id")
+    pour_ml: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    units_per_sale: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+    created_at: Mapped[datetime] = _stamp()
+    updated_at: Mapped[datetime] = _stamp()
+
+
+class PosSale(Base):
+    """Idempotency ledger. One row per provider line item that posted stock."""
+
+    __tablename__ = "pos_sales"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "provider", "external_line_id", name="uq_pos_sales_line"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    provider: Mapped[str] = mapped_column(String(16))
+    external_line_id: Mapped[str] = mapped_column(String(200))
+    order_id: Mapped[str] = mapped_column(String(128), default="", server_default=text("''"))
+    variation_id: Mapped[str] = mapped_column(String(128), default="", server_default=text("''"))
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id")
+    movement_id: Mapped[uuid.UUID | None] = _fk("stock_movements.id", nullable=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+    closed_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+
+
+class PosSyncRun(Base):
+    __tablename__ = "pos_sync_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'completed', 'failed')",
+            name="ck_pos_sync_runs_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    connection_id: Mapped[uuid.UUID] = _fk("pos_connections.id")
+    status: Mapped[str] = mapped_column(String(16), default="running", server_default=text("'running'"))
+    started_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    counts: Mapped[dict] = mapped_column(JSON, default=dict)
+    error: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    actor_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+
+
 class LlmCredential(Base):
     """One saved provider key. The secret is Fernet ciphertext, never the raw key."""
 
