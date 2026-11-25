@@ -572,6 +572,12 @@ class Supplier(Base):
     lead_time_days: Mapped[int] = mapped_column(Integer, default=7, server_default=text("7"))
     payment_terms: Mapped[str | None] = mapped_column(String(80), nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
+    rep_name: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    rep_email: Mapped[str] = mapped_column(String(320), default="", server_default=text("''"))
+    rep_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    order_minimum_currency: Mapped[str] = mapped_column(
+        String(3), default=DEFAULT_CURRENCY, server_default=text("'USD'")
+    )
     created_at: Mapped[datetime] = _stamp()
     contacts: Mapped[list[SupplierContact]] = relationship(back_populates="supplier", cascade="all, delete-orphan")
     items: Mapped[list[InventoryItem]] = relationship(back_populates="supplier")
@@ -592,6 +598,90 @@ class SupplierContact(Base):
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     created_at: Mapped[datetime] = _stamp()
     supplier: Mapped[Supplier] = relationship(back_populates="contacts")
+
+
+OFFER_SOURCES = ("manual", "csv", "pdf")
+PRICE_SHEET_STATUSES = ("pending_review", "applied", "rejected")
+
+
+class SupplierAllocation(Base):
+    """Bottles a supplier has set aside for this venue over a named period."""
+
+    __tablename__ = "supplier_allocations"
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="ck_supplier_allocations_quantity"),
+        CheckConstraint(
+            "period_end IS NULL OR period_start IS NULL OR period_end >= period_start",
+            name="ck_supplier_allocations_period",
+        ),
+        Index("ix_supplier_allocations_venue_supplier", "venue_id", "supplier_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id", index=True)
+    product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
+    quantity: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    period_label: Mapped[str] = mapped_column(String(120), default="", server_default=text("''"))
+    period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+
+
+class PriceSheet(Base):
+    """A parsed supplier price sheet. Rows become offers only when a person applies it."""
+
+    __tablename__ = "price_sheets"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending_review', 'applied', 'rejected')",
+            name="ck_price_sheets_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id", index=True)
+    document_id: Mapped[uuid.UUID] = _fk("documents.id", index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending_review", server_default=text("'pending_review'"))
+    parsed_rows: Mapped[list] = mapped_column(JSON, default=list)
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    created_at: Mapped[datetime] = _stamp()
+    reviewed_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class SupplierOffer(Base):
+    """One quoted price. The current offer is the latest valid row per supplier and product."""
+
+    __tablename__ = "supplier_offers"
+    __table_args__ = (
+        CheckConstraint("source IN ('manual', 'csv', 'pdf')", name="ck_supplier_offers_source"),
+        CheckConstraint("price_cents >= 0", name="ck_supplier_offers_price"),
+        CheckConstraint("case_size >= 1", name="ck_supplier_offers_case_size"),
+        CheckConstraint(
+            "valid_to IS NULL OR valid_to >= valid_from",
+            name="ck_supplier_offers_window",
+        ),
+        Index("ix_supplier_offers_venue_product", "venue_id", "product_id"),
+        Index("ix_supplier_offers_venue_supplier", "venue_id", "supplier_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id", index=True)
+    product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
+    sku_id: Mapped[uuid.UUID | None] = _fk("skus.id", nullable=True, index=True)
+    unit_description: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    case_size: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    price_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    currency: Mapped[str] = _currency()
+    valid_from: Mapped[date] = mapped_column(Date)
+    valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source: Mapped[str] = mapped_column(String(16))
+    source_document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True, index=True)
+    price_sheet_id: Mapped[uuid.UUID | None] = _fk("price_sheets.id", nullable=True, index=True)
+    created_at: Mapped[datetime] = _stamp()
 
 
 LOCATION_KINDS = ("cellar", "bar", "walk_in", "storage", "other")

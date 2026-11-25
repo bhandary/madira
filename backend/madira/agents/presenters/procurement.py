@@ -32,3 +32,35 @@ def with_scheduled(payload: dict) -> dict:
         "tastings": payload["tastings"],
         "a2ui_operations": tasting_surface("Tasting scheduled (draft)", payload["draft"], payload["tastings"]),
     }
+
+
+OFFER_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "offers"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "offers", "component": "SupplierOffers", "offers": {"path": "/offers"}, "supplier": {"path": "/supplier"}},
+]
+
+HISTORY_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "history"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "history", "component": "PriceHistory", "product": {"path": "/product"}, "points": {"path": "/points"}},
+]
+
+
+def with_offers(payload: dict) -> dict:
+    data = {
+        "title": payload.get("title") or "Current supplier offers",
+        "supplier": payload.get("supplier") or "",
+        "product": payload.get("product") or "",
+        "offers": payload.get("offers") or [],
+    }
+    return {**data, "a2ui_operations": surface("supplier-offers", OFFER_SCHEMA, data)}
+
+
+def with_price_history(payload: dict) -> dict:
+    data = {
+        "title": payload.get("title") or "Price history",
+        "product": payload.get("product") or {},
+        "points": payload.get("points") or [],
+    }
+    return {**data, "a2ui_operations": surface("price-history", HISTORY_SCHEMA, data)}

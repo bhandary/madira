@@ -89,7 +89,7 @@ def classify_intent(text: str) -> str:
         return "list"
     if any(k in t for k in ("menu", "dish", "pairing", "parse", "upload", "yuzu", "ribeye", "tasting menu")):
         return "menu"
-    if any(k in t for k in ("importer", "distributor", ".ics", "calendar", "supplier")) or (
+    if any(k in t for k in ("importer", "distributor", ".ics", "calendar", "supplier", "price history", "supplier offer", "current offer")) or (
         "tasting" in t and "schedule" in t
     ) or ("tasting" in t and "menu" not in t):
         return "supplier"
@@ -177,6 +177,10 @@ class DemoChatModel(BaseChatModel):
             return self._draft_note(messages)
         if self.role == "menu-extractor":
             return self._extract_menu(messages)
+        if self.role == "price-sheet-parser":
+            from madira.agents.demo.prices import price_sheet_json
+
+            return _ai(content=price_sheet_json(last_human(messages)))
         text = last_human(messages)
         if self.role == "briefing-intro":
             return self._briefing_intro(messages)
@@ -318,7 +322,12 @@ class DemoChatModel(BaseChatModel):
             start, end = _audit_dates(text)
             return f"Summarize the audit pack from {start} to {end}. Read only."
         if specialist == "supplier-scheduler":
-            if any(k in text.lower() for k in ("schedule", "book", "set up", "hold")):
+            lowered = text.lower()
+            if "price history" in lowered:
+                return f"PRICE_HISTORY product={_named_hint(text)}"
+            if "offer" in lowered:
+                return f"SUPPLIER_OFFERS product={_named_hint(text)} supplier={_supplier_hint(text)}"
+            if any(k in lowered for k in ("schedule", "book", "set up", "hold")):
                 return (
                     "Schedule a draft tasting with Kermit Lynch Wine Merchant titled "
                     "'New Loire releases tasting' next week at the cellar. Produce .ics only — do not send."
@@ -490,7 +499,23 @@ class DemoChatModel(BaseChatModel):
             return finish("Compliance review is read-only. Nothing was changed.")
 
         if role == "supplier-scheduler":
-            if any(k in text.lower() for k in ("schedule", "book", "set up", "hold", "new loire")) and "schedule_tasting" not in done:
+            lowered = text.lower()
+            if lowered.startswith("price_history"):
+                if "get_price_history" not in done:
+                    return _ai([_call("get_price_history", {"product": _marked(text, "product")})])
+                return finish("Price history comes from offers and invoices. The amounts are on the card.")
+            if lowered.startswith("supplier_offers"):
+                if "get_supplier_offers" not in done:
+                    return _ai(
+                        [
+                            _call(
+                                "get_supplier_offers",
+                                {"product": _marked(text, "product"), "supplier": _marked(text, "supplier")},
+                            )
+                        ]
+                    )
+                return finish("Current offers come from the supplier service. The amounts are on the card.")
+            if any(k in lowered for k in ("schedule", "book", "set up", "hold", "new loire")) and "schedule_tasting" not in done:
                 return _ai(
                     [
                         _call(
@@ -617,3 +642,26 @@ def _extract_menu_id(messages: list[BaseMessage]) -> str:
             if isinstance(data, dict) and data.get("menu_id"):
                 return str(data["menu_id"])
     return ""
+
+
+def _marked(text: str, key: str) -> str:
+    match = re.search(rf"\b{key}=([^\n]*?)(?:\s+\w+=|$)", text or "", re.I)
+    return match.group(1).strip() if match else ""
+
+
+def _named_hint(text: str) -> str:
+    found = _extract_product_id(text)
+    if found:
+        return found
+    match = re.search(r"\bfor\s+([^.]+)", text or "", re.I)
+    if not match:
+        return ""
+    hint = re.split(r"\b(?:from|at|with)\b", match.group(1), maxsplit=1, flags=re.I)[0]
+    return hint.strip(" .")
+
+
+def _supplier_hint(text: str) -> str:
+    match = re.search(r"\b(?:from|supplier)\s+([^.]+)", text or "", re.I)
+    if not match:
+        return ""
+    return match.group(1).strip(" .")

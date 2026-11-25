@@ -48,6 +48,9 @@ class Capability(str, Enum):
     LIST_PUBLISH_SUBMIT = "list_publish_submit"
     # Approve or reject a list version. Owner only.
     LIST_PUBLISH_DECIDE = "list_publish_decide"
+    # Edit supplier profiles, allocations, and offers, and apply or reject a price sheet.
+    # Owner, Manager, and Sommelier. Reads use RECORDS.
+    SUPPLIERS_MANAGE = "suppliers_manage"
 
 
 MATRIX: dict[Capability, frozenset[str]] = {
@@ -71,6 +74,7 @@ MATRIX: dict[Capability, frozenset[str]] = {
     Capability.TEAM_VIEW: frozenset({OWNER, SOMMELIER, MANAGER}),
     Capability.LIST_PUBLISH_SUBMIT: frozenset({OWNER, SOMMELIER}),
     Capability.LIST_PUBLISH_DECIDE: frozenset({OWNER}),
+    Capability.SUPPLIERS_MANAGE: frozenset({OWNER, MANAGER, SOMMELIER}),
 }
 
 

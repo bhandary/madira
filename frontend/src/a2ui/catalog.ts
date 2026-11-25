@@ -18,6 +18,8 @@ import { quizCardProps } from "./quizCardSchema";
 import { roleplayPanelProps } from "./roleplayPanelSchema";
 import { varianceReportProps } from "./varianceReportSchema";
 import { zoneConditionCardProps } from "./zoneConditionCardSchema";
+import { supplierOffersProps } from "./supplierOffersSchema";
+import { priceHistoryProps } from "./priceHistorySchema";
 import { MADIRA_CATALOG_ID, catalogDefinitions } from "./definitions";
 
 /**
@@ -76,7 +78,11 @@ const definitions = Object.fromEntries(
                       ? receivingChecklistProps.describe(def.description)
                       : name === "ZoneConditionCard"
                         ? zoneConditionCardProps.describe(def.description)
-                        : schemaFor(def.props).describe(def.description),
+                        : name === "SupplierOffers"
+                          ? supplierOffersProps.describe(def.description)
+                          : name === "PriceHistory"
+                            ? priceHistoryProps.describe(def.description)
+                            : schemaFor(def.props).describe(def.description),
     },
   ]),
 );

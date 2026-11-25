@@ -749,6 +749,10 @@ def _supplier_public(session: Session, row: Supplier) -> dict:
         "lead_time_days": int(row.lead_time_days or 0),
         "payment_terms": row.payment_terms,
         "notes": row.notes or "",
+        "rep_name": row.rep_name or "",
+        "rep_email": row.rep_email or "",
+        "rep_phone": row.rep_phone,
+        "order_minimum_currency": row.order_minimum_currency or DEFAULT_CURRENCY,
         "created_at": _iso(row.created_at),
         "contacts": [_contact_public(contact) for contact in contacts],
     }
