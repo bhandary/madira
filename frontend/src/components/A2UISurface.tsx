@@ -27,7 +27,9 @@ import type { StorageZone } from "@/lib/api";
 import type { SupplierOfferCard } from "@/a2ui/supplierOffersSchema";
 import type { PriceHistoryProduct, PricePoint } from "@/a2ui/priceHistorySchema";
 import { sampleCard } from "@/a2ui/sampleCardSchema";
+import { repFollowup, sourcingBrief, tastingHistory } from "@/a2ui/sourcingSchema";
 import { SampleCard } from "@/components/SampleCard";
+import { RepFollowupView, SourcingBriefView, TastingHistoryView } from "@/components/SourcingViews";
 
 function money(n: unknown, currency?: unknown) {
   const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
@@ -329,10 +331,25 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
     const card = parsed.data;
     return (
       <SampleCard
-        key={`${card.id}:${card.score ?? ""}:${card.product_id ?? ""}:${card.decision}:${card.label_document_id ?? ""}`}
+        key={`${card.id}:${card.score ?? ""}:${card.product_id ?? ""}:${card.quoted_price_cents ?? ""}:${card.decision}:${card.pass_reason}:${card.purchase_order_id ?? ""}:${card.list_version_id ?? ""}:${card.label_document_id ?? ""}`}
         sample={card}
       />
     );
+  },
+  SourcingBrief: (p) => {
+    const parsed = sourcingBrief.safeParse(p.brief);
+    if (!parsed.success) return null;
+    return <SourcingBriefView brief={parsed.data} />;
+  },
+  RepFollowup: (p) => {
+    const parsed = repFollowup.safeParse(p.followup);
+    if (!parsed.success) return null;
+    return <RepFollowupView followup={parsed.data} />;
+  },
+  TastingHistory: (p) => {
+    const parsed = tastingHistory.safeParse(p.history);
+    if (!parsed.success) return null;
+    return <TastingHistoryView history={parsed.data} />;
   },
   TastingNoteCard: (p) => <TastingNoteSurface note={p.note} />,
   AuditTable: (p) => <AuditSurface events={p.events} chain={p.chain} />,

@@ -1242,7 +1242,7 @@ class TastingSession(Base):
 
 
 class Sample(Base):
-    """One bottle tasted in a session. A decision is stored here; the order comes later."""
+    """One bottle tasted in a session. Buy and list open drafts. Pass stores a reason."""
 
     __tablename__ = "samples"
     __table_args__ = (
@@ -1273,9 +1273,81 @@ class Sample(Base):
     decision: Mapped[str] = mapped_column(String(16), default="undecided", server_default=text("'undecided'"))
     decided_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
     decided_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    pass_reason: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    purchase_order_id: Mapped[uuid.UUID | None] = _fk("purchase_orders.id", nullable=True, index=True)
+    po_line_id: Mapped[uuid.UUID | None] = _fk("po_lines.id", nullable=True, index=True)
+    list_id: Mapped[uuid.UUID | None] = _fk("beverage_lists.id", nullable=True, index=True)
+    list_version_id: Mapped[uuid.UUID | None] = _fk("list_versions.id", nullable=True, index=True)
     created_at: Mapped[datetime] = _stamp()
     session: Mapped[TastingSession] = relationship(back_populates="samples")
     product: Mapped[Product | None] = relationship()
+
+
+class SourcingBrief(Base):
+    """A want list built from list-coverage gaps. The model phrases the rationale only."""
+
+    __tablename__ = "sourcing_briefs"
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'closed')", name="ck_sourcing_briefs_status"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    list_id: Mapped[uuid.UUID | None] = _fk("beverage_lists.id", nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(16), default="draft", server_default=text("'draft'"))
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    created_at: Mapped[datetime] = _stamp()
+    items: Mapped[list["WantItem"]] = relationship(
+        back_populates="brief",
+        cascade="all, delete-orphan",
+        order_by="WantItem.position",
+    )
+
+
+class WantItem(Base):
+    """One gap on a sourcing brief. Quantity and the price band come from services."""
+
+    __tablename__ = "want_items"
+    __table_args__ = (
+        CheckConstraint("quantity_hint >= 0", name="ck_want_items_quantity"),
+        CheckConstraint("position >= 0", name="ck_want_items_position"),
+        Index("ix_want_items_venue_brief", "venue_id", "brief_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    brief_id: Mapped[uuid.UUID] = _fk("sourcing_briefs.id", index=True)
+    category: Mapped[str] = mapped_column(String(32))
+    style: Mapped[str] = mapped_column(String(80))
+    price_band: Mapped[str] = mapped_column(String(16), default="", server_default=text("''"))
+    quantity_hint: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    dishes: Mapped[list] = mapped_column(JSON, default=list)
+    sample_id: Mapped[uuid.UUID | None] = _fk("samples.id", nullable=True, index=True)
+    offer_id: Mapped[uuid.UUID | None] = _fk("supplier_offers.id", nullable=True, index=True)
+    rationale: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    created_at: Mapped[datetime] = _stamp()
+    brief: Mapped[SourcingBrief] = relationship(back_populates="items")
+
+
+class RepFollowup(Base):
+    """A draft note to a supplier rep. Madira stores it and does not send it."""
+
+    __tablename__ = "rep_followups"
+    __table_args__ = (UniqueConstraint("session_id", name="uq_rep_followups_session"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    session_id: Mapped[uuid.UUID] = _fk("tasting_sessions.id", index=True)
+    supplier_id: Mapped[uuid.UUID | None] = _fk("suppliers.id", nullable=True, index=True)
+    to_email: Mapped[str] = mapped_column(String(320), default="", server_default=text("''"))
+    subject: Mapped[str] = mapped_column(String(200), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    purchase_order_id: Mapped[uuid.UUID | None] = _fk("purchase_orders.id", nullable=True, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    created_at: Mapped[datetime] = _stamp()
+    updated_at: Mapped[datetime] = _stamp()
 
 
 class LlmCredential(Base):

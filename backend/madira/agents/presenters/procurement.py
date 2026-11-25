@@ -75,6 +75,53 @@ def with_sample(payload: dict) -> dict:
     }
 
 
+BRIEF_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "brief"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "brief", "component": "SourcingBrief", "brief": {"path": "/brief"}},
+]
+
+FOLLOWUP_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "note"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "note", "component": "RepFollowup", "followup": {"path": "/followup"}},
+]
+
+TASTING_HISTORY_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "history"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "history", "component": "TastingHistory", "history": {"path": "/history"}},
+]
+
+
+def with_brief(payload: dict) -> dict:
+    brief = payload["brief"]
+    return {
+        **payload,
+        "a2ui_operations": surface("sourcing-brief", BRIEF_SCHEMA, {"title": brief.get("title") or "Sourcing brief", "brief": brief}),
+    }
+
+
+def with_followup(payload: dict) -> dict:
+    followup = payload.get("followup") or {}
+    return {
+        **payload,
+        "a2ui_operations": surface(
+            "rep-followup",
+            FOLLOWUP_SCHEMA,
+            {"title": followup.get("subject") or "Rep follow-up", "followup": followup},
+        ),
+    }
+
+
+def with_history(payload: dict) -> dict:
+    return {
+        **payload,
+        "history": payload,
+        "a2ui_operations": surface("tasting-history", TASTING_HISTORY_SCHEMA, {"title": "Tasted and bought", "history": payload}),
+    }
+
+
 OFFER_SCHEMA = [
     {"id": "root", "component": "Column", "children": ["title", "offers"]},
     {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},

@@ -47,6 +47,13 @@ export const sampleCard = z.object({
   currency: z.string().nullable(),
   quoted_label: z.string(),
   decision: z.enum(["undecided", "buy", "list", "pass"]),
+  pass_reason: z.string(),
+  purchase_order_id: z.string().nullable(),
+  purchase_order_number: z.string(),
+  purchase_order_status: z.string(),
+  list_id: z.string().nullable(),
+  list_version_id: z.string().nullable(),
+  list_version_number: z.number().nullable(),
   list_price: listPrice,
   pairs_with: pairsWith,
 });

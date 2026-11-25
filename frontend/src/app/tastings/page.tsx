@@ -7,10 +7,13 @@ import {
   ApiError,
   addSample,
   createTastingSession,
+  draftRepFollowup,
   getProducts,
+  getRepFollowup,
   getTastingSession,
   listProcurementSuppliers,
   listTastingSessions,
+  type RepFollowup,
   type TastingSessionRow,
 } from "@/lib/api";
 
@@ -25,6 +28,8 @@ export default function TastingsPage() {
   const [title, setTitle] = useState("");
   const [when, setWhen] = useState("2026-12-01T15:00");
   const [location, setLocation] = useState("Maison Madira cellar");
+  const [followup, setFollowup] = useState<RepFollowup | null>(null);
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -52,8 +57,11 @@ export default function TastingsPage() {
 
   async function openSession(sessionId: string) {
     const body = await getTastingSession(sessionId);
+    const note = await getRepFollowup(sessionId);
     setSelected(sessionId);
     setSamples(body.samples);
+    setFollowup(note.followup);
+    setCopied(false);
     setSessions((current) => {
       const next = current.filter((row) => row.id !== body.session.id);
       return [body.session, ...next];
@@ -207,7 +215,7 @@ export default function TastingsPage() {
           <div className="space-y-3">
             {samples.map((sample) => (
               <SampleCard
-                key={`${sample.id}:${sample.score ?? ""}:${sample.product_id ?? ""}:${sample.decision}:${sample.label_document_id ?? ""}`}
+                key={`${sample.id}:${sample.score ?? ""}:${sample.product_id ?? ""}:${sample.quoted_price_cents ?? ""}:${sample.decision}:${sample.pass_reason}:${sample.purchase_order_id ?? ""}:${sample.list_version_id ?? ""}:${sample.label_document_id ?? ""}`}
                 sample={sample}
                 products={products}
                 onChange={(next) => {
@@ -216,6 +224,57 @@ export default function TastingsPage() {
               />
             ))}
           </div>
+          <section className="panel space-y-3 p-3" data-testid="followup-panel">
+            <h3 className="text-base font-medium">Rep follow-up</h3>
+            <p className="text-sm text-muted">A draft for the supplier. Madira does not send it.</p>
+            <button
+              type="button"
+              className="btn btn-primary min-h-11 w-full"
+              data-testid="tasting-followup"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                setError("");
+                void draftRepFollowup(current.id)
+                  .then((body) => setFollowup(body.followup))
+                  .catch((err: unknown) => {
+                    setError(err instanceof ApiError ? err.message : "The follow-up could not be drafted.");
+                  })
+                  .finally(() => setBusy(false));
+              }}
+            >
+              Draft follow-up
+            </button>
+            {followup ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium" data-testid="followup-subject">
+                  {followup.subject}
+                </p>
+                <pre className="whitespace-pre-wrap text-sm" data-testid="followup-body">
+                  {followup.body}
+                </pre>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn min-h-11"
+                    data-testid="followup-copy"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(followup.body).then(() => setCopied(true));
+                    }}
+                  >
+                    {copied ? "Copied" : "Copy draft"}
+                  </button>
+                  {followup.mailto ? (
+                    <a className="btn inline-flex min-h-11 items-center" data-testid="followup-mailto" href={followup.mailto}>
+                      Open in mail
+                    </a>
+                  ) : (
+                    <p className="text-sm text-muted">No rep email is on file.</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </section>
         </section>
       ) : null}
 

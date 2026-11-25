@@ -1,8 +1,9 @@
 """Tasting sessions, samples, a downloadable calendar file, and label matching.
 
-Nothing is emailed and no invite is sent. A decision is stored on the sample.
-The purchase order and the list draft are a later step. List prices, margins,
-and dish matches come from the pricing and pairing services.
+Nothing is emailed and no invite is sent. A decision is applied by the sourcing
+service: buy opens or extends a draft purchase order, list opens a draft list
+version, and pass stores a reason. List prices, margins, and dish matches come
+from the pricing and pairing services.
 """
 
 from __future__ import annotations
@@ -23,8 +24,10 @@ from madira.domain.session import session_scope
 from madira.models import (
     SAMPLE_DECISIONS,
     TASTING_STATUSES,
+    ListVersion,
     Product,
     ProductVariant,
+    PurchaseOrder,
     Sample,
     Sku,
     Supplier,
@@ -312,8 +315,8 @@ def update_sample(venue_id: uuid.UUID, session_id: uuid.UUID, sample_id: uuid.UU
         venue = _venue(session, venue_id)
         sample = _owned_sample(session, venue_id, session_id, sample_id)
         before = _sample_audit(sample)
-        decision_changed = False
         score_changed = False
+        fields = {key: value for key, value in fields.items() if key != "decision"}
         if "note" in fields:
             sample.note = _text(fields.get("note"), "Note", 4000, required=False)
         if any(key in fields for key in ("product_id", "sku_id", "supplier_id", "offer_id")):
@@ -339,9 +342,6 @@ def update_sample(venue_id: uuid.UUID, session_id: uuid.UUID, sample_id: uuid.UU
         if "score" in fields:
             sample.score = _score(fields.get("score"))
             score_changed = True
-        if "decision" in fields:
-            _set_decision_fields(sample, str(fields.get("decision") or ""))
-            decision_changed = True
         record_audit_event(
             session,
             org_id=venue.organization_id,
@@ -362,17 +362,6 @@ def update_sample(venue_id: uuid.UUID, session_id: uuid.UUID, sample_id: uuid.UU
                 entity_id=sample.id,
                 before={"score": before["score"], "note": before["note"]},
                 after={"score": sample.score, "note": sample.note},
-            )
-        if decision_changed:
-            record_audit_event(
-                session,
-                org_id=venue.organization_id,
-                venue_id=venue_id,
-                action="sample.decision",
-                entity_type="sample",
-                entity_id=sample.id,
-                before={"decision": before["decision"]},
-                after={"decision": sample.decision, "decided_at": sample.decided_at},
             )
         payload = _sample_public(session, venue, sample)
         session.commit()
@@ -426,27 +415,18 @@ def score_sample(
         return {"sample": payload, "session_id": sample.session_id}
 
 
-def set_decision(venue_id: uuid.UUID, session_id: uuid.UUID, sample_id: uuid.UUID, decision: str) -> dict:
-    """Store buy, list, pass, or undecided. This does not open an order or a list."""
+def set_decision(
+    venue_id: uuid.UUID,
+    session_id: uuid.UUID,
+    sample_id: uuid.UUID,
+    decision: str,
+    reason: str | None = None,
+) -> dict:
+    """Apply buy, list, pass, or undecided. Buy and list stay drafts."""
 
-    with session_scope() as session:
-        venue = _venue(session, venue_id)
-        sample = _owned_sample(session, venue_id, session_id, sample_id)
-        before = {"decision": sample.decision, "decided_at": sample.decided_at}
-        _set_decision_fields(sample, decision)
-        record_audit_event(
-            session,
-            org_id=venue.organization_id,
-            venue_id=venue_id,
-            action="sample.decision",
-            entity_type="sample",
-            entity_id=sample.id,
-            before=before,
-            after={"decision": sample.decision, "decided_at": sample.decided_at},
-        )
-        payload = _sample_public(session, venue, sample)
-        session.commit()
-        return {"sample": payload}
+    from madira.domain.sourcing.service import apply_decision
+
+    return apply_decision(venue_id, session_id, sample_id, decision, reason)
 
 
 def ics_text(venue_id: uuid.UUID, session_id: uuid.UUID) -> str:
@@ -849,18 +829,6 @@ def _apply_quote(sample: Sample, price, currency, venue: Venue) -> None:
     sample.currency = _currency(currency, venue.currency or DEFAULT_CURRENCY)
 
 
-def _set_decision_fields(sample: Sample, decision: str) -> None:
-    label = _decision(decision)
-    sample.decision = label
-    if label == "undecided":
-        sample.decided_by_user_id = None
-        sample.decided_at = None
-        return
-    actor = _actor()
-    sample.decided_by_user_id = None if actor is None else actor[0]
-    sample.decided_at = datetime.now(timezone.utc)
-
-
 def _apply_links(
     session: Session,
     venue: Venue,
@@ -1010,9 +978,43 @@ def _sample_public(session: Session, venue: Venue, sample: Sample) -> dict:
         "currency": sample.currency,
         "quoted_label": "" if quoted is None else money_label(int(quoted), code or venue.currency or DEFAULT_CURRENCY),
         "decision": sample.decision,
+        "pass_reason": sample.pass_reason or "",
+        "purchase_order_id": None if sample.purchase_order_id is None else str(sample.purchase_order_id),
+        "purchase_order_number": _po_number(session, venue, sample),
+        "purchase_order_status": _po_status(session, venue, sample),
+        "list_id": None if sample.list_id is None else str(sample.list_id),
+        "list_version_id": None if sample.list_version_id is None else str(sample.list_version_id),
+        "list_version_number": _list_number(session, venue, sample),
         "list_price": price,
         "pairs_with": pairs,
     }
+
+
+def _po_number(session: Session, venue: Venue, sample: Sample) -> str:
+    if sample.purchase_order_id is None:
+        return ""
+    order = session.get(PurchaseOrder, sample.purchase_order_id)
+    if order is None or order.venue_id != venue.id:
+        return ""
+    return order.po_number or ""
+
+
+def _po_status(session: Session, venue: Venue, sample: Sample) -> str:
+    if sample.purchase_order_id is None:
+        return ""
+    order = session.get(PurchaseOrder, sample.purchase_order_id)
+    if order is None or order.venue_id != venue.id:
+        return ""
+    return order.status or ""
+
+
+def _list_number(session: Session, venue: Venue, sample: Sample) -> int | None:
+    if sample.list_version_id is None:
+        return None
+    version = session.get(ListVersion, sample.list_version_id)
+    if version is None or version.venue_id != venue.id:
+        return None
+    return int(version.number)
 
 
 def _list_price(session: Session, venue: Venue, sample: Sample, product: Product | None) -> dict:

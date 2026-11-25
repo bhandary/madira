@@ -9,6 +9,7 @@ const routes = [
   ["/training", "Staff training"],
   ["/suppliers", "Supplier tastings"],
   ["/tastings", "Tasting sessions"],
+  ["/sourcing", "Sourcing"],
   ["/records", "Records"],
   ["/settings", "Settings"],
   ["/login", "Sign in"],

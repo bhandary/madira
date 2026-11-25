@@ -124,14 +124,25 @@ def _wipe() -> None:
             session.execute(text("DELETE FROM roleplay_sessions"))
         if bind is not None and inspect(bind).has_table("venue_invites"):
             session.execute(text("DELETE FROM venue_invites"))
+        if bind is not None and inspect(bind).has_table("samples"):
+            session.execute(
+                text(
+                    "UPDATE samples SET label_document_id = NULL, decided_by_user_id = NULL, "
+                    "purchase_order_id = NULL, po_line_id = NULL, list_id = NULL, list_version_id = NULL"
+                )
+            )
+        if bind is not None and inspect(bind).has_table("want_items"):
+            session.execute(text("UPDATE want_items SET sample_id = NULL, offer_id = NULL"))
+        if bind is not None and inspect(bind).has_table("sourcing_briefs"):
+            session.execute(text("UPDATE sourcing_briefs SET created_by_user_id = NULL"))
+        if bind is not None and inspect(bind).has_table("rep_followups"):
+            session.execute(text("UPDATE rep_followups SET created_by_user_id = NULL, purchase_order_id = NULL"))
         if bind is not None and inspect(bind).has_table("list_entries"):
             session.execute(text("DELETE FROM list_entries"))
         if bind is not None and inspect(bind).has_table("list_versions"):
             session.execute(text("DELETE FROM list_versions"))
         if bind is not None and inspect(bind).has_table("public_list_snapshots"):
             session.execute(text("DELETE FROM public_list_snapshots"))
-        if bind is not None and inspect(bind).has_table("samples"):
-            session.execute(text("UPDATE samples SET label_document_id = NULL, decided_by_user_id = NULL"))
         if bind is not None and inspect(bind).has_table("tasting_sessions"):
             session.execute(text("UPDATE tasting_sessions SET created_by_user_id = NULL"))
         session.execute(delete(Document))

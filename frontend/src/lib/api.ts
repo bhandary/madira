@@ -1046,12 +1046,93 @@ export async function setSampleDecision(
   sessionId: string,
   sampleId: string,
   decision: "undecided" | "buy" | "list" | "pass",
+  reason?: string,
 ): Promise<{ sample: SampleCardData }> {
   const res = await fetch(`${API}/tastings/${sessionId}/samples/${sampleId}/decision`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "same-origin",
-    body: JSON.stringify({ decision }),
+    body: JSON.stringify({ decision, reason: reason ?? "" }),
+  });
+  return readJson(res);
+}
+
+export type SourcingBriefItem = {
+  id: string;
+  category: string;
+  style: string;
+  price_band: string;
+  quantity_hint: number;
+  dishes: { dish_id: string; name: string }[];
+  sample_id: string | null;
+  offer_id: string | null;
+  rationale: string;
+  position: number;
+};
+
+export type SourcingBrief = {
+  id: string;
+  list_id: string | null;
+  title: string;
+  status: string;
+  items: SourcingBriefItem[];
+};
+
+export type RepFollowup = {
+  id: string;
+  session_id: string;
+  supplier: string;
+  to_email: string;
+  subject: string;
+  body: string;
+  purchase_order_number: string;
+  mailto: string;
+  sent: boolean;
+};
+
+export type TastingHistoryRow = {
+  supplier_id: string;
+  supplier: string;
+  product_id: string;
+  product: string;
+  tasted: number;
+  buy: number;
+  list: number;
+  pass: number;
+  undecided: number;
+  bought_bottles: number;
+  invoiced_bottles: number;
+  last_cost_cents: number | null;
+  last_cost_label: string;
+};
+
+export async function listSourcingBriefs(): Promise<{ briefs: SourcingBrief[] }> {
+  const res = await fetch(`${API}/sourcing/briefs`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function buildSourcingBrief(): Promise<{ brief: SourcingBrief }> {
+  const res = await fetch(`${API}/sourcing/briefs`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export async function getTastingHistory(): Promise<{ rows: TastingHistoryRow[] }> {
+  const res = await fetch(`${API}/sourcing/history`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function getRepFollowup(sessionId: string): Promise<{ followup: RepFollowup | null }> {
+  const res = await fetch(`${API}/tastings/${sessionId}/follow-up`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function draftRepFollowup(sessionId: string): Promise<{ followup: RepFollowup }> {
+  const res = await fetch(`${API}/tastings/${sessionId}/follow-up`, {
+    method: "POST",
+    credentials: "same-origin",
   });
   return readJson(res);
 }

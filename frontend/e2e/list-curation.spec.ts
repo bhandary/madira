@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { waitForListDesk } from "./listDesk";
+import { curateFromMenu, waitForListDesk } from "./listDesk";
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -9,8 +9,9 @@ test("curate from the menu on a phone", async ({ page }) => {
   await page.getByTestId("list-budget").fill("12000");
   await page.getByTestId("list-margin").fill("3.2");
   await page.getByTestId("list-target-cost").fill("31.3");
-  await page.getByTestId("list-curate").click();
+  await curateFromMenu(page);
   const editor = page.getByTestId("list-editor");
+  await expect(page.getByTestId("list-picker").locator("option:checked")).toHaveText("Maison Madira autumn list");
   await expect(editor).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("coverage-grid")).toBeVisible();
   await expect(page.getByTestId("list-health")).toBeVisible();
