@@ -653,6 +653,68 @@ def list_reminders() -> str:
     return _dumps(body)
 
 
+def _query_tool(fn, **kwargs) -> str:
+    from madira.agents.presenters.queries import with_table
+    from madira.domain.compliance.queries import QueryError
+
+    try:
+        body = with_table(fn(_vid(), **kwargs))
+    except (NotFound, QueryError) as exc:
+        return _dumps({"error": exc.message})
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("compliance-auditor")
+    return _dumps(body)
+
+
+def query_stock_movements(sku: str = "", start_date: str = "", end_date: str = "", limit: int = 25, offset: int = 0) -> str:
+    """Stock movements and sale depletion for one SKU and date range. Read only."""
+    from madira.domain.compliance.queries import stock_movements
+
+    return _query_tool(stock_movements, sku=sku, start_date=start_date, end_date=end_date, limit=limit, offset=offset)
+
+
+def query_conditions(limit: int = 25, offset: int = 0) -> str:
+    """Condition excursions and stale sensor gaps. Read only."""
+    from madira.domain.compliance.queries import conditions
+
+    return _query_tool(conditions, limit=limit, offset=offset)
+
+
+def query_compliance_status(limit: int = 25, offset: int = 0) -> str:
+    """License and certificate status, plus open reminders. Read only. Nothing is sent."""
+    from madira.domain.compliance.queries import compliance_status
+
+    return _query_tool(compliance_status, limit=limit, offset=offset)
+
+
+def query_pos_gaps(limit: int = 25, offset: int = 0) -> str:
+    """POS sync gaps and unmapped items. Read only."""
+    from madira.domain.compliance.queries import pos_gaps
+
+    return _query_tool(pos_gaps, limit=limit, offset=offset)
+
+
+def query_list_versions(limit: int = 25, offset: int = 0) -> str:
+    """List versions and publish history. Read only."""
+    from madira.domain.compliance.queries import list_versions
+
+    return _query_tool(list_versions, limit=limit, offset=offset)
+
+
+def query_purchases(limit: int = 25, offset: int = 0) -> str:
+    """Purchase orders and receipts. Amounts come from the purchasing records. Read only."""
+    from madira.domain.compliance.queries import purchases
+
+    return _query_tool(purchases, limit=limit, offset=offset)
+
+
+def query_audit_events(action: str = "", actor: str = "", limit: int = 25, offset: int = 0) -> str:
+    """Audit events filtered by action and actor. Read only."""
+    from madira.domain.compliance.queries import audit_events
+
+    return _query_tool(audit_events, action=action, actor=actor, limit=limit, offset=offset)
+
+
 def get_storage_zones_status() -> str:
     """Return storage zones with ZoneConditionCard surfaces. Read only."""
     from madira.agents.presenters.compliance import with_zones
@@ -807,6 +869,13 @@ COMPLIANCE_TOOLS = [
     get_storage_zones_status,
     get_sensor_status,
     list_reminders,
+    query_stock_movements,
+    query_conditions,
+    query_compliance_status,
+    query_pos_gaps,
+    query_list_versions,
+    query_purchases,
+    query_audit_events,
 ]
 
 ALL_TOOLS = (

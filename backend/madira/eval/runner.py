@@ -62,6 +62,7 @@ def run(live: bool) -> int:
         pairing, pair_problems = _score_pairing(ctx.venue_id, cases, listed)
         curation, curation_problems = _score_curation(ctx.venue_id)
         training, training_problems = _score_training(ctx.venue_id)
+        auditor, auditor_problems = _score_auditor(live)
     finally:
         reset(token)
 
@@ -69,11 +70,13 @@ def run(live: bool) -> int:
     _print_pairing(pairing)
     _print_curation(curation)
     _print_training(training)
+    _print_auditor(auditor)
     problems = (
         extract_problems
         + pair_problems
         + curation_problems
         + training_problems
+        + auditor_problems
         + _threshold_problems(extraction, pairing)
     )
     if problems:
@@ -628,6 +631,59 @@ def _score_training(venue_id) -> tuple[dict, list[str]]:
         "questions": questions,
         "consistent": consistent,
     }, problems
+
+
+def _score_auditor(live: bool) -> tuple[dict, list[str]]:
+    """The auditor's spoken totals are the AuditTable totals, not a second guess."""
+
+    import json
+
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    from madira.agents.tools import query_stock_movements
+    from madira.domain.compliance.queries import answer_from_audit_table
+
+    payload = json.loads(query_stock_movements())
+    table = payload.get("audit_table") or {}
+    answer = answer_from_audit_table(table)
+    problems = []
+    if "AuditorTable" not in json.dumps(payload.get("a2ui_operations") or []):
+        problems.append("auditor result has no AuditorTable")
+    totals = table.get("totals") or {}
+    if "movement_count" not in totals or "depletion" not in totals:
+        problems.append("auditor table is missing stock totals")
+    for key, value in totals.items():
+        if str(value) not in answer:
+            problems.append(f"auditor answer omits {key}")
+    rows = table.get("rows") or []
+    if int((table.get("page") or {}).get("total") or 0) > 0:
+        linked = [link for row in rows for link in row.get("links") or []]
+        if not any(str(link.get("href") or "").startswith("/") for link in linked):
+            problems.append("auditor rows have no source link")
+    if not live:
+        from madira.agents.demo.model import DemoChatModel
+
+        prompt = "Query stock movements and depletion. Read only. Answer from the audit table."
+        model = DemoChatModel(role="compliance-auditor")
+        first = model.invoke([HumanMessage(content=prompt)])
+        calls = getattr(first, "tool_calls", None) or []
+        if not calls or calls[0].get("name") != "query_stock_movements":
+            problems.append("demo auditor did not query the stock audit table")
+        second = model.invoke(
+            [
+                HumanMessage(content=prompt),
+                first if isinstance(first, AIMessage) else AIMessage(content=""),
+                ToolMessage(content=json.dumps(payload), name="query_stock_movements", tool_call_id="eval-stock"),
+            ]
+        )
+        spoken = second.content if isinstance(second.content, str) else str(second.content)
+        if str(totals.get("movement_count")) not in spoken:
+            problems.append("demo auditor did not answer from the audit table")
+    return {"rows": int((table.get("page") or {}).get("total") or 0), "answered": 0 if problems else 1}, problems
+
+
+def _print_auditor(counts: dict) -> None:
+    print(f"auditor summary  rows={counts['rows']}  answered={counts['answered']}")
 
 
 def _print_training(counts: dict) -> None:

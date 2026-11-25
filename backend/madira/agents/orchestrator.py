@@ -30,7 +30,7 @@ You do not do specialist work yourself. You ALWAYS delegate with the `task` tool
 - staff-trainer — lessons by role, quizzes, spaced reviews, tonight's briefing, floor lookup, guest roleplay, and team progress. Scores, dates, citations, and stock come from tools. Do not invent them and do not show cost or margin.
 - supplier-scheduler — plan tastings, propose an unsent tasting invite, and score samples (.ics download only, never send email or invites); current supplier offers and price history. Amounts, margins, and scores come from those tools.
 - buyer — sourcing briefs from list gaps, post-tasting decisions, rep follow-up drafts, and tasted-versus-bought history. Buy and list create drafts only. Nothing is sent.
-- compliance-auditor — read-only audit pack summary, missing-invoice gaps, hash-chain status, and storage-zone conditions. Never write.
+- compliance-auditor — read-only audit pack, gaps, storage, sensors, reminders, and parameterized audit tables (stock, conditions, licenses, POS, lists, purchases, audit events). Answer from those tables. Never write.
 
 For a new menu, call menu-analyst first, then pairing-sommelier.
 Keep write_todos current so the floor can see who is working.
@@ -138,6 +138,9 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
             "You are the compliance auditor. You are strictly read-only. "
             "Call get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status, "
             "get_sensor_status, or list_reminders. "
+            "For a table, call query_stock_movements, query_conditions, query_compliance_status, "
+            "query_pos_gaps, query_list_versions, query_purchases, or query_audit_events. "
+            "Those return an AuditTable. Quote its totals. Do not add a number that is not in the table. "
             "find_compliance_gaps includes certificate expiry and open reminders. "
             "get_sensor_status returns the last reading and whether it is stale. The signing secret is not in the tool. "
             "list_reminders is in-app only. Do not send email and do not acknowledge a reminder. "
@@ -268,40 +271,71 @@ def invoke_head_sommelier(message: str, thread_id: str | None = None) -> dict[st
 
 
 def _invoke_head_sommelier(message: str, thread_id: str | None, venue_id: uuid.UUID) -> dict[str, Any]:
+    import time
+
+    from madira.domain.usage.service import UsageError, begin_run, finish_run
+
+    try:
+        run_id = begin_run(venue_id, message)
+    except UsageError as exc:
+        runtime = resolve_runtime()
+        return {
+            "reply": exc.message,
+            "delegation": [],
+            "todos": [],
+            "a2ui_operations": [],
+            "demo_mode": runtime.demo_mode,
+            "thread_id": thread_id,
+            "messages_count": 0,
+            "usage_error": exc.message,
+        }
+    started = time.perf_counter()
     tracker.start_run()
     runtime = resolve_runtime()
     agent = build_head_sommelier()
-    # A checkpointer refuses invoke unless the run names a thread.
-    # madira_venue_id is read by tools if the context variable does not cross a worker thread.
-    result = agent.invoke(
-        {"messages": [{"role": "user", "content": message}]},
-        config={
-            "configurable": {
-                "thread_id": thread_id or str(uuid.uuid4()),
-                "madira_venue_id": str(venue_id),
-            }
-        },
-    )
-    messages = result.get("messages", []) if isinstance(result, dict) else []
-    snap = tracker.snapshot()
-    delegated = snap["delegation"] or extract_task_delegations(messages)
-    ops = snap["a2ui_operations"] or extract_a2ui(messages)
     reply = ""
-    for msg in reversed(messages):
-        if getattr(msg, "type", "") == "ai" or msg.__class__.__name__ == "AIMessage":
-            if not getattr(msg, "tool_calls", None):
-                reply = _message_text(msg)
-                if reply:
-                    break
-    return {
-        "reply": reply,
-        "delegation": delegated,
-        "todos": snap["todos"],
-        "a2ui_operations": ops,
-        "demo_mode": runtime.demo_mode,
-        "thread_id": thread_id,
-        "messages_count": len(messages),
-    }
+    delegated: list[dict[str, str]] = []
+    try:
+        # A checkpointer refuses invoke unless the run names a thread.
+        # madira_venue_id is read by tools if the context variable does not cross a worker thread.
+        result = agent.invoke(
+            {"messages": [{"role": "user", "content": message}]},
+            config={
+                "configurable": {
+                    "thread_id": thread_id or str(uuid.uuid4()),
+                    "madira_venue_id": str(venue_id),
+                }
+            },
+        )
+        messages = result.get("messages", []) if isinstance(result, dict) else []
+        snap = tracker.snapshot()
+        delegated = snap["delegation"] or extract_task_delegations(messages)
+        ops = snap["a2ui_operations"] or extract_a2ui(messages)
+        for msg in reversed(messages):
+            if getattr(msg, "type", "") == "ai" or msg.__class__.__name__ == "AIMessage":
+                if not getattr(msg, "tool_calls", None):
+                    reply = _message_text(msg)
+                    if reply:
+                        break
+        return {
+            "reply": reply,
+            "delegation": delegated,
+            "todos": snap["todos"],
+            "a2ui_operations": ops,
+            "demo_mode": runtime.demo_mode,
+            "thread_id": thread_id,
+            "messages_count": len(messages),
+        }
+    finally:
+        names = [item.get("subagent", "") for item in delegated if isinstance(item, dict)]
+        finish_run(
+            run_id,
+            reply=reply,
+            delegated=names,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            tokens_in=max(1, len(message) // 4) if (message or "").strip() else 0,
+            tokens_out=max(1, len(reply) // 4) if (reply or "").strip() else 0,
+        )
 
 
 def inspect_subagents(agent=None) -> dict[str, Any]:

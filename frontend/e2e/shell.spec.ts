@@ -12,6 +12,8 @@ const routes = [
   ["/sourcing", "Sourcing"],
   ["/pos", "POS"],
   ["/sensors", "Sensors"],
+  ["/audit", "Audit"],
+  ["/usage", "Usage"],
   ["/records", "Records"],
   ["/settings", "Settings"],
   ["/login", "Sign in"],
@@ -57,6 +59,8 @@ test("mobile more menu reveals suppliers and settings", async ({ page }) => {
   await page.getByRole("button", { name: "More", exact: true }).click();
   await expect(page.getByTestId("mobile-menu").getByRole("link", { name: "POS" })).toBeVisible();
   await expect(page.getByTestId("mobile-menu").getByRole("link", { name: "Sensors" })).toBeVisible();
+  await expect(page.getByTestId("mobile-menu").getByRole("link", { name: "Audit" })).toBeVisible();
+  await expect(page.getByTestId("mobile-menu").getByRole("link", { name: "Usage" })).toBeVisible();
   await expect(page.getByTestId("mobile-menu").getByRole("link", { name: "Suppliers" })).toBeVisible();
   await expect(page.getByTestId("mobile-menu").getByRole("link", { name: "Settings" })).toBeVisible();
 });

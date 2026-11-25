@@ -24,6 +24,7 @@ import { sampleCardProps } from "./sampleCardSchema";
 import { repFollowupProps, sourcingBriefProps, tastingHistoryProps } from "./sourcingSchema";
 import { posStatusProps, unmappedPosProps } from "./posSchema";
 import { reminderListProps, sensorStatusProps } from "./sensorSchema";
+import { auditorTableProps } from "./auditorTableSchema";
 import { MADIRA_CATALOG_ID, catalogDefinitions } from "./definitions";
 
 /**
@@ -102,7 +103,9 @@ const definitions = Object.fromEntries(
                                           ? sensorStatusProps.describe(def.description)
                                           : name === "ReminderList"
                                             ? reminderListProps.describe(def.description)
-                                            : schemaFor(def.props).describe(def.description),
+                                            : name === "AuditorTable"
+                                              ? auditorTableProps.describe(def.description)
+                                              : schemaFor(def.props).describe(def.description),
     },
   ]),
 );

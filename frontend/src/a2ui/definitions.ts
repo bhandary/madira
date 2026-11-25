@@ -112,6 +112,10 @@ export const catalogDefinitions = {
     description: "Open in-app reminders for licenses and certificates. Nothing is sent.",
     props: { reminders: "array of reminder rows" },
   },
+  AuditorTable: {
+    description: "A read-only compliance table with columns, typed rows, service totals, and links to source records.",
+    props: { table: "audit table with columns, rows, totals, and page" },
+  },
   TastingHistory: {
     description: "Tasted samples against bought purchase-order lines and invoice lines.",
     props: { history: "tasting history rows" },

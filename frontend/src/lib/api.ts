@@ -2678,6 +2678,55 @@ export async function syncPos(): Promise<{ posted: number; skipped: number; unma
   return readJson(res);
 }
 
+export type UsageReport = {
+  month: string;
+  monthly_spend_cap_cents: number | null;
+  spent_cents: number;
+  spent_micro_usd: number;
+  requests_per_minute: number | null;
+  requests_this_minute: number;
+  by_subagent: { subagent: string; calls: number; tokens_in: number; tokens_out: number; cost_micro_usd: number }[];
+  by_day: { day: string; calls: number; cost_micro_usd: number }[];
+  cap_status: string;
+  can_edit: boolean;
+  demo: boolean;
+};
+
+export async function getUsage(): Promise<UsageReport> {
+  const res = await fetch(`${API}/usage`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function saveUsageLimits(body: {
+  monthly_spend_cap_cents: number | null;
+  requests_per_minute: number | null;
+}): Promise<UsageReport> {
+  const res = await fetch(`${API}/usage/limits`, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function getAuditQuery(kind: string, offset = 0): Promise<{ audit_table: unknown }> {
+  const path: Record<string, string> = {
+    stock: "/compliance/queries/stock",
+    conditions: "/compliance/queries/conditions",
+    compliance: "/compliance/queries/compliance",
+    pos: "/compliance/queries/pos",
+    lists: "/compliance/queries/lists",
+    purchases: "/compliance/queries/purchases",
+    events: "/compliance/queries/events",
+  };
+  const res = await fetch(`${API}${path[kind] || path.stock}?limit=25&offset=${offset}`, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
 export function auditPackExportPath(startDate: string, endDate: string, format: "zip" | "journal_csv" | "summary_pdf" | "summary_csv") {
   const params = new URLSearchParams({ start_date: startDate, end_date: endDate, format });
   return `${API}/compliance/audit-pack/export?${params}`;
