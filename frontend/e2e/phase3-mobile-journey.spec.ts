@@ -33,7 +33,11 @@ test("curate a list, Ana finishes a week of briefings and a quiz, and the report
   const curate = page.getByTestId("list-curate");
   const curateBox = await curate.boundingBox();
   expect(curateBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+  const curated = page.waitForResponse(
+    (res) => res.url().includes("/lists/curate") && res.request().method() === "POST" && res.ok(),
+  );
   await curate.click();
+  await curated;
   const editor = page.getByTestId("list-editor");
   await expect(editor).toBeVisible({ timeout: 60_000 });
   const before = await editor.getByTestId("list-item").count();

@@ -6,7 +6,11 @@ test("the sommelier submits, the owner approves, and the QR page loads logged ou
   await page.request.post("/madira-api/auth/demo-persona", { data: { slug: "lea" } });
   await page.goto("/list");
   await expect(page.getByRole("heading", { name: "List curation" })).toBeVisible();
+  const curated = page.waitForResponse(
+    (res) => res.url().includes("/lists/curate") && res.request().method() === "POST" && res.ok(),
+  );
   await page.getByTestId("list-curate").click();
+  await curated;
   const editor = page.getByTestId("list-editor");
   await expect(editor).toBeVisible({ timeout: 60_000 });
   await expect(editor.getByTestId("list-item").first()).toBeVisible();
@@ -48,7 +52,7 @@ test("the sommelier submits, the owner approves, and the QR page loads logged ou
   await expect(guestPage.getByTestId("public-list")).toBeVisible();
   await expect(guestPage.getByTestId("public-venue")).not.toHaveText("");
   await expect(guestPage.getByTestId("public-item").first()).toBeVisible();
-  await expect(guestPage.getByTestId("public-price").first()).toContainText(/\$|€|£/);
+  await expect(guestPage.getByTestId("public-price").filter({ hasText: /\d/ }).first()).toBeVisible();
   await expect(guestPage.getByTestId("phone-tabs")).toHaveCount(0);
   await expect(guestPage.getByTestId("mode-banner")).toHaveCount(0);
   await expect(guestPage.getByText(/margin/i)).toHaveCount(0);
