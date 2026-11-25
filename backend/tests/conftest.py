@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 _PROVIDER_KEYS = (
@@ -23,6 +25,47 @@ def hermetic_llm_env(monkeypatch):
     monkeypatch.delenv("MADIRA_LLM_VALIDATOR", raising=False)
     monkeypatch.delenv("MADIRA_OWNER_EMAIL", raising=False)
     _clear_saved_key()
+
+
+@pytest.fixture(autouse=True)
+def attach_csrf_on_session_cookie(monkeypatch):
+    """Existing clients send the session cookie. Attach the matching CSRF token.
+
+    ``MADIRA_CSRF_TEST_RAW=1`` leaves the request untouched so the CSRF tests
+    can reject a missing or bad token.
+    """
+
+    from fastapi.testclient import TestClient
+
+    from madira.auth import SESSION_COOKIE
+    from madira.csrf import CSRF_COOKIE, CSRF_HEADER, sign_csrf
+
+    original = TestClient.send
+
+    def wrapped(self, request, **kwargs):
+        if os.environ.get("MADIRA_CSRF_TEST_RAW") != "1" and request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+            header_names = {key.lower() for key in request.headers.keys()}
+            if CSRF_HEADER not in header_names:
+                cookie_header = request.headers.get("cookie", "")
+                session = _cookie_from_header(cookie_header, SESSION_COOKIE)
+                token = sign_csrf(session) if session else None
+                if token:
+                    request.headers[CSRF_HEADER] = token
+                    if _cookie_from_header(cookie_header, CSRF_COOKIE) != token:
+                        extra = f"{CSRF_COOKIE}={token}"
+                        request.headers["cookie"] = f"{cookie_header}; {extra}" if cookie_header else extra
+        return original(self, request, **kwargs)
+
+    monkeypatch.setattr(TestClient, "send", wrapped)
+
+
+def _cookie_from_header(header: str, name: str) -> str:
+    prefix = name + "="
+    for part in header.split(";"):
+        piece = part.strip()
+        if piece.startswith(prefix):
+            return piece[len(prefix):]
+    return ""
 
 
 def _clear_saved_key() -> None:
