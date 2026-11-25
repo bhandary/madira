@@ -69,7 +69,10 @@ class Organization(Base):
 
 class Venue(Base):
     __tablename__ = "venues"
-    __table_args__ = (UniqueConstraint("organization_id", "slug", name="uq_venues_org_slug"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "slug", name="uq_venues_org_slug"),
+        CheckConstraint("invite_delivery IN ('draft_only')", name="ck_venues_invite_delivery"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
@@ -80,6 +83,9 @@ class Venue(Base):
         String(64), default="America/Los_Angeles", server_default=text("'America/Los_Angeles'")
     )
     briefing_hour: Mapped[int] = mapped_column(Integer, default=15, server_default=text("15"))
+    invite_delivery: Mapped[str] = mapped_column(
+        String(16), default="draft_only", server_default=text("'draft_only'")
+    )
 
 
 class Membership(Base):
@@ -1348,6 +1354,71 @@ class RepFollowup(Base):
     created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
     created_at: Mapped[datetime] = _stamp()
     updated_at: Mapped[datetime] = _stamp()
+
+
+class TastingInvite(Base):
+    """A tasting invite stays a draft until an Owner or a Manager approves it.
+
+    Approval is the only path that builds the .ics and the email draft.
+    ``sent`` stays false: Madira does not send the invite.
+    """
+
+    __tablename__ = "tasting_invites"
+    __table_args__ = (
+        UniqueConstraint("session_id", name="uq_tasting_invites_session"),
+        CheckConstraint(
+            "status IN ('proposed', 'ready', 'rejected')",
+            name="ck_tasting_invites_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    session_id: Mapped[uuid.UUID] = _fk("tasting_sessions.id")
+    status: Mapped[str] = mapped_column(String(16), default="proposed")
+    agenda_note: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    agenda_facts: Mapped[dict] = mapped_column(JSON, default=dict)
+    approval_id: Mapped[uuid.UUID | None] = _fk("approvals.id", nullable=True, index=True)
+    ics_text: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    email_subject: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    email_body: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    email_mailto: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    driver: Mapped[str] = mapped_column(String(16), default="", server_default=text("''"))
+    sent: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    updated_at: Mapped[datetime] = _stamp()
+
+
+class TastingInviteSlot(Base):
+    __tablename__ = "tasting_invite_slots"
+    __table_args__ = (
+        UniqueConstraint("invite_id", "position", name="uq_tasting_invite_slots_position"),
+        Index("ix_tasting_invite_slots_venue", "venue_id", "invite_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id")
+    invite_id: Mapped[uuid.UUID] = _fk("tasting_invites.id")
+    position: Mapped[int] = mapped_column(Integer)
+    starts_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    ends_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    source: Mapped[str] = mapped_column(String(16), default="entered", server_default=text("'entered'"))
+    chosen: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+
+
+class TastingInviteAttendee(Base):
+    __tablename__ = "tasting_invite_attendees"
+    __table_args__ = (Index("ix_tasting_invite_attendees_venue", "venue_id", "invite_id"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id")
+    invite_id: Mapped[uuid.UUID] = _fk("tasting_invites.id")
+    kind: Mapped[str] = mapped_column(String(16))
+    name: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    email: Mapped[str] = mapped_column(String(320), default="", server_default=text("''"))
+    user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
 
 
 class LlmCredential(Base):

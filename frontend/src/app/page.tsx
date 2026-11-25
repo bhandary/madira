@@ -160,7 +160,13 @@ export default function HomePage() {
           <ul className="mt-2 space-y-1 text-sm">
             {board.approvals.map((row) => (
               <li key={row.id} data-testid="tonight-approval">
-                {row.title}
+                {row.href ? (
+                  <a className="inline-flex min-h-11 items-center" href={row.href}>
+                    {row.title}
+                  </a>
+                ) : (
+                  row.title
+                )}
               </li>
             ))}
           </ul>

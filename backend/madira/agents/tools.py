@@ -14,6 +14,7 @@ from madira.agents.presenters.procurement import (
     with_brief,
     with_followup,
     with_history,
+    with_invite,
     with_offers,
     with_price_history,
     with_sample,
@@ -528,6 +529,24 @@ def get_tasting(session_id: str = "") -> str:
     return _dumps(body)
 
 
+def propose_tasting_invite(session_id: str) -> str:
+    """Propose a tasting invite from the venue schedule. Nothing is sent until an Owner or Manager approves it."""
+    from madira.domain.tastings import invites as invite_service
+
+    try:
+        session_uuid = uuid.UUID(session_id)
+    except ValueError:
+        return _dumps({"error": "tasting not found"})
+    try:
+        payload = invite_service.propose(_vid(), session_uuid)
+    except (NotFound, TastingError, DraftFailed) as exc:
+        return _dumps({"error": exc.message})
+    body = with_invite(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("supplier-scheduler")
+    return _dumps(body)
+
+
 def score_sample(sample_id: str, score: int = 0, note: str = "") -> str:
     """Record a 0-100 score and a note. The number is stored as given, not invented."""
     try:
@@ -721,7 +740,7 @@ def _named_product(name: str) -> uuid.UUID | None:
     return matches[0].id
 
 
-SUPPLIER_TOOLS = [plan_tasting, get_tasting, score_sample, get_supplier_offers, get_price_history]
+SUPPLIER_TOOLS = [plan_tasting, get_tasting, propose_tasting_invite, score_sample, get_supplier_offers, get_price_history]
 BUYER_TOOLS = [build_sourcing_brief, decide_sample, draft_rep_followup, get_tasting_history]
 COMPLIANCE_TOOLS = [get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status]
 

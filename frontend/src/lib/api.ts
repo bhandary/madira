@@ -807,7 +807,7 @@ export type TonightBoard = {
   low_stock: { sku: string; name: string; on_hand: number; par: number }[];
   storage_alerts: { id: string; zone: string; metric: string; status: string }[];
   deliveries_due: { po_number: string; supplier: string; expected_delivery_date: string | null; status: string }[];
-  approvals: { id: string; kind: string; title: string; status: string }[];
+  approvals: { id: string; kind: string; title: string; status: string; href?: string }[];
   expiring_certificates: {
     id: string;
     user_id: string;
@@ -1126,6 +1126,83 @@ export async function getTastingHistory(): Promise<{ rows: TastingHistoryRow[] }
 
 export async function getRepFollowup(sessionId: string): Promise<{ followup: RepFollowup | null }> {
   const res = await fetch(`${API}/tastings/${sessionId}/follow-up`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export type InviteSlot = {
+  position?: number;
+  starts_at: string;
+  ends_at: string;
+  source?: string;
+  chosen?: boolean;
+};
+
+export type InviteGap = {
+  category: string;
+  style: string;
+  price_band: string;
+  quantity_hint: number;
+  dishes: { name: string }[];
+};
+
+export type TastingInvite = {
+  id: string;
+  session_id: string;
+  title: string;
+  supplier: string;
+  status: string;
+  agenda_note: string;
+  agenda_facts: { source: string; gaps: InviteGap[]; samples: { sample_id: string; name: string }[] };
+  slots: InviteSlot[];
+  attendees: { kind: string; name: string; email: string; user_id: string | null }[];
+  approval: { id?: string; decision?: string; required_role?: string; comment?: string | null; decided_at?: string | null } | null;
+  chosen_starts_at: string;
+  email_subject: string;
+  email_body: string;
+  email_mailto: string;
+  sent: boolean;
+  driver: string;
+  ics_ready: boolean;
+};
+
+export type InviteDesk = {
+  suggestions: InviteSlot[];
+  staff: { id: string; name: string; email: string; role: string }[];
+  rep: { supplier: string; name: string; email: string };
+  can_decide: boolean;
+  invite: TastingInvite | null;
+};
+
+export async function getTastingInvite(sessionId: string): Promise<InviteDesk> {
+  const res = await fetch(`${API}/tastings/${sessionId}/invite`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function proposeTastingInvite(
+  sessionId: string,
+  body: { slots: InviteSlot[]; staff_user_ids: string[] },
+): Promise<InviteDesk> {
+  const res = await fetch(`${API}/tastings/${sessionId}/invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(body),
+  });
+  return readJson(res);
+}
+
+export async function decideTastingInvite(
+  sessionId: string,
+  decision: "approve" | "reject",
+  comment: string,
+  slotIndex?: number,
+): Promise<InviteDesk> {
+  const res = await fetch(`${API}/tastings/${sessionId}/invite/${decision}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment, slot_index: slotIndex ?? null }),
+  });
   return readJson(res);
 }
 

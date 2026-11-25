@@ -31,9 +31,19 @@ export const approvalListVersion = z.object({
   status: z.string().optional(),
 });
 
+export const approvalInvite = z.object({
+  id: z.string(),
+  session_id: z.string(),
+  title: z.string().optional(),
+  supplier: z.string().optional(),
+  status: z.string().optional(),
+  chosen_starts_at: z.string().optional(),
+});
+
 /** An owner decision card, or A2UI path bindings resolved before render. */
 export const approvalCardProps = z.object({
-  purchaseOrder: z.union([approvalPurchaseOrder, pathBinding]),
+  purchaseOrder: z.union([approvalPurchaseOrder, pathBinding]).optional(),
   approval: z.union([approvalRecord, pathBinding]),
   listVersion: z.union([approvalListVersion, pathBinding]).optional(),
+  invite: z.union([approvalInvite, pathBinding]).optional(),
 });

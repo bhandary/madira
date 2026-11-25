@@ -54,6 +54,8 @@ class Capability(str, Enum):
     # Plan a tasting, edit samples, score them, and apply a decision.
     # Buy and list stay drafts. Owner, Manager, and Sommelier. Reading uses RECORDS.
     TASTINGS_MANAGE = "tastings_manage"
+    # Approve or reject a tasting invite. Owner and Manager. The invite is not sent.
+    INVITE_DECIDE = "invite_decide"
 
 
 MATRIX: dict[Capability, frozenset[str]] = {
@@ -79,6 +81,7 @@ MATRIX: dict[Capability, frozenset[str]] = {
     Capability.LIST_PUBLISH_DECIDE: frozenset({OWNER}),
     Capability.SUPPLIERS_MANAGE: frozenset({OWNER, MANAGER, SOMMELIER}),
     Capability.TASTINGS_MANAGE: frozenset({OWNER, MANAGER, SOMMELIER}),
+    Capability.INVITE_DECIDE: frozenset({OWNER, MANAGER}),
 }
 
 
