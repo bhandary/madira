@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ApiError, decidePurchaseOrder } from "@/lib/api";
+import { ApiError, decideListVersion, decidePurchaseOrder } from "@/lib/api";
 
 export type ApprovalPurchaseOrder = {
   id: string;
@@ -24,11 +24,104 @@ export type ApprovalRecord = {
   decided_at?: string | null;
 };
 
+export type ApprovalListVersion = {
+  id: string;
+  list_id?: string;
+  list_name?: string;
+  number?: number;
+  status?: string;
+};
+
 function money(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((cents || 0) / 100);
 }
 
-export function ApprovalCard({
+function ListVersionApproval({
+  listVersion,
+  approval,
+  onDecided,
+}: {
+  listVersion: ApprovalListVersion;
+  approval?: ApprovalRecord | null;
+  onDecided?: () => void;
+}) {
+  const decision = approval?.decision || "pending";
+  const pending = decision === "pending" && (listVersion.status || "pending_approval") === "pending_approval";
+  const [comment, setComment] = useState(approval?.comment || "");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const title = `${listVersion.list_name || "List"}${listVersion.number ? ` v${listVersion.number}` : ""}`;
+
+  async function decide(next: "approve" | "reject") {
+    setBusy(true);
+    setError("");
+    try {
+      await decideListVersion(listVersion.id, next, comment);
+      onDecided?.();
+    } catch (err) {
+      setError(err instanceof ApiError || err instanceof Error ? err.message : "The decision could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <article className="panel min-w-0 p-3" data-testid="approval-card">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-medium">{title}</h3>
+        <span className="text-xs uppercase tracking-wide text-muted">{approval?.required_role || "owner"} approval</span>
+      </div>
+      <p className="mt-1 text-sm text-muted">List publish</p>
+      {decision !== "pending" ? (
+        <p className="mt-2 text-sm" data-testid="approval-decision">
+          {decision}
+          {approval?.comment ? ` · ${approval.comment}` : ""}
+        </p>
+      ) : null}
+      {pending ? (
+        <div className="mt-3 space-y-2">
+          <label className="lbl" htmlFor={`list-version-comment-${listVersion.id}`}>
+            Comment
+            <textarea
+              id={`list-version-comment-${listVersion.id}`}
+              data-testid="list-version-comment"
+              className="field min-h-16 w-full"
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-testid="list-version-approve"
+              disabled={busy}
+              onClick={() => void decide("approve")}
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              data-testid="list-version-reject"
+              disabled={busy}
+              onClick={() => void decide("reject")}
+            >
+              Reject
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {error ? (
+        <p className="banner-error mt-3" role="alert" data-testid="approval-error">
+          {error}
+        </p>
+      ) : null}
+    </article>
+  );
+}
+
+function PurchaseOrderApproval({
   purchaseOrder,
   approval,
   onDecided,
@@ -120,4 +213,22 @@ export function ApprovalCard({
       ) : null}
     </article>
   );
+}
+
+export function ApprovalCard({
+  purchaseOrder,
+  approval,
+  listVersion,
+  onDecided,
+}: {
+  purchaseOrder?: ApprovalPurchaseOrder | null;
+  approval?: ApprovalRecord | null;
+  listVersion?: ApprovalListVersion | null;
+  onDecided?: () => void;
+}) {
+  if (listVersion?.id) {
+    return <ListVersionApproval listVersion={listVersion} approval={approval} onDecided={onDecided} />;
+  }
+  if (!purchaseOrder?.id) return null;
+  return <PurchaseOrderApproval purchaseOrder={purchaseOrder} approval={approval} onDecided={onDecided} />;
 }

@@ -24,7 +24,7 @@ async function acknowledgeDay(page: Page, day: string) {
   await expect(page.getByTestId("briefing-acked")).toBeVisible();
 }
 
-test("curate a list, Ana finishes a week of briefings and a quiz, and the report shows 7/7", async ({ page }) => {
+test("curate a list, Ana finishes a week of briefings and a quiz, and the report shows 7/7", async ({ page, browser }) => {
   await page.goto("/list");
   await expect(page.getByRole("heading", { name: "List curation" })).toBeVisible();
   await page.getByTestId("list-budget").fill("9000");
@@ -33,7 +33,11 @@ test("curate a list, Ana finishes a week of briefings and a quiz, and the report
   const curate = page.getByTestId("list-curate");
   const curateBox = await curate.boundingBox();
   expect(curateBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+  const curated = page.waitForResponse(
+    (res) => res.url().includes("/lists/curate") && res.request().method() === "POST" && res.ok(),
+  );
   await curate.click();
+  await curated;
   const editor = page.getByTestId("list-editor");
   await expect(editor).toBeVisible({ timeout: 60_000 });
   const before = await editor.getByTestId("list-item").count();
@@ -42,6 +46,40 @@ test("curate a list, Ana finishes a week of briefings and a quiz, and the report
   await expect(editor.getByTestId("list-item")).toHaveCount(before);
   await editor.getByTestId("list-item-remove").first().click();
   await expect(editor.getByTestId("list-item")).toHaveCount(before - 1);
+  await editor.getByTestId("list-diff-load").click();
+  await expect(editor.getByTestId("list-diff")).toBeVisible();
+  await expect(editor.getByTestId("list-diff-added")).toBeVisible();
+
+  const listId = await page.getByTestId("list-picker").inputValue();
+  await page.request.post("/madira-api/auth/demo-persona", { data: { slug: "lea" } });
+  await editor.getByTestId("list-submit").click();
+  await expect(editor.getByTestId("list-pending")).toBeVisible();
+  await page.request.post("/madira-api/auth/demo-persona", { data: { slug: "owner" } });
+  await page.goto("/list");
+  await page.getByTestId("list-picker").selectOption(listId);
+  const approve = page.getByTestId("list-approve");
+  await expect(approve).toBeVisible();
+  const approveBox = await approve.boundingBox();
+  expect(approveBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+  await approve.click();
+  const publicLink = page.getByTestId("list-public-url");
+  await expect(publicLink).toBeVisible();
+  const href = await publicLink.getAttribute("href");
+  expect(href).toMatch(/^\/l\//);
+
+  const guest = await browser.newContext();
+  const guestPage = await guest.newPage();
+  await guestPage.setViewportSize({ width: 390, height: 844 });
+  await guestPage.goto(href || "/");
+  await expect(guestPage.getByTestId("public-list")).toBeVisible();
+  await expect(guestPage.getByTestId("public-item").first()).toBeVisible();
+  await expect(guestPage.getByTestId("public-price").first()).toBeVisible();
+  await expect(guestPage.getByTestId("phone-tabs")).toHaveCount(0);
+  await expect(guestPage.getByText(/margin/i)).toHaveCount(0);
+  await expect(guestPage.getByText(/\bcost\b/i)).toHaveCount(0);
+  const guestOverflow = await guestPage.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(guestOverflow).toBeLessThanOrEqual(1);
+  await guest.close();
 
   const todayResponse = await page.request.post("/madira-api/tonight/briefing/rebuild");
   expect(todayResponse.ok()).toBeTruthy();

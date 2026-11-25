@@ -163,10 +163,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const sidebar = staff ? STAFF_SIDEBAR : SIDEBAR;
   const tabs = staff ? STAFF_TABS : TABS;
   const moreCurrent = pathname === "/suppliers" || pathname === "/records" || pathname === "/settings" || pathname === "/login";
+  const bare = pathname.startsWith("/l/");
 
   useEffect(() => {
     let cancelled = false;
     const load = () => {
+      if (bare) return;
       getStatus()
         .then((next) => {
           if (!cancelled) setStatus(next);
@@ -181,9 +183,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       cancelled = true;
       window.removeEventListener("madira-status", load);
     };
-  }, [pathname]);
+  }, [pathname, bare]);
 
   useEffect(() => {
+    if (bare) return;
     let cancelled = false;
     getDemoPersonas()
       .then(async (payload) => {
@@ -206,12 +209,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [pathname, bare]);
 
   useEffect(() => {
-    if (role !== "Staff" || STAFF_PATHS.has(pathname)) return;
+    if (bare || role !== "Staff" || STAFF_PATHS.has(pathname)) return;
     router.replace("/");
-  }, [role, pathname, router]);
+  }, [bare, role, pathname, router]);
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -225,6 +228,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [moreOpen]);
 
+  if (bare) return <>{children}</>;
+
   return (
     <div className="min-h-dvh bg-canvas md:flex">
       <a className="skip-link" href="#content">
@@ -237,7 +242,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <p className="mt-2 text-xs leading-5 text-muted">Maison Madira</p>
             <p className="text-xs leading-5 text-muted">Beverage program</p>
           </div>
-          <nav id="app-nav" className="flex min-h-0 flex-1 flex-col gap-0.5 px-2 pb-3" aria-label="Sections">
+          <nav id="app-nav" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3" aria-label="Sections">
             {sidebar.map((item) => {
               const active = pathname === item.href;
               return (

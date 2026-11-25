@@ -1882,6 +1882,112 @@ export async function deleteListItem(listId: string, itemId: string): Promise<Be
   return readJson(res);
 }
 
+export type ListDiffRow = {
+  sku_id: string;
+  name: string;
+  section: string;
+  position: number;
+  bottle_price_cents: number;
+  glass_price_cents: number;
+  currency: string;
+  previous_bottle_price_cents?: number;
+  previous_glass_price_cents?: number;
+  previous_section?: string;
+  previous_position?: number;
+};
+
+export type ListDiff = {
+  added: ListDiffRow[];
+  removed: ListDiffRow[];
+  repriced: ListDiffRow[];
+  moved: ListDiffRow[];
+};
+
+export type ListVersionRecord = {
+  id: string;
+  list_id: string;
+  list_name: string;
+  number: number;
+  status: string;
+  can_submit: boolean;
+  can_decide: boolean;
+  public_path: string | null;
+  public_token: string | null;
+  approval: {
+    id?: string;
+    decision?: string;
+    required_role?: string;
+    comment?: string | null;
+    decided_at?: string | null;
+  } | null;
+  diff: ListDiff;
+};
+
+export type PublicListItem = {
+  name: string;
+  detail: string;
+  bottle_price_cents: number;
+  glass_price_cents: number;
+  currency: string;
+};
+
+export type PublicList = {
+  venue_name: string;
+  published_at: string | null;
+  list: {
+    list_name: string;
+    number: number;
+    currency: string;
+    sections: { name: string; items: PublicListItem[] }[];
+  };
+};
+
+export async function listVersions(listId: string): Promise<{ list_id: string; can_submit: boolean; versions: ListVersionRecord[] }> {
+  const res = await fetch(`${API}/lists/${listId}/versions`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function createListVersion(listId: string): Promise<ListVersionRecord> {
+  const res = await fetch(`${API}/lists/${listId}/versions`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function submitListVersion(versionId: string): Promise<ListVersionRecord> {
+  const res = await fetch(`${API}/lists/versions/${versionId}/submit`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function decideListVersion(
+  versionId: string,
+  decision: "approve" | "reject",
+  comment = "",
+): Promise<ListVersionRecord> {
+  const res = await fetch(`${API}/lists/versions/${versionId}/${decision}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment }),
+  });
+  return readJson(res);
+}
+
+export async function revokePublicList(versionId: string): Promise<ListVersionRecord> {
+  const res = await fetch(`${API}/lists/versions/${versionId}/revoke-public`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  return readJson(res);
+}
+
+export function listQrPath(versionId: string) {
+  return `${API}/lists/versions/${versionId}/qr.png`;
+}
+
+export async function getPublicList(token: string): Promise<PublicList> {
+  const res = await fetch(`${API}/public/lists/${encodeURIComponent(token)}`, { cache: "no-store" });
+  return readJson(res);
+}
+
 export function auditPackExportPath(startDate: string, endDate: string, format: "zip" | "journal_csv" | "summary_pdf" | "summary_csv") {
   const params = new URLSearchParams({ start_date: startDate, end_date: endDate, format });
   return `${API}/compliance/audit-pack/export?${params}`;

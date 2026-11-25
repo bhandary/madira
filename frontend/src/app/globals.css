@@ -930,6 +930,15 @@ code {
   }
 }
 
+@media print {
+  .public-list,
+  .public-list * {
+    background: #fff !important;
+    color: #111 !important;
+    box-shadow: none !important;
+  }
+}
+
 @keyframes wave-drift {
   from {
     transform: rotate(0deg) scale(1);

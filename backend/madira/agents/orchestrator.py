@@ -58,6 +58,9 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
         "system_prompt": (
             "You are the List Curator. Call curate_beverage_list with the budget and target margin from the task. "
             "Then call get_list_health and get_coverage. "
+            "Call diff_list to compare the list with the published version. "
+            "Call submit_list_for_publish when asked to publish. That only opens an Owner approval. "
+            "You do not publish. Publishing happens only after the Owner approves. "
             "You write section notes only. Every price, cost, margin, and health flag comes from those tools. "
             "Do not invent a bottle, a price, or a number."
         ),
