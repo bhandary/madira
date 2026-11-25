@@ -36,6 +36,22 @@ def refresh_sommelier_agent() -> Any:
     return graph
 
 
+def _run_text(payload: Any) -> str:
+    messages = getattr(payload, "messages", None) or []
+    parts: list[str] = []
+    for msg in messages:
+        content = getattr(msg, "content", "")
+        if isinstance(content, str):
+            parts.append(content)
+        elif isinstance(content, list):
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict) and isinstance(item.get("text"), str):
+                    parts.append(item["text"])
+    return "\n".join(parts)[-4000:]
+
+
 def mount_agui(app: FastAPI) -> None:
     try:
         from ag_ui.core import EventType
@@ -47,17 +63,52 @@ def mount_agui(app: FastAPI) -> None:
 
         class VenueScopedAgent(LangGraphAGUIAgent):
             async def run(self, input):
+                import time
+
+                from ag_ui.core import RunErrorEvent
+
+                from madira.agents import tracker
+                from madira.domain.usage.service import UsageError, begin_run, finish_run
+
+                venue_id = active_venue_id()
+                message = _run_text(input)
+                try:
+                    run_id = begin_run(venue_id, message)
+                except UsageError as exc:
+                    yield RunErrorEvent(message=exc.message, code="usage_limit")
+                    return
+                started = time.perf_counter()
+                tracker.start_run()
                 config = dict(self.config or {})
                 configurable = dict(config.get("configurable") or {})
-                configurable["madira_venue_id"] = str(active_venue_id())
+                configurable["madira_venue_id"] = str(venue_id)
                 config["configurable"] = configurable
                 self.config = config
-                async for event in super().run(input):
-                    if getattr(event, "type", None) == EventType.RUN_ERROR:
-                        message = getattr(event, "message", "") or ""
-                        _status, detail = describe_provider_failure(RuntimeError(message))
-                        event = event.model_copy(update={"message": detail})
-                    yield event
+                reply_parts: list[str] = []
+                try:
+                    async for event in super().run(input):
+                        if getattr(event, "type", None) == EventType.RUN_ERROR:
+                            error_text = getattr(event, "message", "") or ""
+                            _status, detail = describe_provider_failure(RuntimeError(error_text))
+                            event = event.model_copy(update={"message": detail})
+                        delta = getattr(event, "delta", None)
+                        if isinstance(delta, str):
+                            reply_parts.append(delta)
+                        yield event
+                finally:
+                    reply = "".join(reply_parts)
+                    names = [item.get("subagent", "") for item in tracker.snapshot()["delegation"]]
+                    try:
+                        finish_run(
+                            run_id,
+                            reply=reply,
+                            delegated=names,
+                            latency_ms=int((time.perf_counter() - started) * 1000),
+                            tokens_in=max(1, len(message) // 4) if message.strip() else 0,
+                            tokens_out=max(1, len(reply) // 4) if reply.strip() else 0,
+                        )
+                    except Exception:
+                        pass
 
         agent = VenueScopedAgent(
             name="head_sommelier",

@@ -53,6 +53,10 @@ def _postgres_venue_setting(session, transaction, connection):
         text("SELECT set_config('app.venue_id', :venue_id, true)"),
         {"venue_id": str(ctx.venue_id)},
     )
+    connection.execute(
+        text("SELECT set_config('app.organization_id', :organization_id, true)"),
+        {"organization_id": str(ctx.organization_id)},
+    )
 
 
 def get_session():

@@ -56,6 +56,16 @@ def classify_intent(text: str) -> str:
             "condition excursion",
             "excursion",
             "sensor",
+            "audit table",
+            "stock movement",
+            "depletion by",
+            "sensor gap",
+            "license status",
+            "certificate status",
+            "publish history",
+            "audit event",
+            "audit purchase",
+            "pos gap",
             "journal entry",
             "qbo",
             "xero",
@@ -153,6 +163,21 @@ def _task_subagents_called(messages: list[BaseMessage]) -> list[str]:
             if name:
                 found.append(name)
     return found
+
+
+def _table_answer(messages: list[BaseMessage]) -> str:
+    from madira.domain.compliance.queries import answer_from_audit_table
+
+    last_tool = next((msg for msg in reversed(messages) if isinstance(msg, ToolMessage)), None)
+    if last_tool is not None and isinstance(last_tool.content, str):
+        try:
+            data = json.loads(last_tool.content)
+        except json.JSONDecodeError:
+            data = None
+        table = data.get("audit_table") if isinstance(data, dict) else None
+        if isinstance(table, dict):
+            return answer_from_audit_table(table)
+    return "The audit table is on the card. Totals come from that table."
 
 
 def _call(name: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -351,6 +376,20 @@ class DemoChatModel(BaseChatModel):
             return "List the lessons for this role."
         if specialist == "compliance-auditor":
             lowered = text.lower()
+            if "stock movement" in lowered or "depletion" in lowered:
+                return "Query stock movements and depletion. Read only. Answer from the audit table."
+            if "sensor gap" in lowered or "condition excursion" in lowered:
+                return "Query condition excursions and sensor gaps. Read only. Answer from the audit table."
+            if "license status" in lowered or "certificate status" in lowered:
+                return "Query license and certificate status and reminders. Read only. Answer from the audit table."
+            if "pos gap" in lowered:
+                return "Query POS gaps and unmapped items. Read only. Answer from the audit table."
+            if "publish history" in lowered or "list version" in lowered:
+                return "Query list versions and publish history. Read only. Answer from the audit table."
+            if "audit purchase" in lowered or "receipt" in lowered:
+                return "Query purchase orders and receipts. Read only. Answer from the audit table."
+            if "audit event" in lowered:
+                return "Query audit events. Read only. Answer from the audit table."
             if "sensor" in lowered:
                 return "Report sensor status. Read only. Do not reveal a signing secret."
             if "reminder" in lowered:
@@ -538,6 +577,34 @@ class DemoChatModel(BaseChatModel):
 
         if role == "compliance-auditor":
             lowered = text.lower()
+            if ("stock movement" in lowered or "depletion" in lowered) and "query_stock_movements" not in done:
+                return _ai([_call("query_stock_movements", {"sku": "", "start_date": "", "end_date": ""})])
+            if ("stock movement" in lowered or "depletion" in lowered):
+                return finish(_table_answer(messages))
+            if ("sensor gap" in lowered or "condition excursion" in lowered) and "query_conditions" not in done:
+                return _ai([_call("query_conditions", {})])
+            if "sensor gap" in lowered or "condition excursion" in lowered:
+                return finish(_table_answer(messages))
+            if ("license status" in lowered or "certificate status" in lowered) and "query_compliance_status" not in done:
+                return _ai([_call("query_compliance_status", {})])
+            if "license status" in lowered or "certificate status" in lowered:
+                return finish(_table_answer(messages))
+            if "pos gap" in lowered and "query_pos_gaps" not in done:
+                return _ai([_call("query_pos_gaps", {})])
+            if "pos gap" in lowered:
+                return finish(_table_answer(messages))
+            if ("publish history" in lowered or "list version" in lowered) and "query_list_versions" not in done:
+                return _ai([_call("query_list_versions", {})])
+            if "publish history" in lowered or "list version" in lowered:
+                return finish(_table_answer(messages))
+            if ("audit purchase" in lowered or "receipt" in lowered) and "query_purchases" not in done:
+                return _ai([_call("query_purchases", {})])
+            if "audit purchase" in lowered or "receipt" in lowered:
+                return finish(_table_answer(messages))
+            if "audit event" in lowered and "query_audit_events" not in done:
+                return _ai([_call("query_audit_events", {"action": "", "actor": ""})])
+            if "audit event" in lowered:
+                return finish(_table_answer(messages))
             if "sensor" in lowered and "get_sensor_status" not in done:
                 return _ai([_call("get_sensor_status", {})])
             if "sensor" in lowered:

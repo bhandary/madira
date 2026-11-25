@@ -65,6 +65,9 @@ class Organization(Base):
     document_retention_years: Mapped[int] = mapped_column(
         Integer, nullable=False, default=7, server_default=text("7")
     )
+    # Null means the limit is off. Cents and requests are integers. There is no plan or invoice.
+    monthly_spend_cap_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    requests_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Venue(Base):
@@ -1543,12 +1546,42 @@ class LlmCredential(Base):
 
 class AgentRun(Base):
     __tablename__ = "agent_runs"
+    __table_args__ = (Index("ix_agent_runs_org_created", "organization_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    # Filled for new runs so an organization limit can count them. Older rows stay null.
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
     message: Mapped[str] = mapped_column(Text, default="")
     reply: Mapped[str] = mapped_column(Text, default="")
     delegated: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = _stamp()
+
+
+class AgentUsage(Base):
+    """One metered subagent call. Cost is an estimate in micro-dollars, or zero in demo."""
+
+    __tablename__ = "agent_usage"
+    __table_args__ = (
+        CheckConstraint("tokens_in >= 0", name="ck_agent_usage_tokens_in"),
+        CheckConstraint("tokens_out >= 0", name="ck_agent_usage_tokens_out"),
+        CheckConstraint("cost_micro_usd >= 0", name="ck_agent_usage_cost"),
+        CheckConstraint("latency_ms >= 0", name="ck_agent_usage_latency"),
+        CheckConstraint("cost_label IN ('demo', 'estimate')", name="ck_agent_usage_label"),
+        Index("ix_agent_usage_org_created", "organization_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    agent_run_id: Mapped[uuid.UUID | None] = _fk("agent_runs.id", nullable=True, index=True)
+    subagent: Mapped[str] = mapped_column(String(64))
+    model: Mapped[str] = mapped_column(String(120))
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    cost_micro_usd: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    cost_label: Mapped[str] = mapped_column(String(16))
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     created_at: Mapped[datetime] = _stamp()
 
 

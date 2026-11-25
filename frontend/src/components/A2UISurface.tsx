@@ -34,6 +34,8 @@ import { posStatus, unmappedPosItem } from "@/a2ui/posSchema";
 import { PosStatusView, UnmappedPosView } from "@/components/PosViews";
 import { reminderItem, sensorStatusItem } from "@/a2ui/sensorSchema";
 import { ReminderListView, SensorStatusView } from "@/components/SensorViews";
+import { auditorTable } from "@/a2ui/auditorTableSchema";
+import { AuditorTableView } from "@/components/AuditorTable";
 
 function money(n: unknown, currency?: unknown) {
   const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
@@ -369,6 +371,11 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
     const parsed = reminderItem.array().safeParse(p.reminders);
     if (!parsed.success) return null;
     return <ReminderListView reminders={parsed.data} />;
+  },
+  AuditorTable: (p) => {
+    const parsed = auditorTable.safeParse(p.table);
+    if (!parsed.success) return null;
+    return <AuditorTableView table={parsed.data} />;
   },
   TastingHistory: (p) => {
     const parsed = tastingHistory.safeParse(p.history);

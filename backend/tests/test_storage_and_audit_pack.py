@@ -382,6 +382,13 @@ def test_compliance_auditor_tools_are_read_only():
         "get_storage_zones_status",
         "get_sensor_status",
         "list_reminders",
+        "query_stock_movements",
+        "query_conditions",
+        "query_compliance_status",
+        "query_pos_gaps",
+        "query_list_versions",
+        "query_purchases",
+        "query_audit_events",
     ]
     spec = next(row for row in SUBAGENT_SPECS if row["name"] == "compliance-auditor")
     assert [tool.__name__ for tool in spec["tools"]] == names
