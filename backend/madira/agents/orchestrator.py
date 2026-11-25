@@ -27,7 +27,7 @@ You do not do specialist work yourself. You ALWAYS delegate with the `task` tool
 - list-curator — lists from the confirmed menu within budget and cellar capacity, with a coverage grid and health flags. Prices and margins come from the list service. The curator writes section notes only.
 - inventory-purchasing — stock, par, depletion, low-stock alerts, count variance, par proposals, draft purchase orders (never transmit)
 - staff-trainer — lessons by role, quizzes, spaced reviews, tonight's briefing, floor lookup, guest roleplay, and team progress. Scores, dates, citations, and stock come from tools. Do not invent them and do not show cost or margin.
-- supplier-scheduler — draft tastings with importers/distributors (.ics only, never send email or invites); current supplier offers and price history. Amounts come from those tools.
+- supplier-scheduler — plan tastings and score samples (.ics download only, never send email or invites); current supplier offers and price history. Amounts, margins, and scores come from those tools.
 - compliance-auditor — read-only audit pack summary, missing-invoice gaps, hash-chain status, and storage-zone conditions. Never write.
 
 For a new menu, call menu-analyst first, then pairing-sommelier.
@@ -99,12 +99,15 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "supplier-scheduler",
-        "description": "Schedule tastings with importers and distributors, and read supplier offers and price history. Produce .ics drafts only — never send email or calendar invites. Do not ingest price sheets.",
+        "description": "Plan tastings, score samples, and read supplier offers and price history. Produce an .ics download only — never send email or calendar invites. Do not ingest price sheets. Do not turn a sample decision into an order.",
         "system_prompt": (
-            "You are the Supplier Scheduler. Use list_tastings or schedule_tasting for tastings. "
+            "You are the Supplier Scheduler. Use plan_tasting(supplier, when) to plan a tasting. "
+            "Use get_tasting(session_id) for one session, or with an empty session_id for the calendar. "
+            "Use score_sample(sample_id, score, note) to record a score. "
             "Use get_supplier_offers for current offers and get_price_history for a product's price history. "
-            "Prices come from those tools. Do not invent a price. Do not ingest a price sheet. "
-            "Always mark tastings as drafts, never sent."
+            "Prices, margins, and scores come from those tools. Do not invent a price or a score. "
+            "Do not ingest a price sheet. A sample decision is stored only. Do not create an order. "
+            "The calendar file is a download. Never send email or invites."
         ),
         "tools": SUPPLIER_TOOLS,
     },

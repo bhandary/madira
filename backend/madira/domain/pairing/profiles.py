@@ -110,6 +110,23 @@ def _from_levels(source, category: str) -> DrinkProfile | None:
     return _pack((richness, acid, sweet, 0, 3 if tan >= 3 else 2, tan, _label(richness, acid, sweet, tan, category)))
 
 
+def stored_profile(product, note=None) -> DrinkProfile | None:
+    """The approved note or the product row, and only when those fields are filled in.
+
+    Name and style rules are a pairing fallback. A sample that was never profiled
+    stays unprofiled instead of borrowing a number from the name.
+    """
+
+    category = fold(getattr(product, "category", "") or "")
+    for source in (note, product):
+        if source is None:
+            continue
+        parsed = _from_levels(source, category)
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def derive_profile(product, note=None) -> DrinkProfile:
     """Approved note, then the product row, then the name and style."""
 

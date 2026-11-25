@@ -84,6 +84,10 @@ export const catalogDefinitions = {
     description: "Calendar of supplier tastings.",
     props: { tastings: "array" },
   },
+  SampleCard: {
+    description: "One tasting sample: label scan, score, list price and margin, and the dishes it pairs with.",
+    props: { sample: "sample card" },
+  },
   TastingNoteCard: {
     description: "Tasting note with a server hook, guest description, technical note, and flavor profile.",
     props: { note: "tasting note" },

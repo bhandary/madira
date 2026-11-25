@@ -16,6 +16,7 @@ const SIDEBAR = [
   { href: "/inventory/count", label: "Phone count" },
   { href: "/training", label: "Staff training" },
   { href: "/suppliers", label: "Suppliers" },
+  { href: "/tastings", label: "Tastings" },
   { href: "/records", label: "Records" },
   { href: "/settings", label: "Settings" },
 ];
@@ -42,6 +43,7 @@ const STAFF_TABS = [
 
 const MORE = [
   { href: "/suppliers", label: "Suppliers" },
+  { href: "/tastings", label: "Tastings" },
   { href: "/records", label: "Records" },
   { href: "/settings", label: "Settings" },
 ];
@@ -162,7 +164,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const staff = role === "Staff";
   const sidebar = staff ? STAFF_SIDEBAR : SIDEBAR;
   const tabs = staff ? STAFF_TABS : TABS;
-  const moreCurrent = pathname === "/suppliers" || pathname === "/records" || pathname === "/settings" || pathname === "/login";
+  const moreCurrent =
+    pathname === "/suppliers" ||
+    pathname === "/tastings" ||
+    pathname === "/records" ||
+    pathname === "/settings" ||
+    pathname === "/login";
   const bare = pathname.startsWith("/l/");
 
   useEffect(() => {

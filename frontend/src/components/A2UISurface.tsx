@@ -26,6 +26,8 @@ import { ZoneConditionCard } from "@/components/ZoneConditionCard";
 import type { StorageZone } from "@/lib/api";
 import type { SupplierOfferCard } from "@/a2ui/supplierOffersSchema";
 import type { PriceHistoryProduct, PricePoint } from "@/a2ui/priceHistorySchema";
+import { sampleCard } from "@/a2ui/sampleCardSchema";
+import { SampleCard } from "@/components/SampleCard";
 
 function money(n: unknown, currency?: unknown) {
   const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
@@ -321,6 +323,17 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
   },
   ScheduleForm: (p) => <ScheduleForm draft={p.draft} />,
   TastingCalendar: (p) => <TastingCalendar tastings={p.tastings} />,
+  SampleCard: (p) => {
+    const parsed = sampleCard.safeParse(p.sample);
+    if (!parsed.success) return null;
+    const card = parsed.data;
+    return (
+      <SampleCard
+        key={`${card.id}:${card.score ?? ""}:${card.product_id ?? ""}:${card.decision}:${card.label_document_id ?? ""}`}
+        sample={card}
+      />
+    );
+  },
   TastingNoteCard: (p) => <TastingNoteSurface note={p.note} />,
   AuditTable: (p) => <AuditSurface events={p.events} chain={p.chain} />,
   ServiceCard: (p) => <ServiceCardSurface card={p.card} />,

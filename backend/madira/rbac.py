@@ -51,6 +51,9 @@ class Capability(str, Enum):
     # Edit supplier profiles, allocations, and offers, and apply or reject a price sheet.
     # Owner, Manager, and Sommelier. Reads use RECORDS.
     SUPPLIERS_MANAGE = "suppliers_manage"
+    # Plan a tasting, edit samples, score them, and store a decision.
+    # Owner, Manager, and Sommelier. Reading the calendar uses RECORDS.
+    TASTINGS_MANAGE = "tastings_manage"
 
 
 MATRIX: dict[Capability, frozenset[str]] = {
@@ -75,6 +78,7 @@ MATRIX: dict[Capability, frozenset[str]] = {
     Capability.LIST_PUBLISH_SUBMIT: frozenset({OWNER, SOMMELIER}),
     Capability.LIST_PUBLISH_DECIDE: frozenset({OWNER}),
     Capability.SUPPLIERS_MANAGE: frozenset({OWNER, MANAGER, SOMMELIER}),
+    Capability.TASTINGS_MANAGE: frozenset({OWNER, MANAGER, SOMMELIER}),
 }
 
 

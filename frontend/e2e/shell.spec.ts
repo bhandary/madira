@@ -8,6 +8,7 @@ const routes = [
   ["/purchasing", "Purchasing"],
   ["/training", "Staff training"],
   ["/suppliers", "Supplier tastings"],
+  ["/tastings", "Tasting sessions"],
   ["/records", "Records"],
   ["/settings", "Settings"],
   ["/login", "Sign in"],

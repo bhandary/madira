@@ -582,7 +582,7 @@ class Supplier(Base):
     contacts: Mapped[list[SupplierContact]] = relationship(back_populates="supplier", cascade="all, delete-orphan")
     items: Mapped[list[InventoryItem]] = relationship(back_populates="supplier")
     orders: Mapped[list[PurchaseOrder]] = relationship(back_populates="supplier")
-    tastings: Mapped[list[Tasting]] = relationship(back_populates="supplier")
+    sessions: Mapped[list[TastingSession]] = relationship(back_populates="supplier")
 
 
 class SupplierContact(Base):
@@ -1209,20 +1209,73 @@ class BriefingAck(Base):
     acknowledged_at: Mapped[datetime] = _stamp()
 
 
-class Tasting(Base):
-    __tablename__ = "tastings"
+TASTING_STATUSES = ("planned", "held", "closed")
+SAMPLE_DECISIONS = ("undecided", "buy", "list", "pass")
+
+
+class TastingSession(Base):
+    """A cellar tasting. The calendar file is generated when someone downloads it."""
+
+    __tablename__ = "tasting_sessions"
+    __table_args__ = (
+        CheckConstraint("status IN ('planned', 'held', 'closed')", name="ck_tasting_sessions_status"),
+        CheckConstraint("ends_at >= starts_at", name="ck_tasting_sessions_window"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
-    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id")
+    supplier_id: Mapped[uuid.UUID | None] = _fk("suppliers.id", nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200))
     starts_at: Mapped[datetime] = mapped_column(AwareDateTime)
     ends_at: Mapped[datetime] = mapped_column(AwareDateTime)
     location: Mapped[str] = mapped_column(String(200), default="Maison Madira cellar")
+    status: Mapped[str] = mapped_column(String(16), default="planned", server_default=text("'planned'"))
     notes: Mapped[str] = mapped_column(Text, default="")
-    ics: Mapped[str] = mapped_column(Text, default="")
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
     created_at: Mapped[datetime] = _stamp()
-    supplier: Mapped[Supplier] = relationship(back_populates="tastings")
+    supplier: Mapped[Supplier | None] = relationship(back_populates="sessions")
+    samples: Mapped[list[Sample]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="Sample.created_at",
+    )
+
+
+class Sample(Base):
+    """One bottle tasted in a session. A decision is stored here; the order comes later."""
+
+    __tablename__ = "samples"
+    __table_args__ = (
+        CheckConstraint("score IS NULL OR (score >= 0 AND score <= 100)", name="ck_samples_score"),
+        CheckConstraint(
+            "decision IN ('undecided', 'buy', 'list', 'pass')",
+            name="ck_samples_decision",
+        ),
+        CheckConstraint(
+            "quoted_price_cents IS NULL OR quoted_price_cents >= 0",
+            name="ck_samples_quoted_price",
+        ),
+        Index("ix_samples_venue_session", "venue_id", "session_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    session_id: Mapped[uuid.UUID] = _fk("tasting_sessions.id", index=True)
+    product_id: Mapped[uuid.UUID | None] = _fk("products.id", nullable=True, index=True)
+    sku_id: Mapped[uuid.UUID | None] = _fk("skus.id", nullable=True, index=True)
+    supplier_id: Mapped[uuid.UUID | None] = _fk("suppliers.id", nullable=True, index=True)
+    offer_id: Mapped[uuid.UUID | None] = _fk("supplier_offers.id", nullable=True, index=True)
+    label_document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True, index=True)
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    quoted_price_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    decision: Mapped[str] = mapped_column(String(16), default="undecided", server_default=text("'undecided'"))
+    decided_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    session: Mapped[TastingSession] = relationship(back_populates="samples")
+    product: Mapped[Product | None] = relationship()
 
 
 class LlmCredential(Base):

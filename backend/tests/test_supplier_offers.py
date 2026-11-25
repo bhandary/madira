@@ -489,7 +489,7 @@ def test_demo_model_routes_offers_and_history_without_dropping_tastings():
     assert not finished.tool_calls
     assert "Current offers" in str(finished.content)
     tasting = model.invoke([HumanMessage(content="Schedule a tasting with Kermit Lynch Wine Merchant")])
-    assert tasting.tool_calls[0]["name"] == "schedule_tasting"
+    assert tasting.tool_calls[0]["name"] == "plan_tasting"
     head = DemoChatModel()
     wrapped = head._task_description("supplier-scheduler", "Show the price history for Muscadet Domaine de l'Ecu")
     assert wrapped.startswith("PRICE_HISTORY product=")
@@ -526,7 +526,7 @@ with engine.connect() as conn:
 command.upgrade(cfg, "head")
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert version == "0020_supplier_offers"
+    assert version == "0021_tasting_sessions"
     tables = set(sa.inspect(conn).get_table_names())
     assert {"supplier_offers", "price_sheets", "supplier_allocations"} <= tables
     columns = {row[1] for row in conn.execute(sa.text("PRAGMA table_info(suppliers)"))}

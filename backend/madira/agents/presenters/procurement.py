@@ -1,4 +1,4 @@
-"""Tasting surfaces. The draft calendar text comes from the procurement service."""
+"""Tasting, offer, and price-history surfaces. Calendar text is built for download only."""
 
 from __future__ import annotations
 
@@ -21,16 +21,57 @@ def tasting_surface(title: str, draft: dict, tastings: list[dict]) -> list[dict[
 def with_tasting_list(payload: dict) -> dict:
     tastings = payload["tastings"]
     return {
+        "sessions": payload.get("sessions", tastings),
         "tastings": tastings,
         "a2ui_operations": tasting_surface("Supplier calendar", {}, tastings),
     }
 
 
 def with_scheduled(payload: dict) -> dict:
+    tastings = payload["tastings"]
     return {
         "draft": payload["draft"],
-        "tastings": payload["tastings"],
-        "a2ui_operations": tasting_surface("Tasting scheduled (draft)", payload["draft"], payload["tastings"]),
+        "sessions": payload.get("sessions", tastings),
+        "tastings": tastings,
+        "a2ui_operations": tasting_surface("Tasting scheduled (draft)", payload["draft"], tastings),
+    }
+
+
+SAMPLE_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "card"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "card", "component": "SampleCard", "sample": {"path": "/sample"}},
+]
+
+SESSION_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "form"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "form", "component": "ScheduleForm", "draft": {"path": "/session"}},
+]
+
+
+def with_session(payload: dict) -> dict:
+    tasting = payload["session"]
+    samples = payload.get("samples") or []
+    operations = surface("tasting-session", SESSION_SCHEMA, {"title": tasting.get("title") or "Tasting", "session": tasting})
+    for sample in samples:
+        label = sample.get("product_name") or "Unmatched sample"
+        operations.extend(
+            surface(
+                f"sample-{sample['id']}",
+                SAMPLE_SCHEMA,
+                {"title": label, "sample": sample},
+            )
+        )
+    return {**payload, "a2ui_operations": operations}
+
+
+def with_sample(payload: dict) -> dict:
+    sample = payload["sample"]
+    label = sample.get("product_name") or "Unmatched sample"
+    return {
+        **payload,
+        "a2ui_operations": surface("sample-card", SAMPLE_SCHEMA, {"title": label, "sample": sample}),
     }
 
 

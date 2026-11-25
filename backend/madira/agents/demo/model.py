@@ -89,7 +89,7 @@ def classify_intent(text: str) -> str:
         return "list"
     if any(k in t for k in ("menu", "dish", "pairing", "parse", "upload", "yuzu", "ribeye", "tasting menu")):
         return "menu"
-    if any(k in t for k in ("importer", "distributor", ".ics", "calendar", "supplier", "price history", "supplier offer", "current offer")) or (
+    if any(k in t for k in ("importer", "distributor", ".ics", "calendar", "supplier", "price history", "supplier offer", "current offer", "sample")) or (
         "tasting" in t and "schedule" in t
     ) or ("tasting" in t and "menu" not in t):
         return "supplier"
@@ -181,6 +181,8 @@ class DemoChatModel(BaseChatModel):
             from madira.agents.demo.prices import price_sheet_json
 
             return _ai(content=price_sheet_json(last_human(messages)))
+        if self.role == "label-scanner":
+            return _ai(content=_label_match(last_human(messages)))
         text = last_human(messages)
         if self.role == "briefing-intro":
             return self._briefing_intro(messages)
@@ -323,11 +325,13 @@ class DemoChatModel(BaseChatModel):
             return f"Summarize the audit pack from {start} to {end}. Read only."
         if specialist == "supplier-scheduler":
             lowered = text.lower()
+            if "score" in lowered and "sample" in lowered:
+                return text
             if "price history" in lowered:
                 return f"PRICE_HISTORY product={_named_hint(text)}"
             if "offer" in lowered:
                 return f"SUPPLIER_OFFERS product={_named_hint(text)} supplier={_supplier_hint(text)}"
-            if any(k in lowered for k in ("schedule", "book", "set up", "hold")):
+            if any(k in lowered for k in ("schedule", "book", "set up", "hold", "plan")):
                 return (
                     "Schedule a draft tasting with Kermit Lynch Wine Merchant titled "
                     "'New Loire releases tasting' next week at the cellar. Produce .ics only — do not send."
@@ -515,13 +519,30 @@ class DemoChatModel(BaseChatModel):
                         ]
                     )
                 return finish("Current offers come from the supplier service. The amounts are on the card.")
-            if any(k in lowered for k in ("schedule", "book", "set up", "hold", "new loire")) and "schedule_tasting" not in done:
+            if "score" in lowered and "sample" in lowered and "score_sample" not in done:
                 return _ai(
                     [
                         _call(
-                            "schedule_tasting",
+                            "score_sample",
                             {
-                                "supplier_name": "Kermit Lynch Wine Merchant",
+                                "sample_id": _extract_product_id(text),
+                                "score": _extract_score(text),
+                                "note": _marked(text, "note"),
+                            },
+                        )
+                    ]
+                )
+            if _extract_product_id(text) and "get_tasting" not in done and "plan_tasting" not in done and "score_sample" not in done:
+                if "sample" not in lowered:
+                    return _ai([_call("get_tasting", {"session_id": _extract_product_id(text)})])
+            if any(k in lowered for k in ("schedule", "book", "set up", "hold", "new loire", "plan")) and "plan_tasting" not in done:
+                return _ai(
+                    [
+                        _call(
+                            "plan_tasting",
+                            {
+                                "supplier": "Kermit Lynch Wine Merchant",
+                                "when": "next week",
                                 "title": "New Loire releases tasting",
                                 "location": "Maison Madira cellar",
                                 "notes": "Draft hold — export .ics, do not send invites.",
@@ -529,9 +550,9 @@ class DemoChatModel(BaseChatModel):
                         )
                     ]
                 )
-            if "list_tastings" not in done and "schedule_tasting" not in done:
-                return _ai([_call("list_tastings", {})])
-            return finish("Supplier tasting is a draft only. .ics is attached; nothing was sent.")
+            if "get_tasting" not in done and "plan_tasting" not in done:
+                return _ai([_call("get_tasting", {"session_id": ""})])
+            return finish("Supplier tasting is a draft only. The .ics is a download; nothing was sent.")
 
         return finish("Done.")
 
@@ -612,6 +633,46 @@ def _extract_answers(text: str) -> str:
 def _wants_note(text: str) -> bool:
     folded = text.lower()
     return any(key in folded for key in ("tasting note", "tasting notes", "service card", "talking point", "server hook"))
+
+
+def _label_match(text: str) -> str:
+    """Echo one catalog row when its name or barcode is in the filename. Never invent one."""
+
+    import json
+
+    filename = ""
+    marker = "FILENAME="
+    for line in (text or "").splitlines():
+        if line.startswith(marker):
+            filename = line[len(marker) :].strip()
+            break
+    folded = filename.casefold()
+    catalog = ""
+    start = (text or "").find("CATALOG<<<")
+    end = (text or "").find(">>>", start + 1) if start >= 0 else -1
+    if start >= 0 and end > start:
+        catalog = text[start + len("CATALOG<<<") : end]
+    for raw in catalog.splitlines():
+        parts = raw.split("\t")
+        if len(parts) < 4:
+            continue
+        _row_id, name, producer, barcode = (part.strip() for part in parts[:4])
+        if name and name.casefold() in folded:
+            return json.dumps({"name": name, "producer": producer, "barcode": barcode})
+        if barcode and barcode.casefold() in folded:
+            return json.dumps({"name": name, "producer": producer, "barcode": barcode})
+    return json.dumps({"name": "", "producer": "", "barcode": ""})
+
+
+def _extract_score(text: str) -> int:
+    match = re.search(r"\bscore\s+(\d{1,3})\b", text or "", re.I)
+    if match:
+        return int(match.group(1))
+    match = re.search(r"\b(\d{1,3})\b", text or "")
+    if not match:
+        return 0
+    number = int(match.group(1))
+    return number if number <= 100 else 0
 
 
 def _extract_product_id(text: str) -> str:
