@@ -206,6 +206,8 @@ class DemoChatModel(BaseChatModel):
             return _ai(content=_buyer_rationales(last_human(messages)))
         if self.role == "rep-drafter":
             return _ai(content='{"thanks":"Thank you for pouring with us."}')
+        if self.role == "invite-drafter":
+            return _ai(content='{"agenda":"Please taste these open styles with us."}')
         text = last_human(messages)
         if self.role == "briefing-intro":
             return self._briefing_intro(messages)
@@ -544,6 +546,10 @@ class DemoChatModel(BaseChatModel):
                         ]
                     )
                 return finish("Current offers come from the supplier service. The amounts are on the card.")
+            if (
+                "tasting invite" in lowered or "propose an invite" in lowered or "propose invite" in lowered
+            ) and "propose_tasting_invite" not in done:
+                return _ai([_call("propose_tasting_invite", {"session_id": _extract_product_id(text)})])
             if "score" in lowered and "sample" in lowered and "score_sample" not in done:
                 return _ai(
                     [

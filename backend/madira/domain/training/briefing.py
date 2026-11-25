@@ -38,6 +38,7 @@ from madira.models import (
     Receipt,
     ReceiptLine,
     Sku,
+    TastingInvite,
     StockMovement,
     StorageZone,
     User,
@@ -891,17 +892,26 @@ def tonight() -> dict:
         waiting = []
         if ctx is not None:
             role_name = ctx.role.lower()
+            visible_roles = {role_name}
+            if role_name in {"owner", "manager"}:
+                visible_roles.add("owner_or_manager")
             pending = session.scalars(
                 select(Approval)
                 .where(
                     Approval.venue_id == venue_id,
                     Approval.decision == "pending",
-                    func.lower(Approval.required_role) == role_name,
+                    func.lower(Approval.required_role).in_(visible_roles),
                 )
                 .order_by(Approval.created_at.asc())
             ).all()
             for row in pending:
-                if row.entity_type == "list_version":
+                href = ""
+                if row.entity_type == "tasting_invite":
+                    title = "Tasting invite awaiting approval"
+                    invite = session.get(TastingInvite, row.entity_id)
+                    if invite is not None and invite.venue_id == venue_id:
+                        href = "/tastings"
+                elif row.entity_type == "list_version":
                     title = f"List publish awaiting {ctx.role}"
                 else:
                     title = f"{row.entity_type} awaiting {ctx.role}"
@@ -911,6 +921,7 @@ def tonight() -> dict:
                         "kind": row.entity_type or "approval",
                         "title": title,
                         "status": row.decision,
+                        "href": href,
                     }
                 )
             if ctx.role in {OWNER, SOMMELIER}:

@@ -11,7 +11,7 @@ import { LessonCard } from "@/components/LessonCard";
 import { QuizCard } from "@/components/QuizCard";
 import { RoleplayPanel } from "@/components/RoleplayPanel";
 import { roleplaySession } from "@/a2ui/roleplayPanelSchema";
-import type { ApprovalListVersion, ApprovalPurchaseOrder, ApprovalRecord } from "@/components/ApprovalCard";
+import type { ApprovalInvite, ApprovalListVersion, ApprovalPurchaseOrder, ApprovalRecord } from "@/components/ApprovalCard";
 import { ReceivingChecklist } from "@/components/ReceivingChecklist";
 import type { ReceivingLineView, ReceivingOrder, ReceivingReceiptView } from "@/components/ReceivingChecklist";
 import { asAudit, AuditTable } from "@/components/AuditTable";
@@ -357,8 +357,12 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
   CountSheet: (p) => <CountSheet session={p.session} lines={p.lines} />,
   VarianceReport: (p) => <VarianceReport report={p.report} />,
   ApprovalCard: (p) => {
-    const listVersion = p.listVersion as ApprovalListVersion | undefined;
     const approval = (p.approval as ApprovalRecord) || null;
+    const invite = p.invite as ApprovalInvite | undefined;
+    if (invite && typeof invite === "object" && invite.id && invite.session_id) {
+      return <ApprovalCard invite={invite} approval={approval} />;
+    }
+    const listVersion = p.listVersion as ApprovalListVersion | undefined;
     if (listVersion && typeof listVersion === "object" && listVersion.id) {
       return <ApprovalCard listVersion={listVersion} approval={approval} />;
     }

@@ -72,20 +72,27 @@ def build_ics(
     notes: str,
     uid: str = "",
     dtstamp: datetime | str | None = None,
+    method: str = "PUBLISH",
+    attendees: list[dict] | None = None,
 ) -> str:
-    """An RFC 5545 calendar. Times are real UTC instants. Nothing is sent."""
+    """An RFC 5545 calendar. Times are real UTC instants. Nothing is sent.
+
+    ``PUBLISH`` is the session download. ``REQUEST`` is the approved invite
+    download and carries ATTENDEE lines for the chosen slot.
+    """
 
     start = parse_stamp(starts_at)
     end = parse_stamp(ends_at)
     stamp = parse_stamp(dtstamp) if dtstamp is not None else start
     identity = uid or f"{start.strftime('%Y%m%dT%H%M%SZ')}-madira@maison.local"
     description = f"{notes} (draft only — not sent)" if notes else "Draft only — not sent"
+    method_name = "REQUEST" if str(method or "").upper() == "REQUEST" else "PUBLISH"
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
         "PRODID:-//Maison Madira//Madira//EN",
         "CALSCALE:GREGORIAN",
-        "METHOD:PUBLISH",
+        f"METHOD:{method_name}",
         "BEGIN:VEVENT",
         f"UID:{_escape(identity)}",
         f"DTSTAMP:{_utc(stamp)}",
@@ -93,10 +100,22 @@ def build_ics(
         f"DTEND:{_utc(end)}",
         f"SUMMARY:{_escape(title)}",
         f"LOCATION:{_escape(location)}",
-        f"DESCRIPTION:{_escape(description)}",
-        "END:VEVENT",
-        "END:VCALENDAR",
     ]
+    if method_name == "REQUEST":
+        lines.append("ORGANIZER;CN=Maison Madira:mailto:drafts@maison.local")
+        for person in attendees or []:
+            email = str(person.get("email") or "").strip()
+            if not email or any(mark in email for mark in (" ", "\n", "\r", ",", ";")):
+                continue
+            name = _escape(str(person.get("name") or email))
+            lines.append(f"ATTENDEE;CN={name}:mailto:{email}")
+    lines.extend(
+        [
+            f"DESCRIPTION:{_escape(description)}",
+            "END:VEVENT",
+            "END:VCALENDAR",
+        ]
+    )
     return "\r\n".join(_fold_line(line) for line in lines) + "\r\n"
 
 

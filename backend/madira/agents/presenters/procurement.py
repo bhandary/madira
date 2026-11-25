@@ -102,6 +102,30 @@ def with_brief(payload: dict) -> dict:
     }
 
 
+INVITE_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "card"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "card", "component": "ApprovalCard", "invite": {"path": "/invite"}, "approval": {"path": "/approval"}},
+]
+
+
+def with_invite(payload: dict) -> dict:
+    invite = payload.get("invite") or {}
+    approval = invite.get("approval") if isinstance(invite, dict) else None
+    return {
+        **payload,
+        "a2ui_operations": surface(
+            "tasting-invite",
+            INVITE_SCHEMA,
+            {
+                "title": invite.get("title") or "Tasting invite",
+                "invite": invite,
+                "approval": approval or {"decision": "pending", "required_role": "owner_or_manager"},
+            },
+        ),
+    }
+
+
 def with_followup(payload: dict) -> dict:
     followup = payload.get("followup") or {}
     return {

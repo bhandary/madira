@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SampleCard } from "@/components/SampleCard";
+import { TastingInvitePanel } from "@/components/TastingInvite";
 import type { SampleCardData, SampleProductOption } from "@/a2ui/sampleCardSchema";
 import {
   ApiError,
@@ -224,6 +225,7 @@ export default function TastingsPage() {
               />
             ))}
           </div>
+          <TastingInvitePanel key={current.id} sessionId={current.id} />
           <section className="panel space-y-3 p-3" data-testid="followup-panel">
             <h3 className="text-base font-medium">Rep follow-up</h3>
             <p className="text-sm text-muted">A draft for the supplier. Madira does not send it.</p>

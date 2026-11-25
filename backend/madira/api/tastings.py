@@ -9,9 +9,21 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
-from madira.agents.presenters.procurement import with_followup, with_sample, with_scheduled, with_session, with_tasting_list
+from madira.agents.presenters.procurement import (
+    with_followup,
+    with_invite,
+    with_sample,
+    with_scheduled,
+    with_session,
+    with_tasting_list,
+)
 from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.sourcing.service import draft_followup, get_followup
+from madira.domain.tastings.invites import approve as approve_invite
+from madira.domain.tastings.invites import desk as invite_desk
+from madira.domain.tastings.invites import ics_text as invite_ics_text
+from madira.domain.tastings.invites import propose as propose_invite
+from madira.domain.tastings.invites import reject as reject_invite
 from madira.domain.tastings.service import (
     TastingError,
     add_sample,
@@ -87,6 +99,22 @@ class ScoreBody(BaseModel):
 class DecisionBody(BaseModel):
     decision: str
     reason: str = ""
+
+
+class InviteSlotBody(BaseModel):
+    starts_at: str
+    ends_at: str = ""
+    source: str = "entered"
+
+
+class InviteProposeBody(BaseModel):
+    slots: list[InviteSlotBody] | None = None
+    staff_user_ids: list[str] | None = None
+
+
+class InviteDecisionBody(BaseModel):
+    comment: str = ""
+    slot_index: int | None = None
 
 
 def _fail(exc: Exception) -> HTTPException:
@@ -283,3 +311,54 @@ def tasting_followup_draft(session_id: uuid.UUID) -> dict[str, Any]:
         return with_followup(draft_followup(active_venue_id(), session_id))
     except (NotFound, TastingError, DraftFailed) as exc:
         raise _fail(exc) from exc
+
+
+@router.get("/tastings/{session_id}/invite", dependencies=[require(Capability.RECORDS)])
+def tasting_invite(session_id: uuid.UUID) -> dict[str, Any]:
+    try:
+        return invite_desk(active_venue_id(), session_id)
+    except (NotFound, TastingError) as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/tastings/{session_id}/invite", dependencies=[require(Capability.TASTINGS_MANAGE)])
+def tasting_invite_propose(session_id: uuid.UUID, body: InviteProposeBody) -> dict[str, Any]:
+    slots = None if body.slots is None else [slot.model_dump() for slot in body.slots]
+    try:
+        return with_invite(
+            propose_invite(
+                active_venue_id(),
+                session_id,
+                slots=slots,
+                staff_user_ids=body.staff_user_ids,
+            )
+        )
+    except (NotFound, TastingError, DraftFailed) as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/tastings/{session_id}/invite/approve", dependencies=[require(Capability.INVITE_DECIDE)])
+def tasting_invite_approve(session_id: uuid.UUID, body: InviteDecisionBody) -> dict[str, Any]:
+    try:
+        return with_invite(
+            approve_invite(active_venue_id(), session_id, slot_index=body.slot_index, comment=body.comment)
+        )
+    except (NotFound, TastingError, DraftFailed) as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/tastings/{session_id}/invite/reject", dependencies=[require(Capability.INVITE_DECIDE)])
+def tasting_invite_reject(session_id: uuid.UUID, body: InviteDecisionBody) -> dict[str, Any]:
+    try:
+        return with_invite(reject_invite(active_venue_id(), session_id, comment=body.comment))
+    except (NotFound, TastingError, DraftFailed) as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/tastings/{session_id}/invite.ics", dependencies=[require(Capability.RECORDS)])
+def tasting_invite_ics(session_id: uuid.UUID) -> PlainTextResponse:
+    try:
+        body = invite_ics_text(active_venue_id(), session_id)
+    except (NotFound, TastingError) as exc:
+        raise _fail(exc) from exc
+    return PlainTextResponse(body, media_type="text/calendar; charset=utf-8")
