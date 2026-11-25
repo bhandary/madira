@@ -104,7 +104,7 @@ export default function TastingsPage() {
   const current = sessions.find((row) => row.id === selected);
 
   return (
-    <div className="mx-auto w-full max-w-lg">
+    <div className="mx-auto w-full min-w-0 max-w-lg">
       <h1 className="h-page">Tasting sessions</h1>
       <p className="mt-2 text-sm text-muted">
         Plan a cellar tasting and score the samples. The calendar file is a download. Nothing is sent.
@@ -173,10 +173,10 @@ export default function TastingsPage() {
       {sessions.length ? (
         <ul className="mt-4 space-y-2" data-testid="tasting-sessions">
           {sessions.map((row) => (
-            <li key={row.id}>
+            <li key={row.id} className="min-w-0">
               <button
                 type="button"
-                className="btn min-h-11 w-full justify-start text-left"
+                className="btn h-auto min-h-11 w-full min-w-0 justify-start whitespace-normal break-words text-left"
                 data-testid="tasting-session"
                 aria-current={row.id === selected ? "true" : undefined}
                 onClick={() => {

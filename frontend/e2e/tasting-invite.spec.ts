@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test.use({ viewport: { width: 390, height: 844 } });
 
 test("a tasting invite is approved, then downloaded and copied, and nothing is sent", async ({ page }) => {
-  const title = `Phone invite ${Date.now()}`;
+  const title = `Invite ${Date.now().toString(36)}`;
   await page.goto("/tastings");
   await expect(page.getByRole("heading", { name: "Tasting sessions" })).toBeVisible();
   const brief = await page.request.post("/madira-api/sourcing/briefs");

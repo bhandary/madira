@@ -64,7 +64,7 @@ export function TastingInvitePanel({ sessionId }: { sessionId: string }) {
   const filled = slots.filter((slot) => slot.starts_at && slot.ends_at).length;
 
   return (
-    <section className="panel space-y-3 p-3" data-testid="invite-panel">
+    <section className="panel min-w-0 space-y-3 overflow-hidden p-3" data-testid="invite-panel">
       <h3 className="text-base font-medium">Tasting invite</h3>
       <p className="text-sm text-muted">Madira prepares the calendar file and the email. You send it.</p>
       {desk?.rep ? (
@@ -75,23 +75,23 @@ export function TastingInvitePanel({ sessionId }: { sessionId: string }) {
       ) : null}
       <div className="space-y-2">
         {slots.map((slot, index) => (
-          <div key={`${sessionId}-${index}`} className="grid grid-cols-1 gap-2">
-            <label className="lbl" htmlFor={`invite-start-${index}`}>
+          <div key={`${sessionId}-${index}`} className="grid min-w-0 grid-cols-1 gap-2">
+            <label className="lbl min-w-0" htmlFor={`invite-start-${index}`}>
               Start
               <input
                 id={`invite-start-${index}`}
-                className="field min-h-11 w-full"
+                className="field min-h-11 w-full min-w-0 max-w-full"
                 data-testid="invite-slot"
                 type="datetime-local"
                 value={slot.starts_at}
                 onChange={(event) => updateSlot(index, "starts_at", event.target.value)}
               />
             </label>
-            <label className="lbl" htmlFor={`invite-end-${index}`}>
+            <label className="lbl min-w-0" htmlFor={`invite-end-${index}`}>
               End
               <input
                 id={`invite-end-${index}`}
-                className="field min-h-11 w-full"
+                className="field min-h-11 w-full min-w-0 max-w-full"
                 data-testid="invite-slot-end"
                 type="datetime-local"
                 value={slot.ends_at}
@@ -199,7 +199,7 @@ export function TastingInvitePanel({ sessionId }: { sessionId: string }) {
               <p className="text-sm font-medium" data-testid="invite-subject">
                 {invite.email_subject}
               </p>
-              <pre className="whitespace-pre-wrap text-sm" data-testid="invite-body">
+              <pre className="whitespace-pre-wrap break-words text-sm" data-testid="invite-body">
                 {invite.email_body}
               </pre>
               <div className="flex flex-wrap gap-2">
