@@ -7,7 +7,7 @@ export PYTHONPATH := backend
 
 ALEMBIC := $(VENV)/bin/alembic
 
-.PHONY: install backend frontend dev test eval eval-live e2e doctor verify clean migrate types
+.PHONY: install backend frontend dev test eval eval-live e2e doctor verify clean migrate types worker
 
 install:
 	$(PYTHON) -m venv $(VENV)
@@ -18,6 +18,9 @@ install:
 
 backend:
 	PYTHONPATH=backend $(PY) -m madira.main
+
+worker:
+	PYTHONPATH=backend $(PY) -m madira.worker
 
 frontend:
 	cd frontend && npm run dev

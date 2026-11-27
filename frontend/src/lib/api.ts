@@ -369,7 +369,7 @@ export async function uploadMenu(payload: { text?: string; file?: File }) {
   if (payload.file) body.set("file", payload.file);
   const res = await apiFetch(`${API}/menus/upload`, { method: "POST", body });
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return unwrapJob(await res.json());
 }
 
 export async function ingestMenu(input: {
@@ -384,7 +384,7 @@ export async function ingestMenu(input: {
   if (input.text) body.set("text", input.text);
   if (input.menuId) body.set("menu_id", input.menuId);
   const res = await apiFetch(`${API}/menus/ingest`, { method: "POST", body, credentials: "same-origin" });
-  return readJson(res);
+  return unwrapJob(await readJson(res));
 }
 
 export async function updateDishField(
@@ -1062,6 +1062,29 @@ async function readJson<T>(res: Response): Promise<T> {
   return res.json();
 }
 
+async function waitForJob<T>(jobId: string): Promise<T> {
+  let delay = 200;
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const res = await apiFetch(`${API}/jobs/${jobId}`, { credentials: "same-origin", cache: "no-store" });
+    const job = await readJson<{ status: string; last_error: string; result: T }>(res);
+    if (job.status === "succeeded") return job.result;
+    if (job.status === "failed" || job.status === "dead") {
+      throw new ApiError(502, job.last_error || "The job failed.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 2, 2000);
+  }
+  throw new ApiError(504, "The job is still running.");
+}
+
+async function unwrapJob<T>(body: T): Promise<T> {
+  if (body === null || typeof body !== "object") return body;
+  const row = body as T & { job_status?: string; job_id?: string };
+  if (row.job_status !== "queued" && row.job_status !== "running") return body;
+  if (!row.job_id) throw new ApiError(502, "The job failed.");
+  return waitForJob<T>(row.job_id);
+}
+
 export async function getTastingNotes(productId: string): Promise<TastingNoteList> {
   const res = await apiFetch(`${API}/products/${productId}/notes`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
@@ -1134,7 +1157,7 @@ export async function importList(file: File, confirm: boolean): Promise<ListImpo
   body.set("confirm", confirm ? "true" : "false");
   const res = await apiFetch(`${API}/lists/import`, { method: "POST", body, credentials: "same-origin" });
   if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
-  return res.json();
+  return unwrapJob(await res.json());
 }
 
 export async function getSampleMenu() {
@@ -1379,7 +1402,7 @@ export async function uploadPriceSheet(supplierId: string, file: File): Promise<
     credentials: "same-origin",
     body,
   });
-  return readJson(res);
+  return unwrapJob(await readJson(res));
 }
 
 export async function applyPriceSheet(sheetId: string): Promise<PriceSheetApplied> {
@@ -1477,7 +1500,7 @@ export async function uploadInvoice(
     body,
     credentials: "same-origin",
   });
-  return readJson(res);
+  return unwrapJob(await readJson(res));
 }
 
 export async function stageReceipt(
@@ -1546,7 +1569,7 @@ export async function previewSensorCsv(file: File): Promise<SensorImport> {
   body.set("file", file);
   body.set("filename", file.name);
   const res = await apiFetch(`${API}/sensors/imports`, { method: "POST", credentials: "same-origin", body });
-  return readJson(res);
+  return unwrapJob(await readJson(res));
 }
 
 export async function applySensorImport(importId: string): Promise<SensorImport> {
@@ -1776,7 +1799,7 @@ export async function savePosMapping(body: {
 
 export async function syncPos(): Promise<PosSyncResult> {
   const res = await apiFetch(`${API}/pos/sync`, { method: "POST", credentials: "same-origin" });
-  return readJson(res);
+  return unwrapJob(await readJson(res));
 }
 
 export async function getUsage(): Promise<UsageReport> {

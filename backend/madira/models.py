@@ -2052,6 +2052,45 @@ class ListEntry(Base):
     version: Mapped[ListVersion] = relationship(back_populates="entries")
 
 
+class Job(Base):
+    """One unit of work for the database queue.
+
+    ``payload`` is the job input. ``last_error`` is a short public message.
+    The payload is not copied into the error or the log.
+    """
+
+    __tablename__ = "jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed', 'dead')",
+            name="ck_jobs_status",
+        ),
+        CheckConstraint("attempts >= 0", name="ck_jobs_attempts"),
+        CheckConstraint("max_attempts >= 1", name="ck_jobs_max_attempts"),
+        Index("ix_jobs_status_run_at", "status", "run_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    venue_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("venues.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict] = mapped_column(JSON)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="queued", server_default=text("'queued'"))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3, server_default=text("3"))
+    run_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    locked_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    locked_until: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    last_error: Mapped[str] = mapped_column(String(300), default="", server_default=text("''"))
+    created_at: Mapped[datetime] = _stamp()
+    updated_at: Mapped[datetime] = _stamp()
+    started_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
 class PublicListSnapshot(Base):
     """Guest projection. The anonymous route reads only this table."""
 

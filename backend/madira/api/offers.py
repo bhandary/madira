@@ -11,6 +11,8 @@ from pydantic import BaseModel
 from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.procurement import offers
 from madira.domain.procurement.offers import OfferError
+from madira.jobs.handlers import REQUEST_ATTEMPTS, file_args
+from madira.jobs.runner import accept
 from madira.rbac import Capability, require
 from madira.storage import StorageError, upload_max_bytes
 from madira.tenancy import active_venue_id
@@ -151,12 +153,10 @@ def price_history(product_id: uuid.UUID) -> dict[str, Any]:
 def upload_price_sheet(supplier_id: uuid.UUID = Form(), file: UploadFile = File()) -> dict[str, Any]:
     body = file.file.read(upload_max_bytes() + 1)
     try:
-        return offers.ingest_price_sheet(
-            active_venue_id(),
-            supplier_id,
-            filename=file.filename or "",
-            body=body,
-            content_type=file.content_type,
+        return accept(
+            "price_sheet.ingest",
+            file_args(body, file.filename or "", file.content_type, supplier_id=str(supplier_id)),
+            max_attempts=REQUEST_ATTEMPTS,
         )
     except (NotFound, OfferError, DraftFailed, StorageError) as exc:
         raise _fail(exc) from exc

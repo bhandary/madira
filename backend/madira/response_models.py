@@ -2045,6 +2045,21 @@ class PosSyncResult(APIModel):
     unmapped: list[PosGapItem]
 
 
+class JobRecord(APIModel):
+    id: str
+    kind: str
+    status: str
+    attempts: int
+    max_attempts: int
+    run_at: str
+    last_error: str
+    result: dict[str, Any] | None = None
+    created_at: str
+    updated_at: str
+    started_at: str = ""
+    finished_at: str = ""
+
+
 class SensorList(APIModel):
     sensors: list[SensorRecord]
     stale_after_hours: int
@@ -2553,6 +2568,7 @@ def _routes() -> dict[tuple[str, str], type[APIModel]]:
         ("post", "/pos/connect/square"): pos,
         ("post", "/pos/location"): pos,
         ("post", "/pos/sync"): PosSyncResult,
+        ("get", "/jobs/{job_id}"): JobRecord,
         ("get", "/sensors"): SensorList,
         ("post", "/sensors"): SensorRecord,
         ("post", "/sensors/{sensor_id}/rotate"): SensorRecord,
