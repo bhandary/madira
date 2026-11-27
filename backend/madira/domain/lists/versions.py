@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from madira.domain.catalog.service import beverage_fields
-from madira.domain.compliance.service import get_document_bytes, record_audit_event, store_document
+from madira.domain.compliance.service import get_document, record_audit_event, store_document
 from madira.domain.errors import NotFound
 from madira.domain.inventory.qrcode import qr_png
 from madira.domain.lists.pricing import blended
@@ -195,13 +195,13 @@ def reject(venue_id: uuid.UUID, version_id: uuid.UUID, actor=None, comment: str 
         return body
 
 
-def version_pdf(venue_id: uuid.UUID, version_id: uuid.UUID) -> tuple[str, bytes]:
+def version_pdf(venue_id: uuid.UUID, version_id: uuid.UUID) -> tuple[str, str]:
     with session_scope() as session:
         version = _owned_version(session, venue_id, version_id)
         if version.document_id is None:
             raise NotFound("list pdf not found")
-        document, payload = get_document_bytes(session, venue_id, version.document_id)
-        return document.filename, payload
+        document = get_document(session, venue_id, version.document_id)
+        return document.filename, document.storage_key
 
 
 def version_qr(venue_id: uuid.UUID, version_id: uuid.UUID) -> bytes:

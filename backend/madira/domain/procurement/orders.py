@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from madira.domain.compliance.service import get_document_bytes, record_audit_event, store_document
+from madira.domain.compliance.service import get_document, record_audit_event, store_document
 from madira.domain.errors import NotFound
 from madira.domain.inventory.ledger import public_qty
 from madira.domain.inventory.service import rows as inventory_rows
@@ -416,13 +416,13 @@ def transition_purchase_order(venue_id: uuid.UUID, po_id: uuid.UUID, target: str
         return body
 
 
-def purchase_order_pdf(venue_id: uuid.UUID, po_id: uuid.UUID) -> tuple[str, bytes]:
+def purchase_order_pdf(venue_id: uuid.UUID, po_id: uuid.UUID) -> tuple[str, str]:
     with session_scope() as session:
         order = _order(session, venue_id, po_id)
         if order.pdf_document_id is None:
             raise NotFound("purchase order pdf not found")
-        document, payload = get_document_bytes(session, venue_id, order.pdf_document_id)
-        return document.filename, payload
+        document = get_document(session, venue_id, order.pdf_document_id)
+        return document.filename, document.storage_key
 
 
 def finalize_legacy_draft(session: Session, order: PurchaseOrder, supplier: Supplier, total_cents: int) -> dict:

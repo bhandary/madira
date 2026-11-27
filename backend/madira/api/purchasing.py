@@ -20,7 +20,7 @@ from madira.domain.purchasing.service import draft, list_orders
 from madira.jobs.handlers import REQUEST_ATTEMPTS, file_args
 from madira.jobs.runner import accept
 from madira.rbac import Capability, require
-from madira.storage import StorageError, upload_max_bytes
+from madira.storage import StorageError, stored_file_response, upload_max_bytes
 from madira.tenancy import active_venue_id, current_request
 
 router = APIRouter()
@@ -198,15 +198,10 @@ def procurement_order_cancel(po_id: uuid.UUID) -> dict[str, Any]:
 @router.get("/procurement/orders/{po_id}/pdf", dependencies=[require(Capability.PO_READ)])
 def procurement_order_pdf(po_id: uuid.UUID) -> Response:
     try:
-        filename, payload = lifecycle.purchase_order_pdf(active_venue_id(), po_id)
+        filename, key = lifecycle.purchase_order_pdf(active_venue_id(), po_id)
+        return stored_file_response(key=key, filename=filename, media="application/pdf")
     except (NotFound, OrderError, StorageError) as exc:
         raise _fail(exc) from exc
-    quoted = filename.replace("\\", "").replace('"', "")
-    return Response(
-        content=payload,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{quoted}"'},
-    )
 
 
 @router.post("/procurement/orders/{po_id}/invoices", dependencies=[require(Capability.PO_WRITE)])
@@ -253,11 +248,10 @@ def procurement_invoice_get(invoice_id: uuid.UUID) -> dict[str, Any]:
 @router.get("/procurement/invoices/{invoice_id}/document", dependencies=[require(Capability.PO_READ)])
 def procurement_invoice_document(invoice_id: uuid.UUID) -> Response:
     try:
-        filename, media, payload = receiving.invoice_document(active_venue_id(), invoice_id)
+        filename, media, key = receiving.invoice_document(active_venue_id(), invoice_id)
+        return stored_file_response(key=key, filename=filename, media=media)
     except (NotFound, ReceivingError, StorageError) as exc:
         raise _fail(exc) from exc
-    quoted = filename.replace("\\", "").replace('"', "")
-    return Response(content=payload, media_type=media, headers={"Content-Disposition": f'attachment; filename="{quoted}"'})
 
 
 @router.post("/procurement/orders/{po_id}/receipts", dependencies=[require(Capability.PO_WRITE)])
