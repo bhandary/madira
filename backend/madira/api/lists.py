@@ -11,7 +11,9 @@ from madira.agents.presenters.lists import with_list
 from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.lists.versions import ListVersionError
 from madira.domain.lists import versions as list_versions
-from madira.domain.lists.csv_import import ImportRejected, import_csv
+from madira.domain.lists.csv_import import ImportRejected
+from madira.jobs.handlers import REQUEST_ATTEMPTS, file_args
+from madira.jobs.runner import accept
 from madira.domain.lists.service import (
     add_item,
     coverage_for,
@@ -221,13 +223,16 @@ def import_list(
     body = file.file.read(upload_max_bytes() + 1)
     writing = confirm.strip().lower() in {"1", "true", "yes", "on"}
     try:
-        return import_csv(
-            active_venue_id(),
-            filename=file.filename or "",
-            body=body,
-            content_type=file.content_type,
-            confirm=writing,
-            name=name,
+        return accept(
+            "list.import",
+            file_args(
+                body,
+                file.filename or "",
+                file.content_type,
+                confirm=writing,
+                name=name,
+            ),
+            max_attempts=REQUEST_ATTEMPTS,
         )
     except StorageError as exc:
         raise HTTPException(exc.status, exc.message) from exc

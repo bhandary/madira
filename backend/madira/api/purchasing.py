@@ -17,6 +17,8 @@ from madira.domain.procurement import receiving
 from madira.domain.procurement.orders import OrderError
 from madira.domain.procurement.receiving import ReceivingError
 from madira.domain.purchasing.service import draft, list_orders
+from madira.jobs.handlers import REQUEST_ATTEMPTS, file_args
+from madira.jobs.runner import accept
 from madira.rbac import Capability, require
 from madira.storage import StorageError, upload_max_bytes
 from madira.tenancy import active_venue_id, current_request
@@ -220,17 +222,19 @@ async def procurement_invoice_upload(
     parsed = _lines_json(lines_json)
 
     def upload():
-        return receiving.upload_invoice(
-            active_venue_id(),
-            po_id,
-            filename=file.filename or "invoice",
-            content_type=file.content_type,
-            body=body,
-            invoice_number=invoice_number,
-            invoice_date=invoice_date,
-            tax_cents=tax_cents,
-            lines=parsed,
-            actor=_actor(),
+        return accept(
+            "invoice.extract",
+            file_args(
+                body,
+                file.filename or "invoice",
+                file.content_type,
+                po_id=str(po_id),
+                invoice_number=invoice_number,
+                invoice_date=invoice_date,
+                tax_cents=tax_cents,
+                lines=parsed,
+            ),
+            max_attempts=REQUEST_ATTEMPTS,
         )
 
     return _call(upload)

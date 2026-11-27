@@ -22,9 +22,10 @@ from madira.domain.pos.service import (
     save_mapping,
     set_location,
     status,
-    sync,
     unmapped_items,
 )
+from madira.jobs.handlers import SCHEDULED_ATTEMPTS
+from madira.jobs.runner import accept
 from madira.rbac import Capability, require
 from madira.tenancy import active_venue_id
 
@@ -148,6 +149,6 @@ def pos_location(body: LocationBody) -> dict[str, Any]:
 @router.post("/pos/sync", dependencies=[require(Capability.POS_MANAGE)])
 def pos_sync() -> dict[str, Any]:
     try:
-        return sync(active_venue_id())
+        return accept("pos.sync", {}, max_attempts=SCHEDULED_ATTEMPTS)
     except (NotFound, PosError, Rejected) as exc:
         raise _fail(exc) from exc

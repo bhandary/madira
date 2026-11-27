@@ -17,10 +17,11 @@ from madira.domain.sensors.service import (
     create_sensor,
     list_imports,
     list_sensors,
-    preview_csv,
     reject_import,
     rotate_secret,
 )
+from madira.jobs.handlers import REQUEST_ATTEMPTS, file_args
+from madira.jobs.runner import accept
 from madira.rbac import Capability, require
 from madira.tenancy import active_venue_id
 
@@ -86,7 +87,11 @@ def imports() -> dict[str, Any]:
 async def upload_csv(file: UploadFile = File(...), filename: str = Form("")) -> dict[str, Any]:
     raw = await file.read()
     try:
-        return preview_csv(active_venue_id(), filename or file.filename or "readings.csv", raw)
+        return accept(
+            "sensor.csv",
+            file_args(raw, filename or file.filename or "readings.csv", file.content_type),
+            max_attempts=REQUEST_ATTEMPTS,
+        )
     except (NotFound, SensorError, Rejected) as exc:
         raise _fail(exc) from exc
 

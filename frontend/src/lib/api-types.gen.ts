@@ -833,6 +833,21 @@ export type ItemPatch = {
   section?: string | null;
 };
 
+export type JobRecord = {
+  id: string;
+  kind: string;
+  status: string;
+  attempts: number;
+  max_attempts: number;
+  run_at: string;
+  last_error: string;
+  result?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  finished_at?: string;
+};
+
 export type LessonBottle = {
   sku_id: string;
   name: string;
@@ -2908,6 +2923,7 @@ export type StorageReadingsInventoryStorageZonesZoneIdReadingsGetResponse = Zone
 export type StorageReadingCreateInventoryStorageZonesZoneIdReadingsPostResponse = ZoneReadingResult;
 export type InventoryTransferInventoryTransfersPostResponse = MovementList;
 export type InventoryPatchInventorySkuPatchResponse = CellarBoard;
+export type GetJobJobsJobIdGetResponse = JobRecord;
 export type AddLicenseLicensesPostResponse = LicenseRecorded;
 export type ListsListsGetResponse = ListIndex;
 export type ListsCurateListsCuratePostResponse = BeverageListDetail;
