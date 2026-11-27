@@ -1504,6 +1504,15 @@ export type PersonaBody = {
   slug: string;
 };
 
+export type PinBody = {
+  pin: string;
+};
+
+export type PinSaved = {
+  ok: boolean;
+  has_pin: boolean;
+};
+
 export type PosAlert = {
   kind: string;
   title: string;
@@ -2441,6 +2450,26 @@ export type SyncEntry = {
   notes?: string | null;
 };
 
+export type TabletPerson = {
+  user_id: string;
+  name: string;
+  role: string;
+  position: string | null;
+};
+
+export type TabletState = {
+  enabled: boolean;
+  locked: boolean;
+  idle_seconds: number;
+  expires_at: string | null;
+  pin_session: boolean;
+  can_manage: boolean;
+  self_has_pin: boolean;
+  actor: TabletPerson | null;
+  candidates: TabletPerson[];
+  clearable: TabletPerson[];
+};
+
 export type TastingCreateResult = {
   draft: TastingDraftCard;
 };
@@ -2699,6 +2728,11 @@ export type TransferBody = {
   reason?: string | null;
 };
 
+export type UnlockBody = {
+  user_id: string;
+  pin: string;
+};
+
 export type UsageByAgent = {
   subagent: string;
   calls: number;
@@ -2948,6 +2982,7 @@ export type GetListVersionsListsListIdVersionsGetResponse = ListVersionIndex;
 export type PostListVersionListsListIdVersionsPostResponse = ListVersionRecord;
 export type FloorLookupLookupGetResponse = LookupResult;
 export type LookupPackLookupPackGetResponse = LookupPack;
+export type MePinMePinPostResponse = PinSaved;
 export type ListMenusRouteMenusGetResponse = MenuList;
 export type UploadMenuMenusIngestPostResponse = MenuIngestResult;
 export type ParseMenuRouteMenusParsePostResponse = MenuParseResult;
@@ -3043,6 +3078,12 @@ export type SourcingHistorySourcingHistoryGetResponse = TastingHistory;
 export type SourcingItemSourcingItemsItemIdPatchResponse = SourcingBriefEnvelope;
 export type StatusStatusGetResponse = StatusPayload;
 export type SuppliersSuppliersGetResponse = SupplierNameList;
+export type GetTabletTabletGetResponse = TabletState;
+export type TabletDisableTabletDisablePostResponse = TabletState;
+export type TabletEnableTabletEnablePostResponse = TabletState;
+export type TabletLockTabletLockPostResponse = TabletState;
+export type TabletTouchTabletTouchPostResponse = TabletState;
+export type TabletUnlockTabletUnlockPostResponse = TabletState;
 export type TastingsTastingsGetResponse = TastingSessionList;
 export type TastingsCreateTastingsPostResponse = TastingCreateResult;
 export type TastingDeleteTastingsSessionIdDeleteResponse = DeletedId;
@@ -3074,6 +3115,7 @@ export type TeamInviteTeamInvitesPostResponse = TeamInvite;
 export type TeamRevokeTeamInvitesInviteIdRevokePostResponse = TeamInvite;
 export type TeamRemoveMemberTeamMembersUserIdDeleteResponse = RemovedMember;
 export type TeamUpdateMemberTeamMembersUserIdPatchResponse = TeamMember;
+export type MemberPinClearTeamMembersUserIdPinDeleteResponse = PinSaved;
 export type TeamProgressTeamProgressGetResponse = TeamProgress;
 export type TonightBoardTonightGetResponse = TonightBoard;
 export type TonightBriefingTonightBriefingGetResponse = TonightEnvelope;

@@ -32,7 +32,7 @@ cfg = _alembic_config()
 command.upgrade(cfg, "head")
 engine = sa.create_engine(os.environ["DATABASE_URL"])
 with engine.connect() as conn:
-    assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0028_jobs"
+    assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0029_tablet_pin"
     tables = set(sa.inspect(conn).get_table_names())
     assert "jobs" in tables
     assert "pairing_cache" in tables
@@ -52,7 +52,7 @@ with engine.connect() as conn:
 
 command.upgrade(cfg, "head")
 with engine.connect() as conn:
-    assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0028_jobs"
+    assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0029_tablet_pin"
 print("migration-ok")
 '''
     proc = subprocess.run([sys.executable, "-c", script], cwd=ROOT, env=env, capture_output=True, text=True)

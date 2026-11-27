@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { HoverArrow } from "@/components/HoverArrow";
+import { TabletSettings } from "@/components/TabletMode";
 import {
   ApiError,
   deleteLlmSettings,
@@ -99,6 +100,7 @@ export default function SettingsPage() {
         Paste a provider key to leave demo mode. It is encrypted in the database and overrides environment
         variables until you remove it. The key is never shown again. Model keys are limited to the Owner.
       </p>
+      <TabletSettings />
       {!ready ? (
         <p className="mt-6 text-sm text-muted">Checking the session…</p>
       ) : gate === "signin" ? (

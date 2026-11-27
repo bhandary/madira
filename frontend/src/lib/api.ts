@@ -150,6 +150,8 @@ import type {
   TastingSessionDetail,
   TastingSessionList,
   TastingSessionRow,
+  TabletState,
+  PinSaved,
   TeamInvite,
   TeamMember,
   TeamPerson,
@@ -319,6 +321,8 @@ export type {
   TastingSessionDetail,
   TastingSessionList,
   TastingSessionRow,
+  TabletState,
+  PinSaved,
   TeamInvite,
   TeamMember,
   TeamPerson,
@@ -350,11 +354,15 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
     const token = await ensureCsrfToken();
     if (token) headers.set(CSRF_HEADER, token);
   }
-  return globalThis.fetch(input, {
+  const res = await globalThis.fetch(input, {
     ...init,
     credentials: init.credentials ?? "same-origin",
     headers,
   });
+  if (res.status === 423 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("madira-tablet-locked"));
+  }
+  return res;
 }
 
 export async function getStatus() {
@@ -1178,6 +1186,79 @@ export function notifyStatusChanged() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("madira-status"));
   }
+}
+
+export function notifyTabletChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("madira-tablet"));
+  }
+}
+
+export async function getTablet(): Promise<TabletState> {
+  const res = await apiFetch(`${API}/tablet`, { cache: "no-store", credentials: "same-origin" });
+  return readJson(res);
+}
+
+export async function saveMyPin(pin: string): Promise<PinSaved> {
+  const res = await apiFetch(`${API}/me/pin`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin }),
+  });
+  const saved = await readJson<PinSaved>(res);
+  notifyTabletChanged();
+  return saved;
+}
+
+export async function clearMemberPin(userId: string): Promise<PinSaved> {
+  const res = await apiFetch(`${API}/team/members/${userId}/pin`, { method: "DELETE", credentials: "same-origin" });
+  const saved = await readJson<PinSaved>(res);
+  notifyTabletChanged();
+  return saved;
+}
+
+export async function enableTablet(): Promise<TabletState> {
+  const res = await apiFetch(`${API}/tablet/enable`, { method: "POST", credentials: "same-origin" });
+  const state = await readJson<TabletState>(res);
+  notifyTabletChanged();
+  return state;
+}
+
+export async function disableTablet(pin: string): Promise<TabletState> {
+  const res = await apiFetch(`${API}/tablet/disable`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin }),
+  });
+  const state = await readJson<TabletState>(res);
+  notifyTabletChanged();
+  return state;
+}
+
+export async function unlockTablet(userId: string, pin: string): Promise<TabletState> {
+  const res = await apiFetch(`${API}/tablet/unlock`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, pin }),
+  });
+  const state = await readJson<TabletState>(res);
+  notifyTabletChanged();
+  return state;
+}
+
+export async function lockTablet(): Promise<TabletState> {
+  const res = await apiFetch(`${API}/tablet/lock`, { method: "POST", credentials: "same-origin" });
+  const state = await readJson<TabletState>(res);
+  notifyTabletChanged();
+  return state;
+}
+
+export async function touchTablet(): Promise<TabletState> {
+  const res = await apiFetch(`${API}/tablet/touch`, { method: "POST", credentials: "same-origin" });
+  return readJson(res);
 }
 
 async function errorMessage(res: Response): Promise<string> {

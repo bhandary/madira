@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { AccountMenu, useAccount } from "@/components/AccountMenu";
-import { getDemoPersonas, getStatus, getTonight } from "@/lib/api";
+import { TabletChrome } from "@/components/TabletMode";
+import { getDemoPersonas, getStatus, getTablet, getTonight } from "@/lib/api";
 
 const SIDEBAR = [
   { href: "/", label: "Tonight" },
@@ -210,8 +211,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (bare) return;
     let cancelled = false;
-    getDemoPersonas()
-      .then(async (payload) => {
+    getTablet()
+      .then(async (tablet) => {
+        if (cancelled) return;
+        if (tablet.actor) {
+          setRole(tablet.actor.role);
+          return;
+        }
+        const payload = await getDemoPersonas();
         if (cancelled) return;
         if (payload) {
           const active = payload.personas.find((persona) => persona.slug === payload.active);
@@ -281,6 +288,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <ModeBanner status={status} />
+        <TabletChrome pathname={pathname} onRole={setRole} />
         <OfflineBanner />
         <header className="flex items-center border-b border-line bg-panel px-4 py-3 md:hidden">
           <Brand />

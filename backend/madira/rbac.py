@@ -97,12 +97,18 @@ MATRIX: dict[Capability, frozenset[str]] = {
 }
 
 
+# Capabilities only an Owner holds. A PIN switch never grants these.
+OWNER_ONLY = {capability for capability, roles in MATRIX.items() if roles == frozenset({OWNER})}
+
+
 def require(capability: Capability):
     def dependency(request: Request) -> RequestContext:
         ctx = getattr(request.state, "context", None)
         if not isinstance(ctx, RequestContext):
             ctx = resolve_request(request)
             request.state.context = ctx
+        if ctx.pin_session and capability in OWNER_ONLY:
+            raise HTTPException(status_code=403, detail="Sign in to do that.")
         if ctx.role not in MATRIX[capability]:
             raise HTTPException(status_code=403, detail="This role cannot do that.")
         # Sync handlers run in a worker thread. Bind again so that copy sees the venue.
