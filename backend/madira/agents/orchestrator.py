@@ -155,13 +155,16 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
 SPECIALIST_NAMES = [spec["name"] for spec in SUBAGENT_SPECS]
 
 
-def _live_model(runtime: LlmRuntime):
+def _live_model(runtime: LlmRuntime, role: str):
     from langchain.chat_models import init_chat_model
+
+    from madira.model_tiers import model_for_specialist
 
     kwargs: dict[str, Any] = {}
     if runtime.api_key:
         kwargs["api_key"] = runtime.api_key
-    return init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+    model_id = model_for_specialist(role, runtime)
+    return init_chat_model(f"{runtime.provider}:{model_id}", **kwargs)
 
 
 def _model_for(role: str, runtime: LlmRuntime | None = None):
@@ -170,7 +173,7 @@ def _model_for(role: str, runtime: LlmRuntime | None = None):
         from madira.agents.demo.model import DemoChatModel
 
         return DemoChatModel(role=role)
-    return _live_model(runtime)
+    return _live_model(runtime, role)
 
 
 def specialist_specs(runtime: LlmRuntime | None = None) -> list[dict[str, Any]]:

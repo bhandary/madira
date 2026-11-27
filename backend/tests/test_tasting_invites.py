@@ -329,7 +329,7 @@ command.upgrade(cfg, "head")
 engine = sa.create_engine(os.environ["DATABASE_URL"])
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert version == "0026_usage_metering"
+    assert version == "0027_pairing_cache"
     tables = set(sa.inspect(conn).get_table_names())
     assert "tasting_invites" in tables
     assert "tasting_invite_slots" in tables
@@ -347,7 +347,7 @@ with engine.connect() as conn:
 
 command.upgrade(cfg, "head")
 with engine.connect() as conn:
-    assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0026_usage_metering"
+    assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0027_pairing_cache"
 print("migration-ok")
 '''
     proc = subprocess.run([sys.executable, "-c", script], cwd=ROOT, env=env, capture_output=True, text=True)

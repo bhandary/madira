@@ -154,19 +154,18 @@ def reword_questions(questions: list[dict]) -> list[dict]:
         '{"questions": [{"id", "prompt", "choices", "answer"}]}. '
         "Copy id, choices, and answer unchanged. Do not add prices, costs, or margins."
     )
-    error = ""
-    for attempt in (1, 2):
-        try:
-            raw = completer(prompt if attempt == 1 else prompt + "\nThe previous JSON was rejected:\n" + error)
-        except DraftFailed:
-            raise
-        except Exception as exc:
-            raise DraftFailed(f"The quiz wording failed ({type(exc).__name__}).", 502) from exc
-        try:
-            return _accept_reword(questions, raw)
-        except ValueError as exc:
-            error = str(exc)
-    raise DraftFailed("The quiz wording changed an answer. The quiz was not saved.")
+    from madira.structured_output import run_structured
+
+    def parse(raw: str) -> list[dict]:
+        return _accept_reword(questions, raw)
+
+    return run_structured(
+        prompt,
+        completer,
+        parse,
+        label="The quiz wording",
+        failure="The quiz wording changed an answer. The quiz was not saved.",
+    )
 
 
 def live_complete(prompt: str) -> str:
@@ -176,13 +175,11 @@ def live_complete(prompt: str) -> str:
     if runtime.demo_mode:
         raise DraftFailed("The quiz wording failed because the model is not live.", 502)
     try:
-        from langchain.chat_models import init_chat_model
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        kwargs = {}
-        if runtime.api_key:
-            kwargs["api_key"] = runtime.api_key
-        model = init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+        from madira.model_tiers import bind_chat_model
+
+        model = bind_chat_model("staff-trainer")
         result = model.invoke(
             [
                 SystemMessage(

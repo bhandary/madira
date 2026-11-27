@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Callable, Literal
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from madira.domain.catalog.identity import clean
 from madira.domain.errors import DraftFailed
@@ -155,39 +155,18 @@ def _load_json(raw: str) -> dict:
     return data
 
 
-def _safe_error(exc: Exception) -> str:
-    if isinstance(exc, ValidationError):
-        parts = []
-        for err in exc.errors():
-            loc = ".".join(str(part) for part in err["loc"]) or "draft"
-            parts.append(f"{loc}: {err['msg']}")
-        return "; ".join(parts)[:500]
-    return "The response was not JSON."
-
-
-def _retry_prompt(prompt: str, error: str) -> str:
-    return (
-        prompt
-        + "\nThe previous JSON did not match the schema. "
-        + "Fix these fields and return one JSON object:\n"
-        + error
-        + "\n"
-    )
-
-
 def complete_structured(prompt: str, completer: Completer) -> NoteDraft:
-    """Validate one completion. On failure, retry once, then raise."""
+    """Validate one completion. On failure, retry with the field error."""
 
-    error = ""
-    for attempt in (1, 2):
-        try:
-            raw = completer(prompt if attempt == 1 else _retry_prompt(prompt, error))
-        except DraftFailed:
-            raise
-        except Exception as exc:
-            raise DraftFailed(f"The tasting note draft failed ({type(exc).__name__}).", 502) from exc
-        try:
-            return NoteDraft.model_validate(_load_json(raw))
-        except (json.JSONDecodeError, ValidationError) as exc:
-            error = _safe_error(exc)
-    raise DraftFailed("The tasting note did not match the schema after one retry.")
+    from madira.structured_output import run_structured
+
+    def parse(raw: str) -> NoteDraft:
+        return NoteDraft.model_validate(_load_json(raw))
+
+    return run_structured(
+        prompt,
+        completer,
+        parse,
+        label="The tasting note draft",
+        failure="The tasting note did not match the schema after {n} attempts.",
+    )

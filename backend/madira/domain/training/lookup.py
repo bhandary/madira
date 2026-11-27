@@ -201,13 +201,11 @@ def live_complete(prompt: str) -> str:
     if runtime.demo_mode:
         raise DraftFailed("The floor lookup failed because the model is not live.", 502)
     try:
-        from langchain.chat_models import init_chat_model
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        kwargs = {}
-        if runtime.api_key:
-            kwargs["api_key"] = runtime.api_key
-        model = init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+        from madira.model_tiers import bind_chat_model
+
+        model = bind_chat_model("staff-trainer")
         result = model.invoke(
             [
                 SystemMessage(
@@ -274,20 +272,37 @@ def _load_json(raw: str) -> dict:
     return data
 
 
-def _filters_from_model(raw: str) -> LookupFilters:
-    data = _load_json(raw)
-    allowed = set(LookupFilters.model_fields)
-    cleaned = {key: value for key, value in data.items() if key in allowed}
-    try:
-        return LookupFilters.model_validate(cleaned)
-    except ValidationError as exc:
-        raise DraftFailed("The floor lookup failed (the filter was not valid).", 422) from exc
-
-
 def resolve_filters(query: str) -> LookupFilters:
-    if _completer_override is not None or not demo_posture():
-        return _filters_from_model(_completer()(_prompt(query)))
-    return parse_query(query)
+    if _completer_override is None and demo_posture():
+        return parse_query(query)
+    from madira.structured_output import run_structured
+
+    def parse(raw: str) -> LookupFilters:
+        try:
+            data = _load_json(raw)
+        except DraftFailed as exc:
+            raise ValueError(exc.message) from exc
+        allowed = set(LookupFilters.model_fields)
+        cleaned = {key: value for key, value in data.items() if key in allowed}
+        try:
+            return LookupFilters.model_validate(cleaned)
+        except ValidationError as exc:
+            raise ValueError("the filter was not valid") from exc
+
+    def give_up(exc: Exception, error: str, n: int) -> DraftFailed:
+        if "not valid" in error:
+            return DraftFailed("The floor lookup failed (the filter was not valid).", 422)
+        if "empty" in error:
+            return DraftFailed("The floor lookup failed (empty response).", 502)
+        return DraftFailed("The floor lookup failed (the response was not JSON).", 502)
+
+    return run_structured(
+        _prompt(query),
+        _completer(),
+        parse,
+        label="The floor lookup",
+        give_up=give_up,
+    )
 
 
 def _contains(hay: str, needle: str) -> bool:

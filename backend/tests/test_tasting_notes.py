@@ -278,7 +278,7 @@ def test_schema_retry_then_a_clear_error(client: TestClient):
     set_note_completer(still_invalid)
     failed = client.post(f"/products/{product_id}/notes/draft", data={"tech_sheet": ""})
     assert failed.status_code == 422
-    assert failed.json()["detail"] == "The tasting note did not match the schema after one retry."
+    assert failed.json()["detail"] == "The tasting note did not match the schema after 2 attempts."
     assert len(calls) == 2
     assert "ready to pour" not in failed.text.lower()
     assert "quiet finish" not in failed.text

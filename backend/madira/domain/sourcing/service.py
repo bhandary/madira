@@ -455,13 +455,11 @@ def live_complete(prompt: str, *, kind: str) -> str:
     if runtime.demo_mode:
         raise DraftFailed(f"The {kind} could not be written because the model is not live.", 502)
     try:
-        from langchain.chat_models import init_chat_model
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        kwargs = {}
-        if runtime.api_key:
-            kwargs["api_key"] = runtime.api_key
-        model = init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+        from madira.model_tiers import bind_chat_model
+
+        model = bind_chat_model("buyer")
         message = model.invoke(
             [
                 SystemMessage(content="Reply with JSON only. Do not include prices, counts, or dates."),

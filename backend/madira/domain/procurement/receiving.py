@@ -568,13 +568,11 @@ def _call_vision(*, filename: str, content_type: str | None, body: bytes, po_lin
             {"type": "text", "text": prompt},
             {"type": "image_url", "image_url": {"url": f"data:{media};base64,{encoded}"}},
         ]
-    from langchain.chat_models import init_chat_model
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    kwargs = {}
-    if runtime.api_key:
-        kwargs["api_key"] = runtime.api_key
-    model = init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+    from madira.model_tiers import bind_chat_model
+
+    model = bind_chat_model("inventory-purchasing")
     result = model.invoke(
         [
             SystemMessage(content="You read invoices. Reply with one JSON object and no other text."),
