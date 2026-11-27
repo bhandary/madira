@@ -56,7 +56,7 @@ async function prepareStaffPin(page: Page) {
 
 test("set a PIN, share the tablet, switch user, and auto-lock", async ({ page }) => {
   await prepareStaffPin(page);
-  await page.getByTestId("tablet-person").filter({ hasText: "Ana" }).click();
+  await page.locator('[data-testid="tablet-person"][data-name="Ana"]').click();
   await enterPin(page, "2468");
   await page.clock.install();
   await submitPin(page);
@@ -69,7 +69,7 @@ test("set a PIN, share the tablet, switch user, and auto-lock", async ({ page })
 
 test("a wrong PIN locks the tablet", async ({ page }) => {
   await prepareStaffPin(page);
-  await page.getByTestId("tablet-person").filter({ hasText: "Ana" }).click();
+  await page.locator('[data-testid="tablet-person"][data-name="Ana"]').click();
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await enterPin(page, "0000");
     await submitPin(page);

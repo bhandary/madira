@@ -206,6 +206,7 @@ export function TabletChrome({
                   type="button"
                   className="btn btn-segment w-full"
                   data-testid="tablet-person"
+                  data-name={person.name}
                   aria-pressed={selected === person.user_id}
                   onClick={() => {
                     setSelected(person.user_id);
