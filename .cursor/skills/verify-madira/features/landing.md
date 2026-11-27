@@ -23,7 +23,7 @@ Preconditions:
 - `/health` reports `demo_mode` true.
 - No tasting has been stored yet if the empty calendar is the assertion. A later supplier run inserts one.
 
-- **Banner.** Open `/`. Wait until `[data-testid=mode-banner]` does not contain `connecting`. The banner text is `DEMO MODE` and `deterministic fixtures, no API key`. The level-1 heading named `Ask the Head Sommelier` is visible. It is the only heading on the page.
+- **Banner.** Open `/`. Wait until `[data-testid=mode-banner]` does not contain `connecting`. The banner text is `DEMO MODE` and `deterministic fixtures, no API key`. The level-1 heading named `Ask the Head Sommelier` is visible. It is the only heading in the floor document.
 - **Nav.** Read the links in `#app-nav`. They are `Floor`, `Menu & pairings`, `List curation`, `Inventory`, `Staff training`, `Supplier tastings`, `Settings`. The sidebar `[data-testid=sign-in-link]` reads `Sign in`.
 - **Cards.** The `a.bento` links are `Menu & pairings` (`/menu`), `Cellar` (`/inventory`), `List` (`/list`), and `Team` (`/training`), each with a one-line description and `Open`. Choosing `Cellar` lands on `/inventory`.
 - **Send.** In `[data-testid=copilot-chat]`, fill the placeholder `Type a message...` with `Show the supplier tasting calendar.` and choose the button `Send message`. The chat text contains `Head Sommelier` and `nothing was emailed or purchased`. `[data-testid=copilot-chat-error]` is absent. `[data-testid=tasting-calendar]` is visible and reads `No tastings held yet.`
@@ -34,6 +34,7 @@ Preconditions:
 ## Gotchas
 
 - The banner reads `DEMO MODE connecting` until `GET /status` returns. Do not assert the model label during that gap.
+- `next dev` adds a second heading, `Upgrade Next.js to a safe version.`, in the Next.js overlay shadow root (`#nextjs__container_errors_desc`). Playwright counts it. The floor still has one heading.
 - Do not wait for an empty-chat heading such as `How can I help you today?`. The page has none.
 - Because the conversation is kept, a second drive in the same browser context starts with the earlier messages. Use a new context for the empty state.
 - The chat calendar lists stored tastings. After a supplier run it is no longer empty.

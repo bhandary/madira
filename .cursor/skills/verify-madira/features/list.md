@@ -23,7 +23,7 @@ Preconditions:
 
 - **Set the numbers.** Open `/list`. The heading is `List curation`. Fill `[data-testid=list-budget]` with `12000` and `[data-testid=list-margin]` with `3.2`. `[data-testid=list-workbench-prompt]` reads `Curate a wine, beer, spirit, and sake list to complement the Maison Madira autumn menu. Budget $12000. Target pour/bottle margin 3.2x. Show coverage by category/region/style/price, gaps, and cost/margin math.`
 - **Run.** Choose `[data-testid=list-workbench-submit]`. Wait for `[data-testid=delegate-list-curator]` to show `COMPLETE`.
-- **Summary.** `[data-testid=list-summary]` reads budget `$12,000`, spent `$5,198`, remaining `$6,802`, target multiple `3.2x`, then `wine 8 · $3,432`, `beer 4 · $478`, `spirit 4 · $232`, `sake 3 · $1,056`, and `Gaps: none — categories covered`.
+- **Summary.** `[data-testid=list-summary]` shows budget `$12,000`, spent `$5,198`, remaining `$6,802`, target multiple `3.2x`, then the chips `wine 8 · $3,432`, `beer 4 · $478`, `spirit 4 · $232`, and `sake 3 · $1,056`, then `Gaps: none — categories covered`. Kickers and badges are styled uppercase, so the visible text is `BUDGET $12,000` and `WINE 8 · $3,432` (and the same for beer, spirit, and sake).
 - **Table.** `[data-testid=beverage-list-table]` has columns Category, Name, Region / style, Cost, Pour, Bottle, Margin. The first row is wine `Muscadet Sèvre-et-Maine Sur Lie`.
 - **Read back.** `curl -sS http://127.0.0.1:8123/lists` returns a list named `Maison Madira autumn list` with `budget` 1200000, `currency` `USD`, `target_margin` 3.2, and `item_count` 19. Money is in cents: the first item, `Muscadet Sèvre-et-Maine Sur Lie`, has `cost` 1800, `pour_price` 1600, and `bottle_price` 6200.
 - **Proof.** Screenshot the summary and the table after the curator row is `COMPLETE`.
@@ -32,5 +32,5 @@ Preconditions:
 
 ## Gotchas
 
-- The currency text uses a thousands separator (`$12,000`, `$5,198`). Assert the visible summary, not the raw prompt numbers alone. `GET /lists` stores money in cents, so `$12,000` is `budget` 1200000.
+- The currency text uses a thousands separator (`$12,000`, `$5,198`). Assert the visible summary, not the raw prompt numbers alone. `GET /lists` stores money in cents, so `$12,000` is `budget` 1200000. A text read that follows CSS (`innerText`) uppercases the kicker and the category chip; the DOM text of the chip stays `wine 8`.
 - Each run inserts another beverage list. Read the newest row, or the row whose budget and margin match the prompt.

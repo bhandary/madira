@@ -74,7 +74,7 @@ Wait until a workbench `Run specialists` button (`[data-testid=<page>-workbench-
 
 The floor banner is `DEMO MODE` plus `connecting` until `GET /status` returns. Wait until `connecting` is gone.
 
-On `/`, the only heading is the level-1 `Ask the Head Sommelier`.
+On `/`, the floor's only heading is the level-1 `Ask the Head Sommelier`. `next dev` also mounts `Upgrade Next.js to a safe version.` as a heading inside the Next.js overlay shadow root (`#nextjs__container_errors_desc`). Playwright locators pierce that root, so a count of every heading on the page is 2. That advisory is not part of the floor.
 
 Conversations persist. Each page keeps its thread id in `localStorage` (`madira-thread:floor`, `madira-thread:<page>-workbench`), and the backend stores the thread in the sqlite checkpoint tables. Reloading a page in the same browser context restores the earlier messages, surfaces, and delegation rows. For a clean page, open it in a new browser context.
 
