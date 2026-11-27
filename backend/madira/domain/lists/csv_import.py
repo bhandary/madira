@@ -557,6 +557,9 @@ def _ensure(
         sku.variant = variant
         session.add(sku)
         session.flush()
+    from madira.domain.embeddings.schedule import mark
+
+    mark(session, venue.id, venue.organization_id, "sku", sku.id)
     return product, variant, sku
 
 

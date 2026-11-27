@@ -7,11 +7,20 @@ from fastapi import APIRouter, HTTPException
 
 from madira.agents.presenters.catalog import present_product, present_products, present_sku, present_skus
 from madira.domain.catalog.service import get_product, get_sku, list_products, list_skus
-from madira.domain.errors import NotFound
+from madira.domain.embeddings.service import search_catalog
+from madira.domain.errors import DraftFailed, NotFound
 from madira.rbac import Capability, require
 from madira.tenancy import active_venue_id
 
 router = APIRouter()
+
+
+@router.get("/catalog/search", dependencies=[require(Capability.FLOOR)])
+def catalog_search(q: str = "") -> dict[str, Any]:
+    try:
+        return search_catalog(active_venue_id(), q)
+    except DraftFailed as exc:
+        raise HTTPException(exc.status, exc.message) from exc
 
 
 @router.get("/products", dependencies=[require(Capability.FLOOR)])

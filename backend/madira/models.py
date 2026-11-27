@@ -307,6 +307,35 @@ class ServiceCard(Base):
     product: Mapped[Product] = relationship()
 
 
+class CatalogEmbedding(Base):
+    """One embedding for a venue SKU or an approved tasting note.
+
+    ``values`` is the vector as JSON so SQLite and a Postgres without pgvector
+    can rank in Python. A Postgres that has the vector extension also stores a
+    ``vector`` column, added by migration 0030 and not mapped here. ``model_name``
+    and ``dimension`` keep a model change from being mixed with older vectors.
+    """
+
+    __tablename__ = "catalog_embeddings"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "subject_type", "subject_id", name="uq_catalog_embeddings_subject"),
+        CheckConstraint("subject_type IN ('sku', 'note')", name="ck_catalog_embeddings_subject"),
+        CheckConstraint("dimension >= 1", name="ck_catalog_embeddings_dimension"),
+        Index("ix_catalog_embeddings_venue_model", "venue_id", "model_name", "dimension"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    subject_type: Mapped[str] = mapped_column(String(16))
+    subject_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
+    model_name: Mapped[str] = mapped_column(String(120))
+    dimension: Mapped[int] = mapped_column(Integer)
+    values: Mapped[list] = mapped_column(JSON)
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[datetime] = mapped_column(AwareDateTime, server_default=func.now())
+
+
 class Menu(Base):
     __tablename__ = "menus"
 

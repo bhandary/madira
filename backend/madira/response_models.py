@@ -222,6 +222,7 @@ class PairingSlot(APIModel):
     bottle_price: int
     currency: str
     gap: str
+    similarity: str
 
 
 class PairingOption(APIModel):
@@ -552,6 +553,25 @@ class CatalogProduct(APIModel):
 
 class ProductList(APIModel):
     products: list[CatalogProduct]
+
+
+class CatalogSearchHit(APIModel):
+    sku_id: str
+    product_id: str
+    name: str
+    producer: str
+    region: str
+    style: str
+    category: str
+    vintage: str
+    similarity: float | None
+    why: str
+
+
+class CatalogSearchResult(APIModel):
+    query: str
+    mode: str
+    results: list[CatalogSearchHit]
 
 
 class CatalogSku(APIModel):
@@ -2450,6 +2470,7 @@ def _routes() -> dict[tuple[str, str], type[APIModel]]:
         ("post", "/lists/versions/{version_id}/reject"): version,
         ("post", "/lists/versions/{version_id}/revoke-public"): version,
         ("get", "/public/lists/{token}"): PublicList,
+        ("get", "/catalog/search"): CatalogSearchResult,
         ("get", "/products"): ProductList,
         ("get", "/products/{product_id}"): CatalogProduct,
         ("get", "/skus"): SkuList,

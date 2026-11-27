@@ -14,6 +14,8 @@ PRICES: dict[str, tuple[int, int]] = {
     "claude-haiku-4-5-20251001": (1_000_000, 5_000_000),
     "gemini-3.5-flash": (150_000, 600_000),
     "madira-demo-fixtures": (0, 0),
+    "text-embedding-3-small": (20_000, 0),
+    "gemini-embedding-001": (150_000, 0),
 }
 DEFAULT_PRICE = (1_000_000, 4_000_000)
 

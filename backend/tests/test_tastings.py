@@ -274,7 +274,7 @@ with engine.begin() as conn:
 command.upgrade(cfg, "head")
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert version == "0029_tablet_pin"
+    assert version == "0030_catalog_embeddings"
     tables = set(sa.inspect(conn).get_table_names())
     assert "tastings" not in tables
     assert "tasting_sessions" in tables

@@ -23,6 +23,7 @@ import type {
   BriefingReportDay,
   BriefingReportUser,
   CatalogChoice,
+  CatalogSearchResult,
   CellarBin,
   CellarBoard,
   CellarLocation,
@@ -194,6 +195,7 @@ export type {
   BriefingReportDay,
   BriefingReportUser,
   CatalogChoice,
+  CatalogSearchResult,
   CellarBin,
   CellarBoard,
   CellarLocation,
@@ -457,6 +459,12 @@ export async function swapPairing(menuId: string, pairingId: string, skuId: stri
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sku_id: skuId }),
   });
+  return readJson(res);
+}
+
+export async function searchCatalog(query: string): Promise<CatalogSearchResult> {
+  const params = new URLSearchParams({ q: query });
+  const res = await apiFetch(`${API}/catalog/search?${params}`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
