@@ -12,7 +12,7 @@ Sign in explains that the floor works without an account. With Google unset, the
 ## How to get to it (user POV)
 
 - Choose `Sign in` in the sidebar (`[data-testid=sign-in-link]`), or open `http://127.0.0.1:3000/login`.
-- The sidebar link is not one of the ten section links. It sits in `[data-testid=account-menu]`.
+- Sign in is not a sidebar section. It sits in `[data-testid=account-menu]`, including inside the phone `More` sheet.
 - On a narrow viewport, choose `More`. The account block is inside `[data-testid=mobile-menu]`.
 
 ## Driving it with Playwright and curl

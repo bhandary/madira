@@ -15,7 +15,7 @@ Inventory shows the seeded cellar, lets the floor change a SKU's on-hand count i
 ## How to get to it (user POV)
 
 - Choose `Inventory` in the sidebar, or open `http://127.0.0.1:3000/inventory`.
-- On a narrow viewport, choose the `Cellar` tab (`/inventory`). Opening `More` on this page shows `Purchasing`, `Phone count`, `Supplier tastings`, `Records`, and `Settings`.
+- On a narrow viewport, choose the `Cellar` tab (`/inventory`). Opening `More` on this page shows `Suppliers`, `Tastings`, `Sourcing`, `POS`, `Sensors`, `Audit`, `Usage`, `Records`, and `Settings`. `Purchasing` and `Phone count` are not in that sheet. Phone count is `[data-testid=open-count]` on this page.
 - `Count on a phone` (`[data-testid=open-count]`) opens [Phone count](./counts.md).
 
 ## Driving it with Playwright and curl
@@ -26,6 +26,7 @@ Preconditions:
 - Note `W-MUS-01` before changing it. On a fresh seed, `GET /inventory` returns 15 items, 9 with `low` true, and `W-MUS-01` (`Muscadet Domaine de l'Ecu`) at `on_hand` 4, `par` 12, `reorder_qty` 8, supplier `Kermit Lynch Wine Merchant`, `unit_cost` 1800 (cents).
 - Do the ledger steps after the restore, or put the on-hand count back before a later recipe that expects 4.
 
+- **Search.** On `/inventory`, fill `[data-testid=catalog-search]` with `Barolo` and choose `[data-testid=catalog-search-submit]`. `[data-testid=catalog-search-mode]` is `Ranked by taste similarity.` when the local embeddings are ready, and `Matched the catalog words.` when they are not. A `[data-testid=catalog-hit]` has `data-name` `Barolo G.D. Vajra 2019`. Source: `frontend/src/components/CatalogSearch.tsx`.
 - **Loaded line.** Open `/inventory`. The heading is `Inventory & purchasing`. Wait until the status line is `9 SKUs under par in the seeded cellar.` The line `Loading cellar…` is the earlier state. `[data-testid=cellar-board]` is visible. `[data-testid=storage-zones]` lists `Main Cellar` and `Bar & Cold Box`, each `[data-testid=zone-status]` `OK`.
 - **Adjust.** Fill `[data-testid=inv-sku]` with `W-MUS-01` and `[data-testid=inv-qty]` with `1`. Choose `[data-testid=inv-adjust]`. Wait for `PATCH /madira-api/inventory/W-MUS-01`. `GET http://127.0.0.1:8123/inventory` then shows that SKU at `on_hand` 1, `low` true, `reorder_qty` 11. `[data-testid=inventory-workbench-prompt]` reads `Set on-hand for W-MUS-01 to 1, then draft purchase orders for every SKU below par. Do not transmit orders.`
 - **Run.** Choose `[data-testid=inventory-workbench-submit]` once it is enabled. Wait for `[data-testid=delegate-inventory-purchasing]` to show `COMPLETE`.
