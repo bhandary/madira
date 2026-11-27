@@ -138,6 +138,52 @@ def _enforce(session: Session, venue: Venue, now: datetime) -> None:
             raise UsageError("Too many requests in the last minute. Wait a moment and try again.")
 
 
+def charge_embedding(venue_id: uuid.UUID, *, model: str, tokens_in: int, latency_ms: int) -> None:
+    """Count one live embedding call against the monthly cap and the request limit.
+
+    The estimate is written before the provider request so a full cap or a full
+    minute stops the call. Demo embeddings do not come through here.
+    """
+
+    moment = datetime.now(timezone.utc)
+    incoming = max(int(tokens_in), 0)
+    session = SessionLocal()
+    try:
+        venue = _venue(session, venue_id)
+        _enforce(session, venue, moment)
+        run = AgentRun(
+            venue_id=venue.id,
+            organization_id=venue.organization_id,
+            message="catalog embedding",
+            reply="",
+            delegated=["catalog-embed"],
+            created_at=moment,
+        )
+        session.add(run)
+        session.flush()
+        micro, label = estimate_cost(model, incoming, 0, demo=False)
+        session.add(
+            AgentUsage(
+                organization_id=venue.organization_id,
+                venue_id=venue.id,
+                agent_run_id=run.id,
+                subagent="catalog-embed",
+                model=(model or "")[:120],
+                tokens_in=incoming,
+                tokens_out=0,
+                cost_micro_usd=micro,
+                cost_label=label,
+                latency_ms=max(int(latency_ms), 0),
+            )
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def begin_run(venue_id: uuid.UUID, message: str, *, now: datetime | None = None) -> uuid.UUID:
     """Refuse a run that is at the cap or over the request limit, then record it."""
 

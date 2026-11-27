@@ -394,6 +394,25 @@ export type CatalogProduct = {
   variants: CatalogVariant[];
 };
 
+export type CatalogSearchHit = {
+  sku_id: string;
+  product_id: string;
+  name: string;
+  producer: string;
+  region: string;
+  style: string;
+  category: string;
+  vintage: string;
+  similarity: number | null;
+  why: string;
+};
+
+export type CatalogSearchResult = {
+  query: string;
+  mode: string;
+  results: CatalogSearchHit[];
+};
+
 export type CatalogSku = {
   id: string;
   product_id: string;
@@ -1475,6 +1494,7 @@ export type PairingSlot = {
   bottle_price: number;
   currency: string;
   gap: string;
+  similarity: string;
 };
 
 export type PairingSwap = {
@@ -2909,6 +2929,7 @@ export type AuthDemoPersonasAuthDemoPersonasGetResponse = DemoPersonaList;
 export type AuthGoogleAuthGoogleGetResponse = unknown;
 export type AuthLogoutAuthLogoutPostResponse = OkResponse;
 export type AuthMeAuthMeGetResponse = AccountEnvelope;
+export type CatalogSearchCatalogSearchGetResponse = CatalogSearchResult;
 export type CellarClearEightySixCellarSkusSkuId86DeleteResponse = EightySixResult;
 export type CellarEightySixCellarSkusSkuId86PostResponse = EightySixResult;
 export type AuditEventsComplianceAuditEventsGetResponse = AuditEventList;

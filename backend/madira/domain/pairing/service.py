@@ -161,6 +161,22 @@ def dishes_for_profile(session: Session, venue_id: uuid.UUID, profile) -> list[d
     return found
 
 
+def _similarity(pairing: Pairing) -> str:
+    if pairing.sku_id is None:
+        return ""
+    from sqlalchemy.orm import object_session
+
+    from madira.domain.embeddings.service import similarity_line
+
+    session = object_session(pairing)
+    if session is None:
+        return ""
+    dish = session.get(Dish, pairing.dish_id)
+    if dish is None:
+        return ""
+    return similarity_line(session, dish, pairing.sku_id)
+
+
 def pairing_view(pairing: Pairing) -> dict:
     if pairing.sku is None:
         category = name = producer = region = style = ""
@@ -191,6 +207,7 @@ def pairing_view(pairing: Pairing) -> dict:
         "bottle_price": pairing.bottle_price,
         "currency": pairing.currency,
         "gap": pairing.gap or "",
+        "similarity": _similarity(pairing),
     }
 
 

@@ -25,7 +25,7 @@ from madira.domain.catalog.schemas import (
 from madira.domain.catalog.service import _organization_id
 from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.session import session_scope
-from madira.models import Product, ProductVariant, ServiceCard, Sku, TastingNote
+from madira.models import Product, ProductVariant, ServiceCard, Sku, TastingNote, Venue
 from madira.storage import get_storage, normalize_content_type
 from madira.tenancy import OWNER, SOMMELIER, current_request, demo_posture
 
@@ -428,6 +428,7 @@ def edit_note(venue_id: uuid.UUID, product_id: uuid.UUID, note_id: uuid.UUID, ed
                 setattr(note, field, getattr(draft, field))
             note.aroma_families = list(draft.aroma_families)
             _reopen(note)
+            _mark_note(session, venue_id, product_id, note.id)
         payload = _note_dict(note)
         session.commit()
         return payload
@@ -460,10 +461,27 @@ def _approve(row) -> None:
     row.approved_at = utcnow()
 
 
+def _mark_note(session: Session, venue_id: uuid.UUID, product_id: uuid.UUID, note_id: uuid.UUID) -> None:
+    from madira.domain.embeddings.schedule import mark
+
+    venue = session.get(Venue, venue_id)
+    if venue is None:
+        return
+    mark(session, venue_id, venue.organization_id, "note", note_id)
+    sku_ids = session.scalars(
+        select(Sku.id)
+        .join(ProductVariant, Sku.product_variant_id == ProductVariant.id)
+        .where(Sku.venue_id == venue_id, ProductVariant.product_id == product_id)
+    ).all()
+    for sku_id in sku_ids:
+        mark(session, venue_id, venue.organization_id, "sku", sku_id)
+
+
 def approve_note(venue_id: uuid.UUID, product_id: uuid.UUID, note_id: uuid.UUID) -> dict:
     with session_scope() as session:
         note = _one_note(session, venue_id, product_id, note_id)
         _approve(note)
+        _mark_note(session, venue_id, product_id, note.id)
         payload = _note_dict(note)
         session.commit()
         return payload

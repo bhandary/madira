@@ -18,6 +18,7 @@ const slot = z.object({
   bottle_price: z.number(),
   currency: z.string(),
   gap: z.string(),
+  similarity: z.string(),
 });
 
 const option = z.object({

@@ -22,6 +22,8 @@ KIND_CAPABILITY = {
     "briefing.build": Capability.RECORDS,
     "reminders.refresh": Capability.RECORDS,
     "pos.sync": Capability.POS_MANAGE,
+    "catalog.embed": Capability.FLOOR,
+    "catalog.embed_backfill": Capability.FLOOR,
 }
 
 
@@ -131,6 +133,20 @@ def handle_reminders(_args: dict) -> dict:
     return {"rules": len(body.get("rules") or []), "reminders": len(body.get("reminders") or [])}
 
 
+def handle_embed(args: dict) -> dict:
+    from madira.domain.embeddings.service import embed_subject
+    from madira.tenancy import active_venue_id
+
+    return embed_subject(active_venue_id(), str(args.get("subject_type") or ""), uuid.UUID(str(args["subject_id"])))
+
+
+def handle_embed_backfill(_args: dict) -> dict:
+    from madira.domain.embeddings.service import backfill_venue
+    from madira.tenancy import active_venue_id
+
+    return backfill_venue(active_venue_id())
+
+
 def handle_pos(_args: dict) -> dict:
     from madira.domain.pos.service import sync
     from madira.tenancy import active_venue_id
@@ -153,4 +169,6 @@ HANDLERS: dict[str, Handler] = {
     "briefing.build": handle_briefing,
     "reminders.refresh": handle_reminders,
     "pos.sync": handle_pos,
+    "catalog.embed": handle_embed,
+    "catalog.embed_backfill": handle_embed_backfill,
 }

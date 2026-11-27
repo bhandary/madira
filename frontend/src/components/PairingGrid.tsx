@@ -125,6 +125,11 @@ function SlotCard({
           {[pairing.producer, pairing.region, pairing.style].filter(Boolean).join(" · ")}
         </div>
       )}
+      {pairing.similarity ? (
+        <p className="mt-2 break-words text-sm leading-5" data-testid="pairing-similarity">
+          {pairing.similarity}
+        </p>
+      ) : null}
       {pairing.rationale && (
         <p className="mt-2 break-words text-sm leading-5" data-testid="pairing-rationale">
           {pairing.rationale}

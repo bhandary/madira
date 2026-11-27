@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AgentWorkbench } from "@/components/AgentWorkbench";
+import { CatalogSearch } from "@/components/CatalogSearch";
 import { CellarBoard } from "@/components/CellarBoard";
 import { ZoneConditionCard } from "@/components/ZoneConditionCard";
 import { getInventory, getSensors, listStorageZones, patchStock, type SensorRecord, type StorageZone } from "@/lib/api";
@@ -72,6 +73,7 @@ export default function InventoryPage() {
       blurb="Adjust stock on the floor, then let Inventory & Purchasing draft supplier POs. Seeded cellar data ships with the demo."
       prompt={prompt}
     >
+      <CatalogSearch />
       <p className="mt-4">
         <Link href="/inventory/count" className="btn btn-primary" data-testid="open-count">
           Count on a phone
