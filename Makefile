@@ -7,7 +7,7 @@ export PYTHONPATH := backend
 
 ALEMBIC := $(VENV)/bin/alembic
 
-.PHONY: install backend frontend dev test eval eval-live e2e doctor verify clean migrate
+.PHONY: install backend frontend dev test eval eval-live e2e doctor verify clean migrate types
 
 install:
 	$(PYTHON) -m venv $(VENV)
@@ -40,6 +40,9 @@ eval-live:
 
 migrate:
 	PYTHONPATH=backend $(ALEMBIC) -c backend/alembic.ini upgrade head
+
+types:
+	PYTHONPATH=backend $(PY) -m madira.openapi_ts --out frontend/src/lib/api-types.gen.ts
 
 e2e:
 	cd frontend && npx playwright test

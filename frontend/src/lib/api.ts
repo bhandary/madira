@@ -1,8 +1,343 @@
-import type { AuditChain, AuditEventRow } from "@/a2ui/auditTableSchema";
-import type { SampleCardData } from "@/a2ui/sampleCardSchema";
 import { CSRF_HEADER, ensureCsrfToken } from "@/lib/csrf";
 import { readCachedJson } from "@/lib/offline";
-import type { LookupPack } from "@/lib/lookupOffline";
+
+import type {
+  Account,
+  AffectedSku,
+  AllocationEnvelope,
+  AllocationRecord,
+  AuditChain,
+  AuditEventList,
+  AuditEventRow,
+  AuditPackGap,
+  AuditPackPreview,
+  AuditPackPurchase,
+  AuditorQuery,
+  AuthConfig,
+  BeverageListDetail,
+  BinLabel,
+  BinList,
+  BriefingCard,
+  BriefingItem,
+  BriefingReport,
+  BriefingReportDay,
+  BriefingReportUser,
+  CatalogChoice,
+  CellarBin,
+  CellarBoard,
+  CellarLocation,
+  CertificateList,
+  CertificateRecord,
+  ContactEnvelope,
+  CountReport,
+  CountSessionList,
+  CountSessionRecord,
+  CoverageCell,
+  DeletedFlag,
+  DeletedId,
+  DemoPersona,
+  DemoPersonaList,
+  DiscrepancySummary,
+  DocumentEnvelope,
+  DocumentList,
+  DueReview,
+  DueReviewList,
+  HealthFlag,
+  InviteDesk,
+  InviteGap,
+  InviteSlot,
+  InvoiceLine,
+  InvoiceRecord,
+  ListCandidate,
+  ListDiff,
+  ListDiffRow,
+  ListImportItem,
+  ListImportResult,
+  ListImportRow,
+  ListIndex,
+  ListItemRecord,
+  ListSectionRecord,
+  ListVersionIndex,
+  ListVersionRecord,
+  LlmSettings,
+  LocationList,
+  LookupHit,
+  LookupPack,
+  LookupResult,
+  MenuDish,
+  MenuIngestResult,
+  MenuList,
+  MenuReview,
+  MovementList,
+  OfferRecord,
+  PairingDish,
+  PairingGridResult,
+  PairingOption,
+  PairingSlot,
+  ParProposalEnvelope,
+  ParProposalList,
+  ParProposalRecord,
+  PosCatalog,
+  PosCatalogItem,
+  PosGapItem,
+  PosGapList,
+  PosMapping,
+  PosMappingEnvelope,
+  PosMappingList,
+  PosRun,
+  PosRunList,
+  PosStatus,
+  PosSyncResult,
+  PriceHistory,
+  PricePointRecord,
+  PriceSheetApplied,
+  PriceSheetEnvelope,
+  PriceSheetLine,
+  PriceSheetRecord,
+  PricingRule,
+  ProductList,
+  ProfileEnvelope,
+  PublicList,
+  PublicListItem,
+  PurchaseApproval,
+  PurchaseLine,
+  PurchaseOrderList,
+  PurchaseOrderRow,
+  ReceiptLineRecord,
+  ReceiptRecord,
+  ReminderDecision,
+  ReminderRecord,
+  RemovedMember,
+  RepFollowup,
+  RepFollowupDraft,
+  RepFollowupEnvelope,
+  RetentionPolicy,
+  RoleplayCriterion,
+  RoleplayResponse,
+  RoleplaySession,
+  RoleplayTurn,
+  SampleEnvelope,
+  SensorImport,
+  SensorImportRow,
+  SensorList,
+  SensorRecord,
+  ServiceCardList,
+  ServiceCardRecord,
+  ServiceStandard,
+  SourcingBrief,
+  SourcingBriefEnvelope,
+  SourcingBriefItem,
+  SourcingBriefList,
+  StandardList,
+  StockItem,
+  StockLocation,
+  StockMovementRow,
+  StorageZone,
+  StorageZoneList,
+  SupplierContactRow,
+  SupplierDeskPayload,
+  SupplierEnvelope,
+  SupplierList,
+  SupplierProfile,
+  SupplierRow,
+  TastingCreateResult,
+  TastingDraft,
+  TastingHistory,
+  TastingHistoryRow,
+  TastingInvite,
+  TastingNote,
+  TastingNoteList,
+  TastingSessionDetail,
+  TastingSessionList,
+  TastingSessionRow,
+  TeamInvite,
+  TeamMember,
+  TeamPerson,
+  TeamProgress,
+  TeamRoster,
+  TonightBoard,
+  TonightBriefing,
+  TonightEnvelope,
+  TrainingLesson,
+  TrainingLessons,
+  TrainingQuiz,
+  UsageReport,
+  VaultDocument,
+  WeakTopic,
+  ZoneExcursion,
+  ZoneExcursionEnvelope,
+  ZoneReading,
+  ZoneReadingResult,
+} from "./api-types.gen";
+
+export type {
+  Account,
+  AffectedSku,
+  AllocationEnvelope,
+  AllocationRecord,
+  AuditChain,
+  AuditEventList,
+  AuditEventRow,
+  AuditPackGap,
+  AuditPackPreview,
+  AuditPackPurchase,
+  AuditorQuery,
+  AuthConfig,
+  BeverageListDetail,
+  BinLabel,
+  BinList,
+  BriefingCard,
+  BriefingItem,
+  BriefingReport,
+  BriefingReportDay,
+  BriefingReportUser,
+  CatalogChoice,
+  CellarBin,
+  CellarBoard,
+  CellarLocation,
+  CertificateList,
+  CertificateRecord,
+  ContactEnvelope,
+  CountReport,
+  CountSessionList,
+  CountSessionRecord,
+  CoverageCell,
+  DeletedFlag,
+  DeletedId,
+  DemoPersona,
+  DemoPersonaList,
+  DiscrepancySummary,
+  DocumentEnvelope,
+  DocumentList,
+  DueReview,
+  DueReviewList,
+  HealthFlag,
+  InviteDesk,
+  InviteGap,
+  InviteSlot,
+  InvoiceLine,
+  InvoiceRecord,
+  ListCandidate,
+  ListDiff,
+  ListDiffRow,
+  ListImportItem,
+  ListImportResult,
+  ListImportRow,
+  ListIndex,
+  ListItemRecord,
+  ListSectionRecord,
+  ListVersionIndex,
+  ListVersionRecord,
+  LlmSettings,
+  LocationList,
+  LookupHit,
+  LookupPack,
+  LookupResult,
+  MenuDish,
+  MenuIngestResult,
+  MenuList,
+  MenuReview,
+  MovementList,
+  OfferRecord,
+  PairingDish,
+  PairingGridResult,
+  PairingOption,
+  PairingSlot,
+  ParProposalEnvelope,
+  ParProposalList,
+  ParProposalRecord,
+  PosCatalog,
+  PosCatalogItem,
+  PosGapItem,
+  PosGapList,
+  PosMapping,
+  PosMappingEnvelope,
+  PosMappingList,
+  PosRun,
+  PosRunList,
+  PosStatus,
+  PosSyncResult,
+  PriceHistory,
+  PricePointRecord,
+  PriceSheetApplied,
+  PriceSheetEnvelope,
+  PriceSheetLine,
+  PriceSheetRecord,
+  PricingRule,
+  ProductList,
+  ProfileEnvelope,
+  PublicList,
+  PublicListItem,
+  PurchaseApproval,
+  PurchaseLine,
+  PurchaseOrderList,
+  PurchaseOrderRow,
+  ReceiptLineRecord,
+  ReceiptRecord,
+  ReminderDecision,
+  ReminderRecord,
+  RemovedMember,
+  RepFollowup,
+  RepFollowupDraft,
+  RepFollowupEnvelope,
+  RetentionPolicy,
+  RoleplayCriterion,
+  RoleplayResponse,
+  RoleplaySession,
+  RoleplayTurn,
+  SampleEnvelope,
+  SensorImport,
+  SensorImportRow,
+  SensorList,
+  SensorRecord,
+  ServiceCardList,
+  ServiceCardRecord,
+  ServiceStandard,
+  SourcingBrief,
+  SourcingBriefEnvelope,
+  SourcingBriefItem,
+  SourcingBriefList,
+  StandardList,
+  StockItem,
+  StockLocation,
+  StockMovementRow,
+  StorageZone,
+  StorageZoneList,
+  SupplierContactRow,
+  SupplierDeskPayload,
+  SupplierEnvelope,
+  SupplierList,
+  SupplierProfile,
+  SupplierRow,
+  TastingCreateResult,
+  TastingDraft,
+  TastingHistory,
+  TastingHistoryRow,
+  TastingInvite,
+  TastingNote,
+  TastingNoteList,
+  TastingSessionDetail,
+  TastingSessionList,
+  TastingSessionRow,
+  TeamInvite,
+  TeamMember,
+  TeamPerson,
+  TeamProgress,
+  TeamRoster,
+  TonightBoard,
+  TonightBriefing,
+  TonightEnvelope,
+  TrainingLesson,
+  TrainingLessons,
+  TrainingQuiz,
+  UsageReport,
+  VaultDocument,
+  WeakTopic,
+  ZoneExcursion,
+  ZoneExcursionEnvelope,
+  ZoneReading,
+  ZoneReadingResult,
+};
 
 export const API = "/madira-api";
 
@@ -36,46 +371,6 @@ export async function uploadMenu(payload: { text?: string; file?: File }) {
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
-
-export type MenuDish = {
-  id: string;
-  stable_id: string;
-  name: string;
-  course: string;
-  price: number;
-  currency: string;
-  main_component: string;
-  cooking_method: string;
-  sauce: string;
-  richness: number;
-  acidity: number;
-  sweetness: number;
-  spice: number;
-  umami: number;
-  allergens: string[];
-  confidence: Record<string, number>;
-  low_confidence: string[];
-  needs_repairing: boolean;
-};
-
-export type MenuReview = {
-  menu_id: string;
-  version_id: string;
-  name: string;
-  number: number;
-  status: string;
-  cuisine: string;
-  price_tier: string;
-  dishes: MenuDish[];
-};
-
-export type MenuIngestResult = {
-  menu_id: string;
-  version_id: string;
-  name: string;
-  status: string;
-  review: MenuReview;
-};
 
 export async function ingestMenu(input: {
   file?: File | null;
@@ -116,58 +411,10 @@ export async function confirmMenu(menuId: string, versionId: string): Promise<Me
   return readJson(res);
 }
 
-export async function getMenus(): Promise<{ menus: { id: string; name: string; status: string }[] }> {
+export async function getMenus(): Promise<MenuList> {
   const res = await apiFetch(`${API}/menus`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
-
-export type PairingSlot = {
-  id: string;
-  slot: string;
-  status: string;
-  sku_id: string | null;
-  category: string;
-  name: string;
-  producer: string;
-  region: string;
-  style: string;
-  rationale: string;
-  server_script: string;
-  confidence: string;
-  price_tier: string;
-  glass_price: number;
-  bottle_price: number;
-  currency: string;
-  gap: string;
-};
-
-export type PairingOption = {
-  sku_id: string;
-  name: string;
-  producer: string;
-  category: string;
-  style: string;
-};
-
-export type PairingDish = {
-  id: string;
-  stable_id: string;
-  name: string;
-  dish: string;
-  course: string;
-  flavor_profile: string;
-  price: number;
-  currency: string;
-  needs_repairing: boolean;
-  options: PairingOption[];
-  pairings: PairingSlot[];
-};
-
-export type PairingGridResult = {
-  menu_id: string;
-  menu_name: string;
-  dishes: PairingDish[];
-};
 
 export async function pairMenu(menuId: string): Promise<PairingGridResult> {
   const res = await apiFetch(`${API}/menus/${menuId}/pair`, { method: "POST", credentials: "same-origin" });
@@ -219,68 +466,12 @@ export async function patchStock(sku: string, on_hand: number) {
   return res.json();
 }
 
-export type CellarLocation = {
-  id: string;
-  name: string;
-  kind: string;
-  notes: string;
-};
-
-export type StockLocation = {
-  location_id: string;
-  location_name: string;
-  quantity: number;
-  valuation_cents: number;
-};
-
-export type StockItem = {
-  sku: string;
-  name: string;
-  on_hand: number;
-  par: number;
-  low: boolean;
-  unit: string;
-  depletion_30d: number;
-  valuation_cents: number;
-  currency: string;
-  locations: StockLocation[];
-};
-
-export type CellarBin = {
-  id: string;
-  location_id: string;
-  location_name: string;
-  code: string;
-  label: string;
-  qr_payload: string;
-};
-
-export type StockMovementRow = {
-  id: string;
-  sku: string;
-  name: string;
-  location_name: string;
-  bin_code: string;
-  quantity: number;
-  movement_type: string;
-  reason: string;
-  created_at: string;
-};
-
-export type BinLabel = {
-  bin_id: string;
-  code: string;
-  label: string;
-  qr_payload: string;
-  svg: string;
-};
-
-export async function getCellar(): Promise<{ items: StockItem[]; locations: CellarLocation[] }> {
+export async function getCellar(): Promise<CellarBoard> {
   const res = await apiFetch(`${API}/inventory`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function listLocations(): Promise<{ locations: CellarLocation[] }> {
+export async function listLocations(): Promise<LocationList> {
   const res = await apiFetch(`${API}/inventory/locations`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -295,7 +486,7 @@ export async function createLocation(input: { name: string; kind: string; notes?
   return readJson(res);
 }
 
-export async function listBins(): Promise<{ bins: CellarBin[] }> {
+export async function listBins(): Promise<BinList> {
   const res = await apiFetch(`${API}/inventory/bins`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -318,7 +509,7 @@ export async function getBinLabel(binId: string): Promise<BinLabel> {
   return readJson(res);
 }
 
-export async function listMovements(): Promise<{ movements: StockMovementRow[] }> {
+export async function listMovements(): Promise<MovementList> {
   const res = await apiFetch(`${API}/inventory/movements?limit=80`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -355,45 +546,7 @@ export async function postTransfer(input: {
   return readJson(res);
 }
 
-export type CountSessionRecord = {
-  id: string;
-  location_id: string;
-  location_name: string;
-  status: string;
-  notes: string;
-};
-
-export type CountReport = {
-  session: CountSessionRecord;
-  lines: {
-    id: string;
-    sku: string;
-    name: string;
-    counted_quantity: number;
-    expected_quantity: number | null;
-    device_id: string;
-    bin_code: string;
-    counted_at: string | null;
-  }[];
-  variance_lines: {
-    sku: string;
-    name: string;
-    counted_quantity: number | null;
-    expected_quantity: number;
-    variance: number | null;
-    variance_value_cents: number | null;
-    unit_cost_cents: number;
-  }[];
-  conflicts: {
-    sku: string;
-    readings: { device_id: string; counted_quantity: number; counted_at: string | null }[];
-    resolved: boolean;
-    resolved_quantity: number | null;
-  }[];
-  movements?: { id: string; sku: string; quantity: number; movement_type: string }[];
-};
-
-export async function listCountSessions(): Promise<{ sessions: CountSessionRecord[] }> {
+export async function listCountSessions(): Promise<CountSessionList> {
   const res = await apiFetch(`${API}/inventory/counts`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -460,18 +613,7 @@ export async function approveCountSession(sessionId: string): Promise<CountRepor
   return readJson(res);
 }
 
-export type ParProposalRecord = {
-  id: string;
-  sku: string;
-  name: string;
-  current_par: number;
-  proposed_par: number;
-  depletion_30d: number;
-  rationale: string;
-  status: string;
-};
-
-export async function listParProposals(status = "pending"): Promise<{ proposals: ParProposalRecord[] }> {
+export async function listParProposals(status = "pending"): Promise<ParProposalList> {
   const res = await apiFetch(`${API}/inventory/par-proposals?status=${encodeURIComponent(status)}`, {
     cache: "no-store",
     credentials: "same-origin",
@@ -479,7 +621,7 @@ export async function listParProposals(status = "pending"): Promise<{ proposals:
   return readJson(res);
 }
 
-export async function generateParProposals(): Promise<{ proposals: ParProposalRecord[] }> {
+export async function generateParProposals(): Promise<ParProposalList> {
   const res = await apiFetch(`${API}/inventory/par-proposals/generate`, {
     method: "POST",
     credentials: "same-origin",
@@ -489,7 +631,7 @@ export async function generateParProposals(): Promise<{ proposals: ParProposalRe
   return readJson(res);
 }
 
-export async function acceptParProposal(proposalId: string): Promise<{ proposal: ParProposalRecord }> {
+export async function acceptParProposal(proposalId: string): Promise<ParProposalEnvelope> {
   const res = await apiFetch(`${API}/inventory/par-proposals/${proposalId}/accept`, {
     method: "POST",
     credentials: "same-origin",
@@ -497,79 +639,13 @@ export async function acceptParProposal(proposalId: string): Promise<{ proposal:
   return readJson(res);
 }
 
-export async function rejectParProposal(proposalId: string): Promise<{ proposal: ParProposalRecord }> {
+export async function rejectParProposal(proposalId: string): Promise<ParProposalEnvelope> {
   const res = await apiFetch(`${API}/inventory/par-proposals/${proposalId}/reject`, {
     method: "POST",
     credentials: "same-origin",
   });
   return readJson(res);
 }
-
-export type TrainingLesson = {
-  id: string;
-  slug: string;
-  title: string;
-  body: string;
-  position: string;
-  status: string;
-  can_author: boolean;
-  quiz_id: string | null;
-  standards: { id: string; slug: string; title: string }[];
-  bottles: { sku_id: string; name: string }[];
-};
-
-export type TrainingLessons = {
-  role: string;
-  name: string;
-  position: string | null;
-  can_author: boolean;
-  lessons: TrainingLesson[];
-  drafts: TrainingLesson[];
-};
-
-export type TrainingQuiz = {
-  id: string;
-  lesson_id?: string | null;
-  title: string;
-  questions: { id: string; prompt: string; choices: string[]; kind?: string }[];
-  score?: number | null;
-  score_bp?: number | null;
-  correct?: number | null;
-  total?: number | null;
-  review?: { id: string; prompt: string; selected: number; ok: boolean; explain: string }[];
-  next_review_at?: string | null;
-  next_review_on?: string | null;
-};
-
-export type DueReview = {
-  quiz_id: string;
-  quiz_title: string;
-  question_id: string;
-  prompt: string;
-  box: number;
-  due_at: string;
-  due_on: string;
-  last_result: string;
-};
-
-export type ServiceStandard = {
-  id: string;
-  slug: string;
-  topic: string;
-  title: string;
-  body: string;
-  version: number;
-  is_default: boolean;
-  updated_at: string;
-};
-
-export type DemoPersona = {
-  slug: string;
-  name: string;
-  role: string;
-  position: string | null;
-  email: string;
-};
 
 export async function getTrainingLessons(): Promise<TrainingLessons> {
   const res = await apiFetch(`${API}/training/lessons`, { cache: "no-store", credentials: "same-origin" });
@@ -619,31 +695,10 @@ export async function submitQuizAttempt(quizId: string, answers: number[]): Prom
   return readJson(res);
 }
 
-export async function getDueReviews(): Promise<{ reviews: DueReview[] }> {
+export async function getDueReviews(): Promise<DueReviewList> {
   const res = await apiFetch(`${API}/training/reviews/due`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
-
-export type RoleplayTurn = { role: "guest" | "staff"; text: string; product_ids?: string[] };
-export type RoleplayCriterion = { pass: boolean; evidence: string };
-export type RoleplaySession = {
-  id: string;
-  persona: string;
-  dish_id: string | null;
-  dish_name: string;
-  status: "open" | "scored";
-  transcript: RoleplayTurn[];
-  rubric: {
-    listened: RoleplayCriterion;
-    offered_two_options: RoleplayCriterion;
-    described_structure: RoleplayCriterion;
-    handled_price: RoleplayCriterion;
-  } | null;
-  score: number | null;
-  started_at: string | null;
-  scored_at: string | null;
-};
-export type RoleplayResponse = { session: RoleplaySession };
 
 export async function startRoleplay(persona: string, dish = ""): Promise<RoleplayResponse> {
   const res = await apiFetch(`${API}/training/roleplay`, {
@@ -672,65 +727,6 @@ export async function scoreRoleplay(sessionId: string): Promise<RoleplayResponse
   });
   return readJson(res);
 }
-
-export type TeamMember = {
-  membership_id: string;
-  user_id: string;
-  name: string;
-  email: string;
-  role: string;
-  position: string | null;
-};
-export type TeamInvite = {
-  id: string;
-  email: string;
-  role: string;
-  position: string | null;
-  invited_by_user_id: string;
-  created_at: string | null;
-  accepted_at: string | null;
-  revoked_at: string | null;
-};
-export type TeamRoster = { members: TeamMember[]; invites: TeamInvite[] };
-export type TeamPerson = {
-  user_id: string;
-  name: string;
-  email: string;
-  role: string;
-  position: string | null;
-  briefing_ack: { acked: number; published: number; rate_bp: number | null; label: string };
-  lessons_done: number;
-  quiz_average_bp: number | null;
-  quiz_average_label: string;
-  roleplay_average_bp: number | null;
-  roleplay_average_label: string;
-};
-export type WeakTopic = { topic: string; correct: number; total: number; accuracy_bp: number; label: string };
-export type CertificateRecord = {
-  id: string;
-  user_id: string;
-  name: string;
-  kind: string;
-  label: string;
-  issued_on: string;
-  expires_on: string;
-  document_id: string | null;
-  document_filename: string;
-  created_by_user_id: string;
-  created_at: string | null;
-  days_left: number;
-  expired: boolean;
-  expiring: boolean;
-  due: boolean;
-  gap_type: string;
-  status_label: string;
-};
-export type TeamProgress = {
-  week: { start: string; end: string };
-  people: TeamPerson[];
-  weak_topics: WeakTopic[];
-  expiring_certificates: CertificateRecord[];
-};
 
 export async function getTeam(): Promise<TeamRoster> {
   const res = await apiFetch(`${API}/team`, { cache: "no-store", credentials: "same-origin" });
@@ -767,12 +763,12 @@ export async function updateTeamMember(userId: string, body: { role: string; pos
   return readJson(res);
 }
 
-export async function removeTeamMember(userId: string): Promise<{ removed: boolean; user_id: string }> {
+export async function removeTeamMember(userId: string): Promise<RemovedMember> {
   const res = await apiFetch(`${API}/team/members/${userId}`, { method: "DELETE", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function getTeamCertificates(): Promise<{ certificates: CertificateRecord[] }> {
+export async function getTeamCertificates(): Promise<CertificateList> {
   const res = await apiFetch(`${API}/team/certificates`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -797,81 +793,15 @@ export async function createCertificate(input: {
   return payload.certificate;
 }
 
-export async function deleteCertificate(certificateId: string): Promise<{ removed: boolean }> {
+export async function deleteCertificate(certificateId: string): Promise<DeletedFlag> {
   const res = await apiFetch(`${API}/team/certificates/${certificateId}`, { method: "DELETE", credentials: "same-origin" });
   return readJson(res);
 }
-
-export type BriefingItem = { title: string; detail: string };
-export type BriefingCard = { kind: string; title: string; body: string; items: BriefingItem[] };
-export type TonightBriefing = {
-  id: string;
-  service_date: string;
-  status: string;
-  intro: string;
-  cards: BriefingCard[];
-  due_review_count: number;
-  acknowledged: boolean;
-  seconds_to_ack: number | null;
-};
-export type TonightBoard = {
-  service_date: string;
-  briefing_hour: number;
-  timezone: string;
-  available: boolean;
-  role: string;
-  briefing: TonightBriefing | null;
-  low_stock: { sku: string; name: string; on_hand: number; par: number }[];
-  storage_alerts: { id: string; zone: string; metric: string; status: string }[];
-  deliveries_due: { po_number: string; supplier: string; expected_delivery_date: string | null; status: string }[];
-  approvals: { id: string; kind: string; title: string; status: string; href?: string }[];
-  pos_alerts?: { kind: string; title: string; href?: string }[];
-  sensors?: SensorRecord[];
-  reminders?: ReminderRecord[];
-  expiring_certificates: {
-    id: string;
-    user_id: string;
-    name: string;
-    kind: string;
-    label: string;
-    issued_on: string;
-    expires_on: string;
-    days_left: number;
-    status_label: string;
-  }[];
-};
-export type LookupHit = {
-  name: string;
-  producer: string;
-  grape: string;
-  region: string;
-  pairing: string;
-  server_script: string;
-  flavor_profile: string;
-  glassware: string;
-  serving_temperature: string;
-  pour_size: string;
-  stock: number | string;
-  price_cents: number;
-  currency: string;
-};
 
 export async function getTonight(): Promise<TonightBoard> {
   const res = await apiFetch(`${API}/tonight`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
-
-export type TonightEnvelope = {
-  role: string;
-  available: boolean;
-  ready: boolean;
-  service_date: string;
-  timezone: string;
-  briefing_hour: number;
-  briefing: TonightBriefing | null;
-};
-
-export type { LookupPack };
 
 export async function getTonightBriefing(serviceDate?: string): Promise<TonightEnvelope> {
   const params = serviceDate ? `?service_date=${encodeURIComponent(serviceDate)}` : "";
@@ -910,40 +840,18 @@ export async function acknowledgeBriefing(id: string, secondsToAck: number): Pro
   return readJson(res);
 }
 
-export type BriefingReportUser = {
-  user_id: string;
-  name: string;
-  acknowledged: boolean;
-  seconds_to_ack: number | null;
-};
-
-export type BriefingReportDay = {
-  service_date: string;
-  briefing_id: string | null;
-  status: string | null;
-  acknowledged_count: number;
-  user_count: number;
-  users: BriefingReportUser[];
-};
-
-export type BriefingReport = {
-  start: string;
-  end: string;
-  days: BriefingReportDay[];
-};
-
 export async function getBriefingReport(start: string, end: string): Promise<BriefingReport> {
   const params = new URLSearchParams({ start, end });
   const res = await apiFetch(`${API}/tonight/briefing/report?${params}`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function lookupFloor(query: string): Promise<{ query: string; results: LookupHit[] }> {
+export async function lookupFloor(query: string): Promise<LookupResult> {
   const res = await apiFetch(`${API}/lookup?q=${encodeURIComponent(query)}`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function getStandards(): Promise<{ can_author: boolean; standards: ServiceStandard[] }> {
+export async function getStandards(): Promise<StandardList> {
   const res = await apiFetch(`${API}/training/standards`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -966,7 +874,7 @@ export async function resetStandard(slug: string): Promise<ServiceStandard> {
   return readJson(res);
 }
 
-export async function getDemoPersonas(): Promise<{ active: string; personas: DemoPersona[] } | null> {
+export async function getDemoPersonas(): Promise<DemoPersonaList | null> {
   const res = await apiFetch(`${API}/auth/demo-personas`, { cache: "no-store", credentials: "same-origin" });
   if (!res.ok) return null;
   return res.json();
@@ -982,20 +890,7 @@ export async function setDemoPersona(slug: string): Promise<void> {
   if (!res.ok) throw new Error("The demo persona could not be changed.");
 }
 
-export type TastingSessionRow = {
-  id: string;
-  supplier_id: string | null;
-  supplier: string;
-  title: string;
-  starts_at: string;
-  ends_at: string;
-  location: string;
-  status: string;
-  notes: string;
-  sample_count: number;
-};
-
-export async function listTastingSessions(): Promise<{ sessions: TastingSessionRow[] }> {
+export async function listTastingSessions(): Promise<TastingSessionList> {
   const res = await apiFetch(`${API}/tastings`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -1008,7 +903,7 @@ export async function createTastingSession(body: {
   ends_at?: string;
   location?: string;
   notes?: string;
-}): Promise<{ draft: { id: string; title: string; ics: string; sent: boolean } }> {
+}): Promise<TastingCreateResult> {
   const res = await apiFetch(`${API}/tastings`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1018,12 +913,12 @@ export async function createTastingSession(body: {
   return readJson(res);
 }
 
-export async function getTastingSession(sessionId: string): Promise<{ session: TastingSessionRow; samples: SampleCardData[] }> {
+export async function getTastingSession(sessionId: string): Promise<TastingSessionDetail> {
   const res = await apiFetch(`${API}/tastings/${sessionId}`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function addSample(sessionId: string): Promise<{ sample: SampleCardData }> {
+export async function addSample(sessionId: string): Promise<SampleEnvelope> {
   const res = await apiFetch(`${API}/tastings/${sessionId}/samples`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1037,7 +932,7 @@ export async function updateSample(
   sessionId: string,
   sampleId: string,
   body: { product_id?: string | null; note?: string; quoted_price_cents?: number | null; currency?: string | null },
-): Promise<{ sample: SampleCardData }> {
+): Promise<SampleEnvelope> {
   const res = await apiFetch(`${API}/tastings/${sessionId}/samples/${sampleId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -1052,7 +947,7 @@ export async function scoreSample(
   sampleId: string,
   score: number | null,
   note?: string,
-): Promise<{ sample: SampleCardData }> {
+): Promise<SampleEnvelope> {
   const res = await apiFetch(`${API}/tastings/${sessionId}/samples/${sampleId}/score`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1067,7 +962,7 @@ export async function setSampleDecision(
   sampleId: string,
   decision: "undecided" | "buy" | "list" | "pass",
   reason?: string,
-): Promise<{ sample: SampleCardData }> {
+): Promise<SampleEnvelope> {
   const res = await apiFetch(`${API}/tastings/${sessionId}/samples/${sampleId}/decision`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1077,61 +972,12 @@ export async function setSampleDecision(
   return readJson(res);
 }
 
-export type SourcingBriefItem = {
-  id: string;
-  category: string;
-  style: string;
-  price_band: string;
-  quantity_hint: number;
-  dishes: { dish_id: string; name: string }[];
-  sample_id: string | null;
-  offer_id: string | null;
-  rationale: string;
-  position: number;
-};
-
-export type SourcingBrief = {
-  id: string;
-  list_id: string | null;
-  title: string;
-  status: string;
-  items: SourcingBriefItem[];
-};
-
-export type RepFollowup = {
-  id: string;
-  session_id: string;
-  supplier: string;
-  to_email: string;
-  subject: string;
-  body: string;
-  purchase_order_number: string;
-  mailto: string;
-  sent: boolean;
-};
-
-export type TastingHistoryRow = {
-  supplier_id: string;
-  supplier: string;
-  product_id: string;
-  product: string;
-  tasted: number;
-  buy: number;
-  list: number;
-  pass: number;
-  undecided: number;
-  bought_bottles: number;
-  invoiced_bottles: number;
-  last_cost_cents: number | null;
-  last_cost_label: string;
-};
-
-export async function listSourcingBriefs(): Promise<{ briefs: SourcingBrief[] }> {
+export async function listSourcingBriefs(): Promise<SourcingBriefList> {
   const res = await apiFetch(`${API}/sourcing/briefs`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function buildSourcingBrief(): Promise<{ brief: SourcingBrief }> {
+export async function buildSourcingBrief(): Promise<SourcingBriefEnvelope> {
   const res = await apiFetch(`${API}/sourcing/briefs`, {
     method: "POST",
     credentials: "same-origin",
@@ -1139,59 +985,15 @@ export async function buildSourcingBrief(): Promise<{ brief: SourcingBrief }> {
   return readJson(res);
 }
 
-export async function getTastingHistory(): Promise<{ rows: TastingHistoryRow[] }> {
+export async function getTastingHistory(): Promise<TastingHistory> {
   const res = await apiFetch(`${API}/sourcing/history`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function getRepFollowup(sessionId: string): Promise<{ followup: RepFollowup | null }> {
+export async function getRepFollowup(sessionId: string): Promise<RepFollowupEnvelope> {
   const res = await apiFetch(`${API}/tastings/${sessionId}/follow-up`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
-
-export type InviteSlot = {
-  position?: number;
-  starts_at: string;
-  ends_at: string;
-  source?: string;
-  chosen?: boolean;
-};
-
-export type InviteGap = {
-  category: string;
-  style: string;
-  price_band: string;
-  quantity_hint: number;
-  dishes: { name: string }[];
-};
-
-export type TastingInvite = {
-  id: string;
-  session_id: string;
-  title: string;
-  supplier: string;
-  status: string;
-  agenda_note: string;
-  agenda_facts: { source: string; gaps: InviteGap[]; samples: { sample_id: string; name: string }[] };
-  slots: InviteSlot[];
-  attendees: { kind: string; name: string; email: string; user_id: string | null }[];
-  approval: { id?: string; decision?: string; required_role?: string; comment?: string | null; decided_at?: string | null } | null;
-  chosen_starts_at: string;
-  email_subject: string;
-  email_body: string;
-  email_mailto: string;
-  sent: boolean;
-  driver: string;
-  ics_ready: boolean;
-};
-
-export type InviteDesk = {
-  suggestions: InviteSlot[];
-  staff: { id: string; name: string; email: string; role: string }[];
-  rep: { supplier: string; name: string; email: string };
-  can_decide: boolean;
-  invite: TastingInvite | null;
-};
 
 export async function getTastingInvite(sessionId: string): Promise<InviteDesk> {
   const res = await apiFetch(`${API}/tastings/${sessionId}/invite`, { cache: "no-store", credentials: "same-origin" });
@@ -1226,7 +1028,7 @@ export async function decideTastingInvite(
   return readJson(res);
 }
 
-export async function draftRepFollowup(sessionId: string): Promise<{ followup: RepFollowup }> {
+export async function draftRepFollowup(sessionId: string): Promise<RepFollowupDraft> {
   const res = await apiFetch(`${API}/tastings/${sessionId}/follow-up`, {
     method: "POST",
     credentials: "same-origin",
@@ -1234,7 +1036,7 @@ export async function draftRepFollowup(sessionId: string): Promise<{ followup: R
   return readJson(res);
 }
 
-export async function scanSampleLabel(sessionId: string, sampleId: string, file: File): Promise<{ sample: SampleCardData }> {
+export async function scanSampleLabel(sessionId: string, sampleId: string, file: File): Promise<SampleEnvelope> {
   const body = new FormData();
   body.set("file", file);
   const res = await apiFetch(`${API}/tastings/${sessionId}/samples/${sampleId}/label`, {
@@ -1245,84 +1047,27 @@ export async function scanSampleLabel(sessionId: string, sampleId: string, file:
   return readJson(res);
 }
 
-export async function getProducts(): Promise<{ products: { id: string; name: string }[] }> {
+export async function getProducts(): Promise<ProductList> {
   const res = await apiFetch(`${API}/products`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function getLists(): Promise<{ lists: BeverageListDetail[] }> {
+export async function getLists(): Promise<ListIndex> {
   const res = await apiFetch(`${API}/lists`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
-
-export type ListImportRow = {
-  line: number;
-  status: "match" | "new" | "error";
-  action: string;
-  message: string;
-  section: string;
-  name: string;
-  producer: string;
-  category: string;
-  vintage: string;
-  bottle_size: string;
-};
-
-export type TastingNote = {
-  id: string;
-  product_id: string;
-  product_name: string;
-  producer: string;
-  server_hook: string;
-  guest_description: string;
-  technical_note: string;
-  body: string;
-  acidity: string;
-  tannin: string;
-  sweetness: string;
-  oak: string;
-  intensity: string;
-  aroma_families: string[];
-  source: string;
-  status: string;
-  approved_by: string | null;
-  approved_at: string | null;
-  has_tech_sheet: boolean;
-  created_at: string;
-};
-
-export type ServiceCardRecord = {
-  id: string;
-  product_id: string;
-  product_name: string;
-  tasting_note_id: string;
-  serving_temperature: string;
-  glassware: string;
-  decanting: string;
-  pour_size: string;
-  source: string;
-  status: string;
-  approved_by: string | null;
-  approved_at: string | null;
-  created_at: string;
-};
-
-export type TastingDraft = {
-  note: TastingNote;
-  service_card: ServiceCardRecord;
-};
 
 async function readJson<T>(res: Response): Promise<T> {
   if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
   return res.json();
 }
 
-export async function getTastingNotes(productId: string): Promise<{ notes: TastingNote[] }> {
+export async function getTastingNotes(productId: string): Promise<TastingNoteList> {
   const res = await apiFetch(`${API}/products/${productId}/notes`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function getServiceCards(productId: string): Promise<{ service_cards: ServiceCardRecord[] }> {
+export async function getServiceCards(productId: string): Promise<ServiceCardList> {
   const res = await apiFetch(`${API}/products/${productId}/service-cards`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -1383,39 +1128,6 @@ export async function approveServiceCard(productId: string, cardId: string): Pro
   return readJson(res);
 }
 
-export type ListImportItem = {
-  section: string;
-  name: string;
-  producer: string;
-  vintage: string;
-  bottle_size: string;
-  category: string;
-  pour_price: number;
-  bottle_price: number;
-  cost: number;
-  currency: string;
-  product_id?: string;
-};
-
-export type ListImportResult = {
-  mode: "preview" | "confirmed";
-  currency: string;
-  matched: number;
-  new: number;
-  new_products: number;
-  new_variants: number;
-  errors: number;
-  rows: ListImportRow[];
-  list?: {
-    id: string;
-    name: string;
-    currency: string;
-    item_count: number;
-    source_filename: string;
-    items: ListImportItem[];
-  };
-};
-
 export async function importList(file: File, confirm: boolean): Promise<ListImportResult> {
   const body = new FormData();
   body.set("file", file);
@@ -1429,20 +1141,6 @@ export async function getSampleMenu() {
   const res = await apiFetch(`${API}/fixtures/sample-menu`, { cache: "no-store" });
   return res.json();
 }
-
-export type LlmSettings = {
-  configured: boolean;
-  stored: boolean;
-  provider: string | null;
-  model: string | null;
-  key_hint: string | null;
-  demo_mode: boolean;
-  demo_forced: boolean;
-  source: string;
-  label: string;
-  warning: string;
-  default_models: Record<string, string>;
-};
 
 export class ApiError extends Error {
   status: number;
@@ -1498,13 +1196,7 @@ export async function saveLlmSettings(body: {
   return readSettings(res);
 }
 
-export type Account = {
-  name: string;
-  email: string;
-  picture: string;
-};
-
-export async function getAuthConfig(): Promise<{ configured: boolean }> {
+export async function getAuthConfig(): Promise<AuthConfig> {
   const res = await apiFetch(`${API}/auth/config`, { cache: "no-store" });
   if (!res.ok) throw new Error("auth config failed");
   const data = (await res.json()) as { configured?: boolean };
@@ -1542,30 +1234,10 @@ export function notifyAuthChanged() {
   }
 }
 
-export type { AuditChain, AuditEventRow };
-
-export type VaultDocument = {
-  id: string;
-  doc_type: string;
-  filename: string;
-  content_type: string;
-  size_bytes: number;
-  sha256: string;
-  linked_entity_type: string;
-  linked_entity_id: string | null;
-  uploaded_by_user_id: string | null;
-  created_at: string;
-};
-
-export type RetentionPolicy = {
-  document_retention_years: number;
-  can_edit: boolean;
-};
-
 export async function getAuditEvents(filters?: {
   entity_type?: string;
   action?: string;
-}): Promise<{ events: AuditEventRow[]; chain: AuditChain }> {
+}): Promise<AuditEventList> {
   const params = new URLSearchParams();
   if (filters?.entity_type) params.set("entity_type", filters.entity_type);
   if (filters?.action) params.set("action", filters.action);
@@ -1577,7 +1249,7 @@ export async function getAuditEvents(filters?: {
   return readJson(res);
 }
 
-export async function listDocuments(): Promise<{ documents: VaultDocument[] }> {
+export async function listDocuments(): Promise<DocumentList> {
   const res = await apiFetch(`${API}/compliance/documents`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -1587,7 +1259,7 @@ export async function uploadDocument(input: {
   doc_type: string;
   linked_entity_type?: string;
   linked_entity_id?: string;
-}): Promise<{ document: VaultDocument }> {
+}): Promise<DocumentEnvelope> {
   const body = new FormData();
   body.set("file", input.file);
   body.set("doc_type", input.doc_type);
@@ -1612,72 +1284,7 @@ export async function updateRetention(years: number): Promise<RetentionPolicy> {
   return readJson(res);
 }
 
-export type SupplierContactRow = {
-  id: string;
-  supplier_id: string;
-  name: string;
-  role: string | null;
-  email: string;
-  phone: string | null;
-  is_primary: boolean;
-};
-
-export type SupplierRow = {
-  id: string;
-  name: string;
-  kind: string;
-  contact_email: string;
-  account_number: string | null;
-  order_minimum_cents: number;
-  default_case_size: number;
-  delivery_days: string[];
-  lead_time_days: number;
-  payment_terms: string | null;
-  notes: string;
-  contacts: SupplierContactRow[];
-};
-
-export type PurchaseLine = {
-  id: string;
-  sku: string;
-  name: string;
-  product_name: string;
-  case_size: number;
-  cases_ordered: number;
-  quantity_ordered: number;
-  quantity_received: number;
-  unit_cost_cents: number;
-  line_total_cents: number;
-  vintage: string | null;
-};
-
-export type PurchaseApproval = {
-  id: string;
-  decision: string;
-  required_role: string;
-  comment: string | null;
-  decided_at: string | null;
-};
-
-export type PurchaseOrderRow = {
-  id: string;
-  po_number: string | null;
-  status: string;
-  supplier_id: string;
-  supplier: string;
-  contact: SupplierContactRow | null;
-  expected_delivery_date: string | null;
-  subtotal_cents: number;
-  order_minimum_cents: number;
-  minimum_met: boolean;
-  shortfall_cents: number;
-  pdf_document_id: string | null;
-  sent_via: string | null;
-  lines: PurchaseLine[];
-  approval: PurchaseApproval;
-};
-
-export async function listProcurementSuppliers(): Promise<{ suppliers: SupplierRow[] }> {
+export async function listProcurementSuppliers(): Promise<SupplierList> {
   const res = await apiFetch(`${API}/procurement/suppliers`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -1689,7 +1296,7 @@ export async function createProcurementSupplier(body: {
   delivery_days: string[];
   lead_time_days: number;
   payment_terms?: string;
-}): Promise<{ supplier: SupplierRow }> {
+}): Promise<SupplierEnvelope> {
   const res = await apiFetch(`${API}/procurement/suppliers`, {
     method: "POST",
     credentials: "same-origin",
@@ -1702,7 +1309,7 @@ export async function createProcurementSupplier(body: {
 export async function addSupplierContact(
   supplierId: string,
   body: { name: string; email: string; role?: string; phone?: string; is_primary?: boolean },
-): Promise<{ contact: SupplierContactRow }> {
+): Promise<ContactEnvelope> {
   const res = await apiFetch(`${API}/procurement/suppliers/${supplierId}/contacts`, {
     method: "POST",
     credentials: "same-origin",
@@ -1711,114 +1318,6 @@ export async function addSupplierContact(
   });
   return readJson(res);
 }
-
-export type SupplierProfile = {
-  id: string;
-  name: string;
-  kind: string;
-  rep_name: string;
-  rep_email: string;
-  rep_phone: string | null;
-  delivery_days: string[];
-  order_minimum_cents: number;
-  order_minimum_currency: string;
-  order_minimum_label: string;
-  payment_terms: string | null;
-  notes: string;
-  lead_time_days: number;
-  default_case_size: number;
-};
-
-export type CatalogChoice = {
-  product_id: string;
-  sku_id: string;
-  name: string;
-  producer: string;
-  barcode: string;
-};
-
-export type AllocationRecord = {
-  id: string;
-  supplier_id: string;
-  product_id: string;
-  product_name: string;
-  quantity: number;
-  period_label: string;
-  period_start: string | null;
-  period_end: string | null;
-};
-
-export type OfferRecord = {
-  id: string;
-  supplier_id: string;
-  supplier: string;
-  product_id: string;
-  product_name: string;
-  sku_id: string | null;
-  sku: string;
-  unit: string;
-  case_size: number;
-  price_cents: number;
-  price_label: string;
-  currency: string;
-  valid_from: string;
-  valid_to: string | null;
-  source: string;
-};
-
-export type PriceSheetLine = {
-  line: number;
-  name: string;
-  producer: string;
-  sku: string;
-  unit: string;
-  case_size: number;
-  price_cents: number;
-  price_label: string;
-  currency: string;
-  valid_from: string;
-  valid_to: string | null;
-  product_id: string | null;
-  sku_id: string | null;
-  product_name: string;
-  status: string;
-  message: string;
-};
-
-export type PriceSheetRecord = {
-  id: string;
-  supplier_id: string;
-  supplier: string;
-  document_id: string;
-  status: string;
-  rows: PriceSheetLine[];
-  matched: number;
-  unmatched: number;
-  created_at: string | null;
-  reviewed_at: string | null;
-};
-
-export type SupplierDeskPayload = {
-  supplier: SupplierProfile;
-  allocations: AllocationRecord[];
-  offers: OfferRecord[];
-  current_offers: OfferRecord[];
-  price_sheets: PriceSheetRecord[];
-  products: CatalogChoice[];
-};
-
-export type PricePointRecord = {
-  date: string;
-  kind: string;
-  price_cents: number;
-  price_label: string;
-  currency: string;
-  supplier_id: string;
-  supplier: string;
-  source: string;
-  offer_id: string | null;
-  invoice_id: string | null;
-};
 
 export async function getSupplierDesk(supplierId: string): Promise<SupplierDeskPayload> {
   const res = await apiFetch(`${API}/procurement/suppliers/${supplierId}/desk`, {
@@ -1840,7 +1339,7 @@ export async function saveSupplierProfile(
     payment_terms: string;
     notes: string;
   },
-): Promise<{ supplier: SupplierProfile }> {
+): Promise<ProfileEnvelope> {
   const res = await apiFetch(`${API}/procurement/suppliers/${supplierId}/profile`, {
     method: "PATCH",
     credentials: "same-origin",
@@ -1853,7 +1352,7 @@ export async function saveSupplierProfile(
 export async function createAllocation(
   supplierId: string,
   body: { product_id: string; quantity: number; period_label: string; period_start?: string; period_end?: string },
-): Promise<{ allocation: AllocationRecord }> {
+): Promise<AllocationEnvelope> {
   const res = await apiFetch(`${API}/procurement/suppliers/${supplierId}/allocations`, {
     method: "POST",
     credentials: "same-origin",
@@ -1863,7 +1362,7 @@ export async function createAllocation(
   return readJson(res);
 }
 
-export async function deleteAllocation(allocationId: string): Promise<{ deleted: string }> {
+export async function deleteAllocation(allocationId: string): Promise<DeletedId> {
   const res = await apiFetch(`${API}/procurement/allocations/${allocationId}`, {
     method: "DELETE",
     credentials: "same-origin",
@@ -1871,7 +1370,7 @@ export async function deleteAllocation(allocationId: string): Promise<{ deleted:
   return readJson(res);
 }
 
-export async function uploadPriceSheet(supplierId: string, file: File): Promise<{ price_sheet: PriceSheetRecord }> {
+export async function uploadPriceSheet(supplierId: string, file: File): Promise<PriceSheetEnvelope> {
   const body = new FormData();
   body.set("supplier_id", supplierId);
   body.set("file", file);
@@ -1883,7 +1382,7 @@ export async function uploadPriceSheet(supplierId: string, file: File): Promise<
   return readJson(res);
 }
 
-export async function applyPriceSheet(sheetId: string): Promise<{ price_sheet: PriceSheetRecord; offers: OfferRecord[] }> {
+export async function applyPriceSheet(sheetId: string): Promise<PriceSheetApplied> {
   const res = await apiFetch(`${API}/procurement/price-sheets/${sheetId}/apply`, {
     method: "POST",
     credentials: "same-origin",
@@ -1891,7 +1390,7 @@ export async function applyPriceSheet(sheetId: string): Promise<{ price_sheet: P
   return readJson(res);
 }
 
-export async function rejectPriceSheet(sheetId: string): Promise<{ price_sheet: PriceSheetRecord; offers: OfferRecord[] }> {
+export async function rejectPriceSheet(sheetId: string): Promise<PriceSheetApplied> {
   const res = await apiFetch(`${API}/procurement/price-sheets/${sheetId}/reject`, {
     method: "POST",
     credentials: "same-origin",
@@ -1899,7 +1398,7 @@ export async function rejectPriceSheet(sheetId: string): Promise<{ price_sheet: 
   return readJson(res);
 }
 
-export async function getPriceHistory(productId: string): Promise<{ product: { id: string; name: string; producer: string }; points: PricePointRecord[] }> {
+export async function getPriceHistory(productId: string): Promise<PriceHistory> {
   const res = await apiFetch(`${API}/procurement/products/${productId}/price-history`, {
     cache: "no-store",
     credentials: "same-origin",
@@ -1907,7 +1406,7 @@ export async function getPriceHistory(productId: string): Promise<{ product: { i
   return readJson(res);
 }
 
-export async function listLifecycleOrders(): Promise<{ orders: PurchaseOrderRow[] }> {
+export async function listLifecycleOrders(): Promise<PurchaseOrderList> {
   const res = await apiFetch(`${API}/procurement/orders`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -1926,7 +1425,7 @@ export async function createLifecycleOrder(body: {
   return readJson(res);
 }
 
-export async function draftLifecycleOrders(): Promise<{ orders: PurchaseOrderRow[] }> {
+export async function draftLifecycleOrders(): Promise<PurchaseOrderList> {
   const res = await apiFetch(`${API}/procurement/orders/draft-from-reorder`, {
     method: "POST",
     credentials: "same-origin",
@@ -1962,72 +1461,6 @@ export async function cancelPurchaseOrder(poId: string): Promise<PurchaseOrderRo
   const res = await apiFetch(`${API}/procurement/orders/${poId}/cancel`, { method: "POST", credentials: "same-origin" });
   return readJson(res);
 }
-
-export type InvoiceLine = {
-  sku: string;
-  product_name?: string;
-  quantity: number;
-  unit_cost_cents: number;
-  vintage?: string | null;
-  po_line_id?: string | null;
-};
-
-export type InvoiceRecord = {
-  id: string;
-  purchase_order_id: string | null;
-  invoice_number: string;
-  invoice_date: string;
-  subtotal_cents: number;
-  tax_cents: number;
-  total_cents: number;
-  currency: string;
-  document_id: string;
-  filename: string;
-  sha256: string;
-  content_type: string;
-  extracted_lines: InvoiceLine[];
-  extraction_mode: string;
-  status: string;
-};
-
-export type ReceiptLineRecord = {
-  id: string;
-  po_line_id: string | null;
-  sku: string;
-  product_name: string;
-  ordered_qty: number;
-  invoiced_qty: number | null;
-  counted_qty: number;
-  ordered_unit_cost_cents: number;
-  invoiced_unit_cost_cents: number | null;
-  ordered_vintage: string | null;
-  received_vintage: string | null;
-  bin_id: string | null;
-  flags: string[];
-  resolution_note: string | null;
-  cost_delta_cents: number;
-};
-
-export type DiscrepancySummary = {
-  has_discrepancies: boolean;
-  counts: Record<string, number>;
-  cost_delta_cents: number;
-  lines: { sku: string; flags: string[]; cost_delta_cents: number }[];
-};
-
-export type ReceiptRecord = {
-  id: string;
-  purchase_order_id: string;
-  po_number: string | null;
-  supplier: string;
-  purchase_order_status: string | null;
-  invoice_id: string | null;
-  status: string;
-  discrepancy_summary: DiscrepancySummary;
-  notes: string | null;
-  lines: ReceiptLineRecord[];
-  a2ui_operations?: unknown[];
-};
 
 export async function uploadInvoice(
   poId: string,
@@ -2088,106 +1521,7 @@ export async function deleteLlmSettings(): Promise<LlmSettings> {
   return readSettings(res);
 }
 
-export type AffectedSku = {
-  sku: string;
-  product_name: string;
-  bin_code: string;
-  on_hand: number;
-};
-
-export type ZoneReading = {
-  id: string;
-  zone_id?: string;
-  temp_c: number;
-  humidity_pct: number;
-  source?: string;
-  recorded_at?: string | null;
-  notes?: string | null;
-  in_range?: boolean;
-};
-
-export type ZoneExcursion = {
-  id: string;
-  zone_id?: string;
-  reading_id?: string;
-  metric: string;
-  status: string;
-  measured_temp_c?: number;
-  measured_humidity_pct?: number;
-  affected_skus: AffectedSku[];
-  resolution_note?: string | null;
-  created_at?: string | null;
-};
-
-export type StorageZone = {
-  id: string;
-  name: string;
-  location_id?: string | null;
-  location_name?: string | null;
-  target_temp_min_c: number;
-  target_temp_max_c: number;
-  target_humidity_min_pct: number;
-  target_humidity_max_pct: number;
-  notes?: string | null;
-  latest_reading?: ZoneReading | null;
-  status: string;
-  excursion?: ZoneExcursion | null;
-};
-
-export type SensorRecord = {
-  id: string;
-  name: string;
-  zone_id: string;
-  zone_name: string;
-  location_name: string;
-  metric: string;
-  external_id: string;
-  sensor_key: string;
-  secret_last4: string;
-  masked: string;
-  last_value: string;
-  last_at: string | null;
-  stale: boolean;
-  stale_after_hours: number;
-  secret?: string;
-};
-
-export type SensorImportRow = {
-  line: number;
-  sensor: string;
-  external_id: string;
-  at: string;
-  metric: string;
-  value: string;
-  zone: string;
-  excursion: string;
-  duplicate: boolean;
-  error: string;
-};
-
-export type SensorImport = {
-  id: string;
-  filename: string;
-  status: string;
-  rows: SensorImportRow[];
-  posted?: number;
-  skipped?: number;
-  excursions?: number;
-};
-
-export type ReminderRecord = {
-  source_type: string;
-  source_id: string;
-  rule_code: string;
-  title: string;
-  detail: string;
-  due_on: string;
-  days_left: number;
-  label: string;
-  channel: string;
-};
-
-export async function getSensors(): Promise<{ sensors: SensorRecord[]; stale_after_hours: number }> {
+export async function getSensors(): Promise<SensorList> {
   const res = await apiFetch(`${API}/sensors`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -2230,7 +1564,7 @@ export async function decideReminder(body: {
   source_id: string;
   action: "acknowledge" | "snooze";
   snooze_days?: number;
-}): Promise<{ status: string; channel: string }> {
+}): Promise<ReminderDecision> {
   const res = await apiFetch(`${API}/reminders/decide`, {
     method: "POST",
     credentials: "same-origin",
@@ -2240,7 +1574,7 @@ export async function decideReminder(body: {
   return readJson(res);
 }
 
-export async function listStorageZones(): Promise<{ zones: StorageZone[] }> {
+export async function listStorageZones(): Promise<StorageZoneList> {
   const res = await apiFetch(`${API}/inventory/storage-zones`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -2250,7 +1584,7 @@ export async function recordZoneReading(
   tempC: number,
   humidityPct: number,
   notes?: string,
-): Promise<{ reading: ZoneReading; excursion: ZoneExcursion | null; zone: StorageZone }> {
+): Promise<ZoneReadingResult> {
   const res = await apiFetch(`${API}/inventory/storage-zones/${zoneId}/readings`, {
     method: "POST",
     credentials: "same-origin",
@@ -2260,7 +1594,7 @@ export async function recordZoneReading(
   return readJson(res);
 }
 
-export async function acknowledgeExcursion(excursionId: string, resolutionNote?: string): Promise<{ excursion: ZoneExcursion }> {
+export async function acknowledgeExcursion(excursionId: string, resolutionNote?: string): Promise<ZoneExcursionEnvelope> {
   const res = await apiFetch(`${API}/inventory/excursions/${excursionId}/acknowledge`, {
     method: "POST",
     credentials: "same-origin",
@@ -2270,41 +1604,6 @@ export async function acknowledgeExcursion(excursionId: string, resolutionNote?:
   return readJson(res);
 }
 
-export type AuditPackPurchase = {
-  supplier: string;
-  po_count: number;
-  invoice_count: number;
-  total_invoiced_cents: number;
-  total_received_value_cents: number;
-};
-
-export type AuditPackGap = {
-  purchase_order_id: string;
-  po_number: string;
-  supplier: string;
-  status: string;
-  reason: string;
-};
-
-export type AuditPackPreview = {
-  venue: { id: string; name: string };
-  start_date: string;
-  end_date: string;
-  purchases_by_supplier: AuditPackPurchase[];
-  invoice_register: { invoice_number: string; total_cents: number; status: string }[];
-  missing_invoice_gaps: AuditPackGap[];
-  inventory_valuation: {
-    start_bottles: number;
-    start_value_cents: number;
-    end_bottles: number;
-    end_value_cents: number;
-  };
-  variance_and_shrinkage: { quantity_delta: number; cost_impact_cents: number; count_sessions: unknown[] };
-  comp_breakage_waste: { cost_impact_cents: number; movements: unknown[] };
-  retention: { document_retention_years: number; retain_until: string };
-  chain: { valid: boolean; checked: number; head_hash: string | null };
-};
-
 export async function previewAuditPack(startDate: string, endDate: string): Promise<AuditPackPreview> {
   const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
   const res = await apiFetch(`${API}/compliance/audit-pack/preview?${params}`, {
@@ -2313,110 +1612,6 @@ export async function previewAuditPack(startDate: string, endDate: string): Prom
   });
   return readJson(res);
 }
-
-export type PricingRule = {
-  id: string | null;
-  category: string;
-  cost_min_cents: number;
-  cost_max_cents: number | null;
-  bottle_multiple: number;
-  glass_pours_per_bottle: number;
-  glass_multiple: number;
-  round_to_cents: number;
-};
-
-export type ListItemRecord = {
-  id: string;
-  sku_id: string;
-  product_id: string | null;
-  list_id: string;
-  section: string;
-  section_id: string | null;
-  position: number;
-  category: string;
-  name: string;
-  producer: string;
-  region: string;
-  style: string;
-  vintage: string;
-  cost?: number;
-  pour_price: number;
-  bottle_price: number;
-  currency: string;
-  margin_pct?: number;
-  beverage_cost_pct?: number;
-  rule_bottle_price?: number;
-  rule_glass_price?: number;
-  line_cost?: number;
-  band: string;
-};
-
-export type ListSectionRecord = {
-  id: string;
-  name: string;
-  position: number;
-  budget_share_pct: number | null;
-  spend?: number;
-  item_count: number;
-  margin_pct?: number;
-  beverage_cost_pct?: number;
-};
-
-export type CoverageCell = {
-  category: string;
-  style: string;
-  band: string;
-  status: string;
-  product_id: string | null;
-  sku_id: string | null;
-  name: string;
-  dish_id: string | null;
-  dish_name: string;
-};
-
-export type ListCandidate = {
-  sku_id: string;
-  product_id: string;
-  name: string;
-  category: string;
-  style: string;
-  band: string;
-  cost?: number;
-};
-
-export type HealthFlag = {
-  code: string;
-  message: string;
-  dish_id: string | null;
-  item_id: string | null;
-  sku_id: string | null;
-  section: string;
-};
-
-export type BeverageListDetail = {
-  id: string;
-  list_id: string;
-  name: string;
-  budget: number;
-  spent: number;
-  remaining: number;
-  currency: string;
-  target_margin: number;
-  target_beverage_cost_pct: number | null;
-  concept: string;
-  price_tier: string;
-  notes: string;
-  item_count: number;
-  items: ListItemRecord[];
-  sections: ListSectionRecord[];
-  cells: CoverageCell[];
-  suggestions: CoverageCell[];
-  gaps: string[];
-  health: { list_id: string; flags: HealthFlag[] };
-  candidates: ListCandidate[];
-  bottles: number;
-  capacity_bottles: number | null;
-};
 
 export async function curateList(body: {
   budget: number;
@@ -2467,67 +1662,7 @@ export async function deleteListItem(listId: string, itemId: string): Promise<Be
   return readJson(res);
 }
 
-export type ListDiffRow = {
-  sku_id: string;
-  name: string;
-  section: string;
-  position: number;
-  bottle_price_cents: number;
-  glass_price_cents: number;
-  currency: string;
-  previous_bottle_price_cents?: number;
-  previous_glass_price_cents?: number;
-  previous_section?: string;
-  previous_position?: number;
-};
-
-export type ListDiff = {
-  added: ListDiffRow[];
-  removed: ListDiffRow[];
-  repriced: ListDiffRow[];
-  moved: ListDiffRow[];
-};
-
-export type ListVersionRecord = {
-  id: string;
-  list_id: string;
-  list_name: string;
-  number: number;
-  status: string;
-  can_submit: boolean;
-  can_decide: boolean;
-  public_path: string | null;
-  public_token: string | null;
-  approval: {
-    id?: string;
-    decision?: string;
-    required_role?: string;
-    comment?: string | null;
-    decided_at?: string | null;
-  } | null;
-  diff: ListDiff;
-};
-
-export type PublicListItem = {
-  name: string;
-  detail: string;
-  bottle_price_cents: number;
-  glass_price_cents: number;
-  currency: string;
-};
-
-export type PublicList = {
-  venue_name: string;
-  published_at: string | null;
-  list: {
-    list_name: string;
-    number: number;
-    currency: string;
-    sections: { name: string; items: PublicListItem[] }[];
-  };
-};
-
-export async function listVersions(listId: string): Promise<{ list_id: string; can_submit: boolean; versions: ListVersionRecord[] }> {
+export async function listVersions(listId: string): Promise<ListVersionIndex> {
   const res = await apiFetch(`${API}/lists/${listId}/versions`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -2573,78 +1708,27 @@ export async function getPublicList(token: string): Promise<PublicList> {
   return readJson(res);
 }
 
-export type PosStatus = {
-  connected: boolean;
-  provider: string;
-  status: string;
-  location_id: string;
-  location_name: string;
-  key_last4: string;
-  masked: string;
-  last_synced_at: string | null;
-  watermark: string;
-  demo_mode: boolean;
-  locations?: { location_id: string; name: string }[];
-};
-
-export type PosCatalogItem = {
-  item_id: string;
-  variation_id: string;
-  name: string;
-  variation_name: string;
-  sku_hint: string;
-};
-
-export type PosMapping = {
-  id: string;
-  provider: string;
-  item_id: string;
-  variation_id: string;
-  sku_id: string;
-  sku: string;
-  pour_ml: number | null;
-  units_per_sale: number;
-};
-
-export type PosRun = {
-  id: string;
-  status: string;
-  started_at: string | null;
-  finished_at: string | null;
-  posted: number;
-  skipped: number;
-  unmapped_count: number;
-  error: string;
-};
-
-export type PosGapItem = {
-  variation_id: string;
-  item_id: string;
-  name: string;
-  quantity: string;
-};
-
 export async function getPosStatus(): Promise<PosStatus> {
   const res = await apiFetch(`${API}/pos/status`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function getPosCatalog(): Promise<{ items: PosCatalogItem[] }> {
+export async function getPosCatalog(): Promise<PosCatalog> {
   const res = await apiFetch(`${API}/pos/catalog`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function getPosMappings(): Promise<{ mappings: PosMapping[] }> {
+export async function getPosMappings(): Promise<PosMappingList> {
   const res = await apiFetch(`${API}/pos/mappings`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function getPosRuns(): Promise<{ runs: PosRun[] }> {
+export async function getPosRuns(): Promise<PosRunList> {
   const res = await apiFetch(`${API}/pos/runs`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
 
-export async function getPosGaps(): Promise<{ items: PosGapItem[] }> {
+export async function getPosGaps(): Promise<PosGapList> {
   const res = await apiFetch(`${API}/pos/gaps`, { cache: "no-store", credentials: "same-origin" });
   return readJson(res);
 }
@@ -2680,7 +1764,7 @@ export async function savePosMapping(body: {
   sku: string;
   pour_ml: number | null;
   units_per_sale: string;
-}): Promise<{ mapping: PosMapping }> {
+}): Promise<PosMappingEnvelope> {
   const res = await apiFetch(`${API}/pos/mappings`, {
     method: "POST",
     credentials: "same-origin",
@@ -2690,24 +1774,10 @@ export async function savePosMapping(body: {
   return readJson(res);
 }
 
-export async function syncPos(): Promise<{ posted: number; skipped: number; unmapped: PosGapItem[] }> {
+export async function syncPos(): Promise<PosSyncResult> {
   const res = await apiFetch(`${API}/pos/sync`, { method: "POST", credentials: "same-origin" });
   return readJson(res);
 }
-
-export type UsageReport = {
-  month: string;
-  monthly_spend_cap_cents: number | null;
-  spent_cents: number;
-  spent_micro_usd: number;
-  requests_per_minute: number | null;
-  requests_this_minute: number;
-  by_subagent: { subagent: string; calls: number; tokens_in: number; tokens_out: number; cost_micro_usd: number }[];
-  by_day: { day: string; calls: number; cost_micro_usd: number }[];
-  cap_status: string;
-  can_edit: boolean;
-  demo: boolean;
-};
 
 export async function getUsage(): Promise<UsageReport> {
   const res = await apiFetch(`${API}/usage`, { cache: "no-store", credentials: "same-origin" });
@@ -2727,7 +1797,7 @@ export async function saveUsageLimits(body: {
   return readJson(res);
 }
 
-export async function getAuditQuery(kind: string, offset = 0): Promise<{ audit_table: unknown }> {
+export async function getAuditQuery(kind: string, offset = 0): Promise<AuditorQuery> {
   const path: Record<string, string> = {
     stock: "/compliance/queries/stock",
     conditions: "/compliance/queries/conditions",

@@ -33,6 +33,7 @@ from madira.auth import router as auth_router
 from madira.config import FRONTEND_ORIGIN, HOST, PORT
 from madira.db import init_db
 from madira.domain.errors import Unavailable
+from madira.response_schema import install_response_models
 from madira.seed import seed
 from madira.tenancy import TenancyMiddleware
 
@@ -73,6 +74,8 @@ app.include_router(reminders_router)
 app.include_router(queries_router)
 app.include_router(usage_router)
 app.include_router(fixtures_router)
+
+install_response_models(app)
 
 
 @app.exception_handler(Unavailable)
