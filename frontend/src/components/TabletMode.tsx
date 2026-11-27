@@ -316,7 +316,12 @@ export function TabletSettings() {
       {state.clearable.length > 0 ? (
         <ul className="mt-4 flex flex-col gap-2">
           {state.clearable.map((person) => (
-            <li key={person.user_id} className="flex items-center justify-between gap-3 text-sm" data-testid="tablet-clear-row">
+            <li
+              key={person.user_id}
+              className="flex items-center justify-between gap-3 text-sm"
+              data-testid="tablet-clear-row"
+              data-name={person.name}
+            >
               <span className="min-w-0 truncate">{personLabel(person)}</span>
               <button
                 type="button"

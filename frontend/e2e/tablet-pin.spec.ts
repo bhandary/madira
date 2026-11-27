@@ -29,10 +29,13 @@ async function savePin(page: Page, pin: string) {
 async function prepareStaffPin(page: Page) {
   await page.goto("/settings");
   await expect(page.getByTestId("tablet-enable")).toBeVisible();
-  const anaRow = page.getByTestId("tablet-clear-row").filter({ hasText: "Ana" });
+  const anaRow = page.locator('[data-testid="tablet-clear-row"][data-name="Ana"]');
   if (await anaRow.count()) {
     const cleared = page.waitForResponse(
-      (res) => res.url().includes("/pin") && res.request().method() === "DELETE",
+      (res) =>
+        res.url().includes("/team/members/") &&
+        res.url().includes("/pin") &&
+        res.request().method() === "DELETE",
     );
     await anaRow.getByTestId("tablet-clear-pin").click();
     await cleared;
