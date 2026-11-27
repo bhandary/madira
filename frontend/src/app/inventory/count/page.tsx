@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CountSheet, formatCount } from "@/components/CountSheet";
 import { VarianceReport, type VarianceReportData } from "@/components/VarianceReport";
 import {
@@ -54,14 +54,17 @@ export default function CountPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const proposalLoad = useRef(0);
 
   const refreshProposals = useCallback(async () => {
+    const token = ++proposalLoad.current;
     const body = await listParProposals("pending");
-    setProposals(body.proposals || []);
+    if (token === proposalLoad.current) setProposals(body.proposals || []);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+    const token = ++proposalLoad.current;
     Promise.all([listLocations(), getCellar(), listCountSessions(), listParProposals("pending")])
       .then(([places, cellar, sessions, pars]) => {
         if (cancelled) return;
@@ -69,7 +72,7 @@ export default function CountPage() {
         setItems(cellar.items || []);
         const cellarPlace = (places.locations || []).find((place) => place.name === "Main Cellar");
         setLocationId((current) => current || cellarPlace?.id || places.locations?.[0]?.id || "");
-        setProposals(pars.proposals || []);
+        if (token === proposalLoad.current) setProposals(pars.proposals || []);
         setOpenSessions((sessions.sessions || []).filter((row) => row.status === "in_progress"));
         setLoaded(true);
       })
@@ -510,8 +513,11 @@ export default function CountPage() {
           onClick={() => {
             setBusy(true);
             setError("");
+            const token = ++proposalLoad.current;
             generateParProposals()
-              .then((body) => setProposals(body.proposals || []))
+              .then((body) => {
+                if (token === proposalLoad.current) setProposals(body.proposals || []);
+              })
               .catch((err: unknown) => setError(err instanceof Error ? err.message : "Par proposals could not be generated."))
               .finally(() => setBusy(false));
           }}
