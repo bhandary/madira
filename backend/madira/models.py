@@ -113,6 +113,43 @@ class Membership(Base):
     role: Mapped[str] = mapped_column(String(32))
     # Floor role for lessons: server, bartender, barback, or host. Empty for everyone else.
     position: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # scrypt string. Never the PIN itself.
+    pin_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    pin_failures: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    pin_locked_until: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class SharedTablet(Base):
+    """One browser signed in by an Owner or Manager and shared at a venue."""
+
+    __tablename__ = "shared_tablets"
+    __table_args__ = (CheckConstraint("pin_failures >= 0", name="ck_shared_tablets_pin_failures"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    host_user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
+    pin_failures: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    pin_locked_until: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    disabled_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class TabletActor(Base):
+    """The person currently using a shared tablet. Idle expiry is ``expires_at``."""
+
+    __tablename__ = "tablet_actors"
+
+    id: Mapped[uuid.UUID] = _pk()
+    tablet_id: Mapped[uuid.UUID] = _fk("shared_tablets.id", index=True)
+    organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    created_at: Mapped[datetime] = _stamp()
 
 
 class Product(Base):

@@ -34,6 +34,7 @@ def hermetic_llm_env(monkeypatch):
     monkeypatch.delenv("MADIRA_S3_ACCESS_KEY", raising=False)
     monkeypatch.delenv("MADIRA_S3_SECRET_KEY", raising=False)
     monkeypatch.delenv("MADIRA_S3_URL_EXPIRES", raising=False)
+    monkeypatch.delenv("MADIRA_TABLET_IDLE_SECONDS", raising=False)
     monkeypatch.delenv("MADIRA_DEMO_MODE", raising=False)
     monkeypatch.delenv("MADIRA_LLM_VALIDATOR", raising=False)
     monkeypatch.delenv("MADIRA_OWNER_EMAIL", raising=False)

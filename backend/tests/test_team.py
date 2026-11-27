@@ -279,7 +279,7 @@ with engine.connect() as conn:
 command.upgrade(cfg, "head")
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert version == "0028_jobs"
+    assert version == "0029_tablet_pin"
     tables = set(sa.inspect(conn).get_table_names())
     assert {"venue_invites", "roleplay_sessions", "certificates"} <= tables
     invites = {row[1] for row in conn.execute(sa.text("PRAGMA table_info(venue_invites)"))}
@@ -301,7 +301,7 @@ with engine.connect() as conn:
 command.upgrade(cfg, "head")
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert version == "0028_jobs"
+    assert version == "0029_tablet_pin"
 print("migration-ok")
 '''
     proc = subprocess.run([sys.executable, "-c", script], cwd=ROOT, env=env, capture_output=True, text=True)

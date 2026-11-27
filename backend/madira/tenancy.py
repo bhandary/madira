@@ -56,6 +56,8 @@ class RequestContext:
     venue_id: uuid.UUID
     organization_id: uuid.UUID
     role: str
+    # True when this request is a PIN switch on a shared tablet, not a Google sign-in.
+    pin_session: bool = False
 
 
 def current_request() -> RequestContext | None:
@@ -313,19 +315,22 @@ def resolve_request(request: Request) -> RequestContext:
             venue = session.get(Venue, membership.venue_id)
             if venue is None:
                 raise HTTPException(status_code=403, detail="No venue membership.")
-            return _context_from(user, membership, venue)
-        if demo_posture():
-            ctx = ensure_demo_tenant(session)
+            host = _context_from(user, membership, venue)
+        elif demo_posture():
+            host = ensure_demo_tenant(session)
             # A real session already returned above. This cookie is demo-only.
             slug = (request.cookies.get(DEMO_PERSONA_COOKIE) or "").strip().lower()
             if slug and slug != "owner":
                 switched = persona_context(session, slug)
                 if switched is not None:
-                    return switched
-            return ctx
-        raise HTTPException(status_code=401, detail="Sign in required.")
+                    host = switched
+        else:
+            raise HTTPException(status_code=401, detail="Sign in required.")
     finally:
         session.close()
+    from madira.domain.tablet import overlay_tablet
+
+    return overlay_tablet(request, host)
 
 
 _EXEMPT = {"/health", "/status", "/fixtures/sample-menu", "/docs", "/redoc", "/openapi.json"}

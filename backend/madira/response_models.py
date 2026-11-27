@@ -75,6 +75,31 @@ class OkResponse(APIModel):
     ok: bool
 
 
+class TabletPerson(APIModel):
+    user_id: str
+    name: str
+    role: str
+    position: str | None
+
+
+class TabletState(APIModel):
+    enabled: bool
+    locked: bool
+    idle_seconds: int
+    expires_at: str | None
+    pin_session: bool
+    can_manage: bool
+    self_has_pin: bool
+    actor: TabletPerson | None
+    candidates: list[TabletPerson]
+    clearable: list[TabletPerson]
+
+
+class PinSaved(APIModel):
+    ok: bool
+    has_pin: bool
+
+
 class DemoPersona(APIModel):
     slug: str
     name: str
@@ -2378,6 +2403,14 @@ def _routes() -> dict[tuple[str, str], type[APIModel]]:
         ("get", "/auth/demo-personas"): DemoPersonaList,
         ("post", "/auth/demo-persona"): DemoPersona,
         ("post", "/auth/logout"): OkResponse,
+        ("get", "/tablet"): TabletState,
+        ("post", "/me/pin"): PinSaved,
+        ("delete", "/team/members/{user_id}/pin"): PinSaved,
+        ("post", "/tablet/enable"): TabletState,
+        ("post", "/tablet/disable"): TabletState,
+        ("post", "/tablet/unlock"): TabletState,
+        ("post", "/tablet/lock"): TabletState,
+        ("post", "/tablet/touch"): TabletState,
         ("get", "/health"): HealthPayload,
         ("get", "/status"): StatusPayload,
         ("get", "/fixtures/sample-menu"): SampleMenu,
