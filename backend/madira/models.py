@@ -420,6 +420,33 @@ class Pairing(Base):
     sku: Mapped[Sku | None] = relationship()
 
 
+class PairingCache(Base):
+    """One deterministic slot assignment for a dish at a venue.
+
+    The key covers the dish version, the published list versions, and the
+    bottles, stock, notes, and pins that the scorer reads. A different venue
+    id never matches. Copy text from the model is not stored here.
+    """
+
+    __tablename__ = "pairing_cache"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "dish_id", name="uq_pairing_cache_venue_dish"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    dish_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("dishes.id", ondelete="CASCADE"), index=True)
+    menu_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("menu_versions.id", ondelete="CASCADE"), index=True
+    )
+    list_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("list_versions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    cache_key: Mapped[str] = mapped_column(String(64))
+    result: Mapped[list] = mapped_column(JSON)
+    created_at: Mapped[datetime] = _stamp()
+
+
 class PairingPreference(Base):
     """A pin, swap, or rejection the sommelier made for a dish, across versions."""
 

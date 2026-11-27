@@ -11,7 +11,7 @@ import hashlib
 import json
 from typing import Callable
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from madira.domain.errors import DraftFailed
 
@@ -195,41 +195,22 @@ def _load_json(raw: str) -> dict:
     return data
 
 
-def _safe_error(exc: Exception) -> str:
-    if isinstance(exc, ValidationError):
-        parts = []
-        for err in exc.errors():
-            loc = ".".join(str(part) for part in err["loc"]) or "draft"
-            parts.append(f"{loc}: {err['msg']}")
-        return "; ".join(parts)[:500]
-    return "The response was not JSON."
-
-
-def _retry_prompt(prompt: str, error: str) -> str:
-    return (
-        prompt
-        + "\nThe previous JSON did not match the schema. "
-        + "Fix these fields and return one JSON object:\n"
-        + error
-        + "\n"
-        + SCHEMA_HINT
-        + "\n"
-    )
-
-
 def complete_menu(prompt: str, completer: Completer, image: tuple[str, bytes] | None = None) -> MenuDraft:
-    """Validate one completion. On failure, retry once, then raise."""
+    """Validate one completion. On failure, retry with the field error."""
 
-    error = ""
-    for attempt in (1, 2):
-        try:
-            raw = completer(prompt if attempt == 1 else _retry_prompt(prompt, error), image)
-        except DraftFailed:
-            raise
-        except Exception as exc:
-            raise DraftFailed(f"The menu extraction failed ({type(exc).__name__}).", 502) from exc
-        try:
-            return MenuDraft.model_validate(_load_json(raw))
-        except (json.JSONDecodeError, ValidationError) as exc:
-            error = _safe_error(exc)
-    raise DraftFailed("The menu did not match the schema after one retry.")
+    from madira.structured_output import run_structured
+
+    def call(text: str) -> str:
+        hinted = text if text == prompt else text + SCHEMA_HINT + "\n"
+        return completer(hinted, image)
+
+    def parse(raw: str) -> MenuDraft:
+        return MenuDraft.model_validate(_load_json(raw))
+
+    return run_structured(
+        prompt,
+        call,
+        parse,
+        label="The menu extraction",
+        failure="The menu did not match the schema after {n} attempts.",
+    )

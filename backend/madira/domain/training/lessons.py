@@ -11,7 +11,7 @@ import json
 import re
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -71,13 +71,11 @@ def live_complete(prompt: str) -> str:
     if runtime.demo_mode:
         raise DraftFailed("The lesson draft failed because the model is not live.", 502)
     try:
-        from langchain.chat_models import init_chat_model
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        kwargs = {}
-        if runtime.api_key:
-            kwargs["api_key"] = runtime.api_key
-        model = init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+        from madira.model_tiers import bind_chat_model
+
+        model = bind_chat_model("staff-trainer")
         result = model.invoke(
             [
                 SystemMessage(
@@ -161,16 +159,6 @@ def _load_json(raw: str) -> dict:
     return data
 
 
-def _safe_error(exc: Exception) -> str:
-    if isinstance(exc, ValidationError):
-        parts = []
-        for err in exc.errors():
-            loc = ".".join(str(part) for part in err["loc"]) or "draft"
-            parts.append(f"{loc}: {err['msg']}")
-        return "; ".join(parts)[:500]
-    return str(exc)[:500] or "The response was not JSON."
-
-
 def complete_lesson(
     prompt: str,
     completer,
@@ -179,21 +167,20 @@ def complete_lesson(
     standard_ids: set[str],
     sku_ids: set[str],
 ) -> LessonDraft:
-    error = ""
-    for attempt in (1, 2):
-        try:
-            raw = completer(prompt if attempt == 1 else prompt + "\nThe previous JSON did not match:\n" + error)
-        except DraftFailed:
-            raise
-        except Exception as exc:
-            raise DraftFailed(f"The lesson draft failed ({type(exc).__name__}).", 502) from exc
-        try:
-            draft = LessonDraft.model_validate(_load_json(raw))
-            _check_draft(draft, position=position, standard_ids=standard_ids, sku_ids=sku_ids)
-            return draft
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            error = _safe_error(exc)
-    raise DraftFailed("The lesson did not match the schema after one retry.")
+    from madira.structured_output import run_structured
+
+    def parse(raw: str) -> LessonDraft:
+        draft = LessonDraft.model_validate(_load_json(raw))
+        _check_draft(draft, position=position, standard_ids=standard_ids, sku_ids=sku_ids)
+        return draft
+
+    return run_structured(
+        prompt,
+        completer,
+        parse,
+        label="The lesson draft",
+        failure="The lesson did not match the schema after {n} attempts.",
+    )
 
 
 def _check_draft(draft: LessonDraft, *, position: str, standard_ids: set[str], sku_ids: set[str]) -> None:

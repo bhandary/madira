@@ -191,9 +191,10 @@ def finish_run(
 ) -> None:
     """Write one usage row per subagent. Demo cost is zero."""
 
+    from madira.model_tiers import model_for_specialist
+
     runtime = resolve_runtime()
     demo = bool(runtime.demo_mode)
-    model = "madira-demo-fixtures" if demo else (runtime.model or "")
     incoming = 0 if tokens_in is None else max(int(tokens_in), 0)
     outgoing = _tokens(reply) if tokens_out is None else max(int(tokens_out), 0)
     names = [name.strip() for name in delegated if (name or "").strip()]
@@ -210,6 +211,7 @@ def finish_run(
         run.reply = (reply or "")[:4000]
         run.delegated = names
         for name, part_in, part_out in zip(names, shares_in, shares_out):
+            model = model_for_specialist(name, runtime)
             micro, label = estimate_cost(model, part_in, part_out, demo=demo)
             session.add(
                 AgentUsage(

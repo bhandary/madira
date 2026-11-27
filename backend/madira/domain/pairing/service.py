@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from madira.domain.catalog.service import beverage_fields
 from madira.domain.errors import DraftFailed, NotFound
+from madira.domain.pairing.cache import digest, read_result, write_result
 from madira.domain.pairing.copy import write_copy
 from madira.domain.pairing.profiles import derive_profile
 from madira.domain.pairing.slots import (
@@ -31,6 +32,7 @@ from madira.models import (
     Dish,
     InventoryItem,
     ListItem,
+    ListVersion,
     Menu,
     MenuVersion,
     Pairing,
@@ -205,7 +207,7 @@ def _pair_version(session: Session, menu: Menu, version: MenuVersion) -> None:
             if prior:
                 _replace(session, dish, [_copy_row(dish, row) for row in prior])
                 continue
-        choices = _choices_for(session, dish, listed, notes, eligible)
+        choices = _cached_or_score(session, dish, listed, stock, notes, eligible)
         texts = write_copy(dish_profile(dish), choices)
         rows = []
         for choice in choices:
@@ -250,6 +252,170 @@ def _pair_version(session: Session, menu: Menu, version: MenuVersion) -> None:
                 )
             )
         _replace(session, dish, rows)
+
+
+def _cached_or_score(session, dish: Dish, listed, stock, notes, eligible: list[Candidate]) -> list[Choice]:
+    key, list_version_id = _cache_identity(session, dish, stock, notes, eligible)
+    stored = read_result(session, dish.venue_id, dish.id, key)
+    if stored is not None:
+        loaded = _load_choices(session, dish, listed, notes, stored)
+        if loaded is not None:
+            return loaded
+    choices = _choices_for(session, dish, listed, notes, eligible)
+    write_result(
+        session,
+        venue_id=dish.venue_id,
+        dish_id=dish.id,
+        menu_version_id=dish.menu_version_id,
+        list_version_id=list_version_id,
+        cache_key=key,
+        result=_dump_choices(choices),
+    )
+    return choices
+
+
+def _cache_identity(session, dish: Dish, stock, notes, eligible: list[Candidate]) -> tuple[str, uuid.UUID | None]:
+    rejected = _rejected_ids(session, dish.venue_id, dish.stable_id)
+    prefs = _preferences(session, dish.venue_id, dish.stable_id)
+    held = []
+    for slot, (kind, sku_id) in sorted(prefs.items()):
+        saved = _saved_copy(session, dish, slot, sku_id)
+        held.append(
+            {
+                "slot": slot,
+                "kind": kind,
+                "sku_id": str(sku_id),
+                "copy": None if saved is None else [saved[0], saved[1], saved[2]],
+            }
+        )
+    versions = _published_versions(session, dish.venue_id)
+    profile = dish_profile(dish)
+    bottles = []
+    for item in sorted(eligible, key=lambda row: str(row.sku_id)):
+        drink = item.profile
+        bottles.append(
+            {
+                "sku_id": str(item.sku_id),
+                "glass": item.glass_price,
+                "bottle": item.bottle_price,
+                "currency": item.currency,
+                "category": item.category,
+                "style": item.style,
+                "name": item.name,
+                "profile": [
+                    drink.richness,
+                    drink.acidity,
+                    drink.sweetness,
+                    drink.spice,
+                    drink.umami,
+                    drink.tannin,
+                    drink.label,
+                ],
+            }
+        )
+    note_rows = []
+    for product_id, note in sorted(notes.items(), key=lambda item: str(item[0])):
+        note_rows.append(
+            {
+                "product_id": str(product_id),
+                "id": str(note.id),
+                "body": note.body,
+                "acidity": note.acidity,
+                "tannin": note.tannin,
+                "sweetness": note.sweetness,
+                "oak": note.oak,
+                "intensity": note.intensity,
+            }
+        )
+    payload = {
+        "venue_id": str(dish.venue_id),
+        "dish_id": str(dish.id),
+        "menu_version_id": str(dish.menu_version_id),
+        "content_hash": dish.content_hash or "",
+        "price": int(dish.price or 0),
+        "dish": {
+            "name": profile.name,
+            "main_component": profile.main_component,
+            "cooking_method": profile.cooking_method,
+            "sauce": profile.sauce,
+            "richness": profile.richness,
+            "acidity": profile.acidity,
+            "sweetness": profile.sweetness,
+            "spice": profile.spice,
+            "umami": profile.umami,
+        },
+        "list_versions": versions,
+        "bottles": bottles,
+        "notes": note_rows,
+        "rejected": sorted(str(item) for item in rejected),
+        "prefs": held,
+        "stock_out": sorted(str(sku) for sku, qty in stock.items() if int(qty) <= 0),
+    }
+    list_version_id = uuid.UUID(versions[-1][0]) if versions else None
+    return digest(payload), list_version_id
+
+
+def _published_versions(session: Session, venue_id: uuid.UUID) -> list[list]:
+    rows = session.scalars(
+        select(ListVersion)
+        .where(ListVersion.venue_id == venue_id, ListVersion.status == "published")
+        .order_by(ListVersion.list_id, ListVersion.number, ListVersion.id)
+    ).all()
+    return [[str(row.id), int(row.number), str(row.list_id)] for row in rows]
+
+
+def _dump_choices(choices: list[Choice]) -> list[dict]:
+    dumped = []
+    for choice in choices:
+        dumped.append(
+            {
+                "slot": choice.slot,
+                "sku_id": None if choice.candidate is None else str(choice.candidate.sku_id),
+                "status": choice.status,
+                "gap": choice.gap,
+                "rationale": choice.rationale,
+                "server_script": choice.server_script,
+                "confidence": choice.confidence,
+                "needs_copy": bool(choice.needs_copy),
+            }
+        )
+    return dumped
+
+
+def _load_choices(session, dish: Dish, listed, notes, dumped: list) -> list[Choice] | None:
+    if len(dumped) != len(SLOTS):
+        return None
+    choices = []
+    for item in dumped:
+        if not isinstance(item, dict) or item.get("slot") not in SLOTS:
+            return None
+        raw_sku = item.get("sku_id")
+        candidate = None
+        if raw_sku:
+            try:
+                sku_id = uuid.UUID(str(raw_sku))
+            except ValueError:
+                return None
+            candidate = _candidate(session, dish.venue_id, sku_id, listed.get(sku_id), notes)
+            if candidate is None:
+                return None
+        elif item.get("status") != "gap":
+            return None
+        choices.append(
+            Choice(
+                item["slot"],
+                candidate,
+                str(item.get("status") or "suggested"),
+                str(item.get("gap") or ""),
+                str(item.get("rationale") or ""),
+                str(item.get("server_script") or ""),
+                str(item.get("confidence") or ""),
+                bool(item.get("needs_copy")),
+            )
+        )
+    if [row.slot for row in choices] != list(SLOTS):
+        return None
+    return choices
 
 
 def _choices_for(session, dish: Dish, listed, notes, eligible: list[Candidate]) -> list[Choice]:

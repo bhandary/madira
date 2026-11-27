@@ -113,13 +113,11 @@ def live_complete(prompt: str) -> str:
     if runtime.demo_mode:
         raise DraftFailed("Roleplay failed because the model is not live.", 502)
     try:
-        from langchain.chat_models import init_chat_model
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        kwargs = {}
-        if runtime.api_key:
-            kwargs["api_key"] = runtime.api_key
-        model = init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+        from madira.model_tiers import bind_chat_model
+
+        model = bind_chat_model("staff-trainer")
         result = model.invoke(
             [
                 SystemMessage(
@@ -277,17 +275,34 @@ def _score_prompt(catalog: list[dict], staff_turns: list[str]) -> str:
 
 def _guest_line(persona: str, index: int, dish_name: str, catalog: list[dict], transcript: list[dict]) -> dict:
     if _guest_override is not None or not demo_posture():
+        from madira.structured_output import run_structured
+
         fn = _guest_override if _guest_override is not None else live_complete
-        raw = _invoke(fn, _guest_prompt(persona, dish_name, catalog, transcript))
-        try:
-            parsed = GuestIn.model_validate(_json_object(raw))
-        except ValidationError as exc:
-            raise DraftFailed("Roleplay failed (the model did not return JSON).", 502) from exc
-        text = " ".join(parsed.text.split())
-        if not text or len(text) > 2000:
-            raise DraftFailed("Roleplay failed (empty response).", 502)
-        ids = _bind_products(text, parsed.product_ids, catalog)
-        return {"role": "guest", "text": text, "product_ids": ids}
+
+        def parse(raw: str) -> dict:
+            try:
+                payload = _json_object(raw)
+            except DraftFailed as exc:
+                raise ValueError("The response was not JSON.") from exc
+            parsed = GuestIn.model_validate(payload)
+            text = " ".join(parsed.text.split())
+            if not text or len(text) > 2000:
+                raise ValueError("empty response")
+            ids = _bind_products(text, parsed.product_ids, catalog)
+            return {"role": "guest", "text": text, "product_ids": ids}
+
+        def give_up(exc: Exception, _error: str, _n: int) -> DraftFailed:
+            if isinstance(exc, ValueError) and "empty response" in str(exc):
+                return DraftFailed("Roleplay failed (empty response).", 502)
+            return DraftFailed("Roleplay failed (the model did not return JSON).", 502)
+
+        return run_structured(
+            _guest_prompt(persona, dish_name, catalog, transcript),
+            lambda text: _invoke(fn, text),
+            parse,
+            label="Roleplay",
+            give_up=give_up,
+        )
     text, ids = _scripted_guest(persona, index, dish_name, catalog)
     _bind_products(text, ids, catalog)
     return {"role": "guest", "text": text, "product_ids": ids}
@@ -339,15 +354,27 @@ def _heuristic(staff_turns: list[str], catalog: list[dict]) -> dict:
 
 def _score_rubric(staff_turns: list[str], catalog: list[dict]) -> tuple[dict, int]:
     if _score_override is not None or not demo_posture():
+        from madira.structured_output import run_structured
+
         fn = _score_override if _score_override is not None else live_complete
-        raw = _invoke(fn, _score_prompt(catalog, staff_turns))
-        try:
-            parsed = ScoreIn.model_validate(_json_object(raw))
-        except ValidationError as exc:
-            raise DraftFailed("Roleplay failed (the model did not return JSON).", 502) from exc
-        proposed = {
-            key: {"pass": getattr(parsed, key).passed, "evidence": getattr(parsed, key).evidence} for key in CRITERIA
-        }
+
+        def parse(raw: str) -> dict:
+            try:
+                payload = _json_object(raw)
+            except DraftFailed as exc:
+                raise ValueError("The response was not JSON.") from exc
+            parsed = ScoreIn.model_validate(payload)
+            return {
+                key: {"pass": getattr(parsed, key).passed, "evidence": getattr(parsed, key).evidence} for key in CRITERIA
+            }
+
+        proposed = run_structured(
+            _score_prompt(catalog, staff_turns),
+            lambda text: _invoke(fn, text),
+            parse,
+            label="Roleplay",
+            failure="Roleplay failed (the model did not return JSON).",
+        )
     else:
         proposed = _heuristic(staff_turns, catalog)
     return _apply_evidence(proposed, staff_turns)

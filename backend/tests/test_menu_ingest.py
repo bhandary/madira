@@ -140,7 +140,7 @@ def test_schema_retry_then_a_clear_error(client: TestClient):
     set_menu_completer(still_invalid)
     failed = _post(client, data={"text": "Grilled octopus, chili, olive oil — $24\n"})
     assert failed.status_code == 422
-    assert failed.json()["detail"] == "The menu did not match the schema after one retry."
+    assert failed.json()["detail"] == "The menu did not match the schema after 2 attempts."
     assert len(calls) == 2
     assert "Dungeness" not in failed.text
 

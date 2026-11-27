@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Callable
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from madira.domain.catalog.identity import clean
 from madira.domain.errors import DraftFailed
@@ -83,13 +83,11 @@ def live_complete(prompt: str) -> str:
     if runtime.demo_mode:
         raise DraftFailed("The list notes failed because the model is not live.", 502)
     try:
-        from langchain.chat_models import init_chat_model
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        kwargs = {}
-        if runtime.api_key:
-            kwargs["api_key"] = runtime.api_key
-        model = init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+        from madira.model_tiers import bind_chat_model
+
+        model = bind_chat_model("list-curator")
         result = model.invoke(
             [
                 SystemMessage(
@@ -149,16 +147,6 @@ def _load_json(raw: str) -> dict:
     return data
 
 
-def _safe_error(exc: Exception) -> str:
-    if isinstance(exc, ValidationError):
-        parts = []
-        for err in exc.errors():
-            loc = ".".join(str(part) for part in err["loc"]) or "draft"
-            parts.append(f"{loc}: {err['msg']}")
-        return "; ".join(parts)[:500]
-    return "The response was not JSON."
-
-
 def _aligned(names: list[str], draft: SectionNotes) -> dict[str, str]:
     wanted = {name.casefold(): name for name in names}
     found: dict[str, str] = {}
@@ -173,26 +161,25 @@ def _aligned(names: list[str], draft: SectionNotes) -> dict[str, str]:
 
 
 def draft_section_notes(names: list[str]) -> dict[str, str]:
-    """Validate one completion. On failure, retry once, then raise."""
+    """Validate one completion. On failure, retry with the field error."""
+
+    from madira.structured_output import run_structured
 
     ordered = [name for name in names if name]
     if not ordered:
         return {}
     prompt = notes_prompt(ordered)
-    completer = _completer()
-    error = ""
-    for attempt in (1, 2):
-        try:
-            raw = completer(prompt if attempt == 1 else prompt + "\nThe previous JSON did not match. Fix it:\n" + error)
-        except DraftFailed:
-            raise
-        except Exception as exc:
-            raise DraftFailed(f"The list notes failed ({type(exc).__name__}).", 502) from exc
-        try:
-            return _aligned(ordered, SectionNotes.model_validate(_load_json(raw)))
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            error = _safe_error(exc) if isinstance(exc, (ValidationError, json.JSONDecodeError)) else str(exc)
-    raise DraftFailed("The list notes did not match the schema after one retry.")
+
+    def parse(raw: str) -> dict[str, str]:
+        return _aligned(ordered, SectionNotes.model_validate(_load_json(raw)))
+
+    return run_structured(
+        prompt,
+        _completer(),
+        parse,
+        label="The list notes",
+        failure="The list notes did not match the schema after {n} attempts.",
+    )
 
 
 def join_notes(notes: dict[str, str], order: list[str]) -> str:
