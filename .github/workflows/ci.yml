@@ -118,10 +118,18 @@ jobs:
             fi
             sleep 1
           done
+          # Unhandled exceptions are already written here: uvicorn logs
+          # "Exception in ASGI application" with the traceback on stderr.
+          dump_server_logs() {
+            echo "===== frontend log (/tmp/madira-frontend.log) ====="
+            cat /tmp/madira-frontend.log 2>/dev/null || true
+            echo "===== backend log (backend/.venv/bin/python -m madira.main > /tmp/madira-backend.log 2>&1) ====="
+            cat /tmp/madira-backend.log 2>/dev/null || true
+          }
           if [ "$ready" -ne 1 ]; then
             echo "backend /health did not report demo mode"
             cat /tmp/madira-health.json 2>/dev/null || true
-            cat /tmp/madira-backend.log
+            dump_server_logs
             exit 1
           fi
 
@@ -145,16 +153,19 @@ jobs:
                 start_frontend
                 continue
               fi
-              cat /tmp/madira-frontend.log
+              dump_server_logs
               exit 1
             fi
             sleep 1
           done
           if [ "$ready" -ne 1 ]; then
-            cat /tmp/madira-frontend.log
+            dump_server_logs
             exit 1
           fi
-          npx playwright test --reporter=line --reporter=html
+          if ! npx playwright test --reporter=line --reporter=html; then
+            dump_server_logs
+            exit 1
+          fi
 
       - name: Upload Playwright report
         if: failure()
