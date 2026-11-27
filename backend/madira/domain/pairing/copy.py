@@ -13,7 +13,7 @@ import re
 import uuid
 from typing import Callable
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from madira.domain.errors import DraftFailed
 from madira.domain.pairing.slots import SLOTS, Choice, DishProfile, demo_copy
@@ -31,7 +31,7 @@ _UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}
 _override: Completer | None = None
 
 
-class InventedSku(Exception):
+class InventedSku(ValueError):
     pass
 
 
@@ -95,13 +95,11 @@ def live_complete(prompt: str) -> str:
     if runtime.demo_mode:
         raise DraftFailed("The pairing copy failed because the model is not live.", 502)
     try:
-        from langchain.chat_models import init_chat_model
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        kwargs = {}
-        if runtime.api_key:
-            kwargs["api_key"] = runtime.api_key
-        model = init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+        from madira.model_tiers import bind_chat_model
+
+        model = bind_chat_model("pairing-sommelier")
         result = model.invoke(
             [
                 SystemMessage(
@@ -199,16 +197,6 @@ def _load_json(raw: str) -> dict:
     return data
 
 
-def _safe_error(exc: Exception) -> str:
-    if isinstance(exc, ValidationError):
-        parts = []
-        for err in exc.errors():
-            loc = ".".join(str(part) for part in err["loc"]) or "copy"
-            parts.append(f"{loc}: {err['msg']}")
-        return "; ".join(parts)[:500]
-    return "The response was not JSON."
-
-
 def _check_skus(draft: CopyDraft, expected: dict[str, str]) -> None:
     found = {row.slot: row for row in draft.slots}
     if set(found) != set(expected):
@@ -224,33 +212,30 @@ def _check_skus(draft: CopyDraft, expected: dict[str, str]) -> None:
 
 
 def complete_copy(prompt: str, completer: Completer, expected: dict[str, str]) -> CopyDraft:
-    """Validate one completion. On failure, retry once, then raise."""
+    """Validate one completion. On failure, retry with the field error."""
 
-    error = ""
-    invented = False
-    for attempt in (1, 2):
-        text = prompt if attempt == 1 else (
-            prompt + "\nThe previous JSON did not match. Fix it and return one JSON object:\n" + error + "\n"
-        )
+    from madira.structured_output import run_structured
+
+    def parse(raw: str) -> CopyDraft:
+        draft = CopyDraft.model_validate(_load_json(raw))
         try:
-            raw = completer(text)
-        except DraftFailed:
-            raise
-        except Exception as exc:
-            raise DraftFailed(f"The pairing copy failed ({type(exc).__name__}).", 502) from exc
-        try:
-            draft = CopyDraft.model_validate(_load_json(raw))
             _check_skus(draft, expected)
-            return draft
-        except InventedSku:
-            invented = True
-            error = "A slot names a SKU that is not a candidate. Use only the sku ids you were given."
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            invented = False
-            error = _safe_error(exc)
-    if invented:
-        raise DraftFailed("The pairing copy named a SKU that is not a candidate.")
-    raise DraftFailed("The pairing copy did not match the schema after one retry.")
+        except InventedSku as exc:
+            raise InventedSku("A slot names a SKU that is not a candidate. Use only the sku ids you were given.") from exc
+        return draft
+
+    def give_up(exc: Exception, _error: str, n: int) -> DraftFailed:
+        if isinstance(exc, InventedSku):
+            return DraftFailed("The pairing copy named a SKU that is not a candidate.")
+        return DraftFailed(f"The pairing copy did not match the schema after {n} attempts.")
+
+    return run_structured(
+        prompt,
+        completer,
+        parse,
+        label="The pairing copy",
+        give_up=give_up,
+    )
 
 
 def write_copy(dish: DishProfile, choices: list[Choice]) -> dict[str, tuple[str, str]]:

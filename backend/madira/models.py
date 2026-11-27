@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
+    Date,
     Float,
     ForeignKey,
     Index,
@@ -17,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    event,
     func,
     text,
 )
@@ -27,6 +29,10 @@ from madira.money import DEFAULT_CURRENCY
 from madira.timestamps import AwareDateTime
 
 ROLES = ("Owner", "Sommelier", "Manager", "Staff", "Auditor")
+INVITE_POSITIONS = ("server", "bartender", "barback", "host")
+ROLEPLAY_PERSONAS = ("skeptic", "budget-conscious", "connoisseur", "celebration")
+ROLEPLAY_STATUSES = ("open", "scored")
+CERTIFICATE_KINDS = ("responsible_service", "food_handler", "other")
 
 
 def _pk():
@@ -45,6 +51,10 @@ def _stamp():
     return mapped_column(AwareDateTime, server_default=func.now())
 
 
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class Organization(Base):
     __tablename__ = "organizations"
 
@@ -55,17 +65,34 @@ class Organization(Base):
     document_retention_years: Mapped[int] = mapped_column(
         Integer, nullable=False, default=7, server_default=text("7")
     )
+    # Null means the limit is off. Cents and requests are integers. There is no plan or invoice.
+    monthly_spend_cap_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    requests_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Venue(Base):
     __tablename__ = "venues"
-    __table_args__ = (UniqueConstraint("organization_id", "slug", name="uq_venues_org_slug"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "slug", name="uq_venues_org_slug"),
+        CheckConstraint("invite_delivery IN ('draft_only')", name="ck_venues_invite_delivery"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
     name: Mapped[str] = mapped_column(String(200))
     slug: Mapped[str] = mapped_column(String(80))
     currency: Mapped[str] = _currency()
+    timezone: Mapped[str] = mapped_column(
+        String(64), default="America/Los_Angeles", server_default=text("'America/Los_Angeles'")
+    )
+    briefing_hour: Mapped[int] = mapped_column(Integer, default=15, server_default=text("15"))
+    invite_delivery: Mapped[str] = mapped_column(
+        String(16), default="draft_only", server_default=text("'draft_only'")
+    )
+    # Launch market. Seeded reminder rules are chosen from this code.
+    jurisdiction: Mapped[str] = mapped_column(
+        String(16), default="US-CA", server_default=text("'US-CA'")
+    )
 
 
 class Membership(Base):
@@ -84,6 +111,45 @@ class Membership(Base):
     user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     role: Mapped[str] = mapped_column(String(32))
+    # Floor role for lessons: server, bartender, barback, or host. Empty for everyone else.
+    position: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # scrypt string. Never the PIN itself.
+    pin_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    pin_failures: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    pin_locked_until: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class SharedTablet(Base):
+    """One browser signed in by an Owner or Manager and shared at a venue."""
+
+    __tablename__ = "shared_tablets"
+    __table_args__ = (CheckConstraint("pin_failures >= 0", name="ck_shared_tablets_pin_failures"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    host_user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
+    pin_failures: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    pin_locked_until: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    disabled_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class TabletActor(Base):
+    """The person currently using a shared tablet. Idle expiry is ``expires_at``."""
+
+    __tablename__ = "tablet_actors"
+
+    id: Mapped[uuid.UUID] = _pk()
+    tablet_id: Mapped[uuid.UUID] = _fk("shared_tablets.id", index=True)
+    organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    created_at: Mapped[datetime] = _stamp()
 
 
 class Product(Base):
@@ -135,6 +201,8 @@ class ProductVariant(Base):
     product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
     vintage: Mapped[str] = mapped_column(String(32), default="")
     bottle_size: Mapped[str] = mapped_column(String(32), default="")
+    drink_from_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    drink_by_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     product: Mapped[Product] = relationship(back_populates="variants")
     skus: Mapped[list[Sku]] = relationship(back_populates="variant")
 
@@ -163,6 +231,9 @@ class Sku(Base):
     par: Mapped[int] = mapped_column(Integer, default=0)
     cost: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
+    best_by: Mapped[date | None] = mapped_column(Date, nullable=True)
+    eighty_sixed_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    eighty_sixed_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
     variant: Mapped[ProductVariant] = relationship(back_populates="skus")
 
 
@@ -234,6 +305,35 @@ class ServiceCard(Base):
     created_at: Mapped[datetime] = _stamp()
     note: Mapped[TastingNote] = relationship()
     product: Mapped[Product] = relationship()
+
+
+class CatalogEmbedding(Base):
+    """One embedding for a venue SKU or an approved tasting note.
+
+    ``values`` is the vector as JSON so SQLite and a Postgres without pgvector
+    can rank in Python. A Postgres that has the vector extension also stores a
+    ``vector`` column, added by migration 0030 and not mapped here. ``model_name``
+    and ``dimension`` keep a model change from being mixed with older vectors.
+    """
+
+    __tablename__ = "catalog_embeddings"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "subject_type", "subject_id", name="uq_catalog_embeddings_subject"),
+        CheckConstraint("subject_type IN ('sku', 'note')", name="ck_catalog_embeddings_subject"),
+        CheckConstraint("dimension >= 1", name="ck_catalog_embeddings_dimension"),
+        Index("ix_catalog_embeddings_venue_model", "venue_id", "model_name", "dimension"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    subject_type: Mapped[str] = mapped_column(String(16))
+    subject_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
+    model_name: Mapped[str] = mapped_column(String(120))
+    dimension: Mapped[int] = mapped_column(Integer)
+    values: Mapped[list] = mapped_column(JSON)
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[datetime] = mapped_column(AwareDateTime, server_default=func.now())
 
 
 class Menu(Base):
@@ -336,6 +436,7 @@ class Dish(Base):
     confidence: Mapped[dict] = mapped_column(JSON, default=dict)
     content_hash: Mapped[str] = mapped_column(String(64), default="")
     needs_repairing: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_special: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     menu: Mapped[Menu] = relationship(back_populates="dishes", foreign_keys="Dish.menu_id")
     version: Mapped[MenuVersion] = relationship(back_populates="dishes", foreign_keys="Dish.menu_version_id")
     pairings: Mapped[list[Pairing]] = relationship(back_populates="dish", cascade="all, delete-orphan")
@@ -385,6 +486,33 @@ class Pairing(Base):
     sku: Mapped[Sku | None] = relationship()
 
 
+class PairingCache(Base):
+    """One deterministic slot assignment for a dish at a venue.
+
+    The key covers the dish version, the published list versions, and the
+    bottles, stock, notes, and pins that the scorer reads. A different venue
+    id never matches. Copy text from the model is not stored here.
+    """
+
+    __tablename__ = "pairing_cache"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "dish_id", name="uq_pairing_cache_venue_dish"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    dish_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("dishes.id", ondelete="CASCADE"), index=True)
+    menu_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("menu_versions.id", ondelete="CASCADE"), index=True
+    )
+    list_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("list_versions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    cache_key: Mapped[str] = mapped_column(String(64))
+    result: Mapped[list] = mapped_column(JSON)
+    created_at: Mapped[datetime] = _stamp()
+
+
 class PairingPreference(Base):
     """A pin, swap, or rejection the sommelier made for a dish, across versions."""
 
@@ -426,6 +554,41 @@ class PairingPreference(Base):
     sku: Mapped[Sku] = relationship()
 
 
+PRICING_CATEGORIES = ("wine", "beer", "spirits", "sake", "other", "*")
+
+
+class PricingRule(Base):
+    """Markup for one category and wholesale cost band. Margin is not stored here."""
+
+    __tablename__ = "pricing_rules"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "category", "cost_min_cents", name="uq_pricing_rules_band"),
+        CheckConstraint(
+            "category IN ('wine', 'beer', 'spirits', 'sake', 'other', '*')",
+            name="ck_pricing_rules_category",
+        ),
+        CheckConstraint("cost_min_cents >= 0", name="ck_pricing_rules_cost_min"),
+        CheckConstraint(
+            "cost_max_cents IS NULL OR cost_max_cents > cost_min_cents",
+            name="ck_pricing_rules_cost_max",
+        ),
+        CheckConstraint("bottle_multiple > 0", name="ck_pricing_rules_bottle_multiple"),
+        CheckConstraint("glass_pours_per_bottle >= 1", name="ck_pricing_rules_pours"),
+        CheckConstraint("glass_multiple > 0", name="ck_pricing_rules_glass_multiple"),
+        CheckConstraint("round_to_cents >= 1", name="ck_pricing_rules_round"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    category: Mapped[str] = mapped_column(String(32))
+    cost_min_cents: Mapped[int] = mapped_column(Integer)
+    cost_max_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bottle_multiple: Mapped[Decimal] = mapped_column(Numeric(6, 2))
+    glass_pours_per_bottle: Mapped[int] = mapped_column(Integer)
+    glass_multiple: Mapped[Decimal] = mapped_column(Numeric(6, 2))
+    round_to_cents: Mapped[int] = mapped_column(Integer)
+
+
 class BeverageList(Base):
     __tablename__ = "beverage_lists"
 
@@ -435,11 +598,41 @@ class BeverageList(Base):
     budget: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = _currency()
     target_margin: Mapped[float] = mapped_column(Float, default=3.0)
+    target_beverage_cost_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    concept: Mapped[str] = mapped_column(String(400), default="", server_default=text("''"))
+    price_tier: Mapped[str] = mapped_column(String(32), default="", server_default=text("''"))
     notes: Mapped[str] = mapped_column(Text, default="")
     source_key: Mapped[str] = mapped_column(String(500), default="", server_default=text("''"))
     source_filename: Mapped[str] = mapped_column(String(300), default="", server_default=text("''"))
     created_at: Mapped[datetime] = _stamp()
     items: Mapped[list[ListItem]] = relationship(back_populates="beverage_list", cascade="all, delete-orphan")
+    sections: Mapped[list[ListSection]] = relationship(
+        back_populates="beverage_list",
+        cascade="all, delete-orphan",
+        order_by="ListSection.position",
+    )
+
+
+class ListSection(Base):
+    """A named group on one list, with an optional share of the buying budget."""
+
+    __tablename__ = "list_sections"
+    __table_args__ = (
+        UniqueConstraint("list_id", "name", name="uq_list_sections_list_name"),
+        CheckConstraint(
+            "budget_share_pct IS NULL OR (budget_share_pct >= 0 AND budget_share_pct <= 100)",
+            name="ck_list_sections_share",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    list_id: Mapped[uuid.UUID] = _fk("beverage_lists.id", index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    budget_share_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    beverage_list: Mapped[BeverageList] = relationship(back_populates="sections")
+    items: Mapped[list[ListItem]] = relationship(back_populates="section_row")
 
 
 class ListItem(Base):
@@ -450,6 +643,12 @@ class ListItem(Base):
     list_id: Mapped[uuid.UUID] = _fk("beverage_lists.id")
     sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
     section: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    section_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("list_sections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     cost: Mapped[int] = mapped_column(Integer, default=0)
     pour_price: Mapped[int] = mapped_column(Integer, default=0)
@@ -457,6 +656,7 @@ class ListItem(Base):
     currency: Mapped[str] = _currency()
     margin_pct: Mapped[float] = mapped_column(Float, default=0)
     beverage_list: Mapped[BeverageList] = relationship(back_populates="items")
+    section_row: Mapped[ListSection | None] = relationship(back_populates="items")
     sku: Mapped[Sku] = relationship()
 
 
@@ -478,11 +678,17 @@ class Supplier(Base):
     lead_time_days: Mapped[int] = mapped_column(Integer, default=7, server_default=text("7"))
     payment_terms: Mapped[str | None] = mapped_column(String(80), nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
+    rep_name: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    rep_email: Mapped[str] = mapped_column(String(320), default="", server_default=text("''"))
+    rep_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    order_minimum_currency: Mapped[str] = mapped_column(
+        String(3), default=DEFAULT_CURRENCY, server_default=text("'USD'")
+    )
     created_at: Mapped[datetime] = _stamp()
     contacts: Mapped[list[SupplierContact]] = relationship(back_populates="supplier", cascade="all, delete-orphan")
     items: Mapped[list[InventoryItem]] = relationship(back_populates="supplier")
     orders: Mapped[list[PurchaseOrder]] = relationship(back_populates="supplier")
-    tastings: Mapped[list[Tasting]] = relationship(back_populates="supplier")
+    sessions: Mapped[list[TastingSession]] = relationship(back_populates="supplier")
 
 
 class SupplierContact(Base):
@@ -498,6 +704,90 @@ class SupplierContact(Base):
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     created_at: Mapped[datetime] = _stamp()
     supplier: Mapped[Supplier] = relationship(back_populates="contacts")
+
+
+OFFER_SOURCES = ("manual", "csv", "pdf")
+PRICE_SHEET_STATUSES = ("pending_review", "applied", "rejected")
+
+
+class SupplierAllocation(Base):
+    """Bottles a supplier has set aside for this venue over a named period."""
+
+    __tablename__ = "supplier_allocations"
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="ck_supplier_allocations_quantity"),
+        CheckConstraint(
+            "period_end IS NULL OR period_start IS NULL OR period_end >= period_start",
+            name="ck_supplier_allocations_period",
+        ),
+        Index("ix_supplier_allocations_venue_supplier", "venue_id", "supplier_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id", index=True)
+    product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
+    quantity: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    period_label: Mapped[str] = mapped_column(String(120), default="", server_default=text("''"))
+    period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+
+
+class PriceSheet(Base):
+    """A parsed supplier price sheet. Rows become offers only when a person applies it."""
+
+    __tablename__ = "price_sheets"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending_review', 'applied', 'rejected')",
+            name="ck_price_sheets_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id", index=True)
+    document_id: Mapped[uuid.UUID] = _fk("documents.id", index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending_review", server_default=text("'pending_review'"))
+    parsed_rows: Mapped[list] = mapped_column(JSON, default=list)
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    created_at: Mapped[datetime] = _stamp()
+    reviewed_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class SupplierOffer(Base):
+    """One quoted price. The current offer is the latest valid row per supplier and product."""
+
+    __tablename__ = "supplier_offers"
+    __table_args__ = (
+        CheckConstraint("source IN ('manual', 'csv', 'pdf')", name="ck_supplier_offers_source"),
+        CheckConstraint("price_cents >= 0", name="ck_supplier_offers_price"),
+        CheckConstraint("case_size >= 1", name="ck_supplier_offers_case_size"),
+        CheckConstraint(
+            "valid_to IS NULL OR valid_to >= valid_from",
+            name="ck_supplier_offers_window",
+        ),
+        Index("ix_supplier_offers_venue_product", "venue_id", "product_id"),
+        Index("ix_supplier_offers_venue_supplier", "venue_id", "supplier_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id", index=True)
+    product_id: Mapped[uuid.UUID] = _fk("products.id", index=True)
+    sku_id: Mapped[uuid.UUID | None] = _fk("skus.id", nullable=True, index=True)
+    unit_description: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    case_size: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    price_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    currency: Mapped[str] = _currency()
+    valid_from: Mapped[date] = mapped_column(Date)
+    valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source: Mapped[str] = mapped_column(String(16))
+    source_document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True, index=True)
+    price_sheet_id: Mapped[uuid.UUID | None] = _fk("price_sheets.id", nullable=True, index=True)
+    created_at: Mapped[datetime] = _stamp()
 
 
 LOCATION_KINDS = ("cellar", "bar", "walk_in", "storage", "other")
@@ -882,9 +1172,37 @@ class ReceiptLine(Base):
     receipt: Mapped[Receipt] = relationship(back_populates="lines")
 
 
+class Standard(Base):
+    """House service standard. Madira ships a default; the venue's edit is the one lessons use."""
+
+    __tablename__ = "standards"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "slug", name="uq_standards_venue_slug"),
+        CheckConstraint("version >= 1", name="ck_standards_version"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    slug: Mapped[str] = mapped_column(String(80))
+    topic: Mapped[str] = mapped_column(String(80))
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text, default="")
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
+    updated_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    updated_at: Mapped[datetime] = _stamp()
+
+
 class Lesson(Base):
     __tablename__ = "lessons"
-    __table_args__ = (UniqueConstraint("venue_id", "slug", name="uq_lessons_venue_slug"),)
+    __table_args__ = (
+        UniqueConstraint("venue_id", "slug", name="uq_lessons_venue_slug"),
+        CheckConstraint(
+            "position IN ('server', 'bartender', 'barback', 'host', 'all')",
+            name="ck_lessons_position",
+        ),
+        CheckConstraint("status IN ('draft', 'approved')", name="ck_lessons_status"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
@@ -893,16 +1211,31 @@ class Lesson(Base):
     role: Mapped[str] = mapped_column(String(64), default="waitstaff")
     category: Mapped[str] = mapped_column(String(64), default="wine")
     body: Mapped[str] = mapped_column(Text, default="")
+    position: Mapped[str] = mapped_column(String(16), default="all", server_default=text("'all'"))
+    status: Mapped[str] = mapped_column(String(16), default="approved", server_default=text("'approved'"))
+    approved_by: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    source: Mapped[str] = mapped_column(String(16), default="seed", server_default=text("'seed'"))
+    standard_ids: Mapped[list] = mapped_column(JSON, default=list)
+    sku_ids: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(AwareDateTime, default=_now, server_default=func.now())
 
 
 class Quiz(Base):
     __tablename__ = "quizzes"
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'approved')", name="ck_quizzes_status"),
+        CheckConstraint("source IN ('lesson', 'list')", name="ck_quizzes_source"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
-    lesson_id: Mapped[uuid.UUID] = _fk("lessons.id")
+    lesson_id: Mapped[uuid.UUID | None] = _fk("lessons.id", nullable=True)
     title: Mapped[str] = mapped_column(String(200))
     questions: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="approved", server_default=text("'approved'"))
+    source: Mapped[str] = mapped_column(String(16), default="lesson", server_default=text("'lesson'"))
+    created_at: Mapped[datetime] = mapped_column(AwareDateTime, default=_now, server_default=func.now())
 
 
 class QuizAttempt(Base):
@@ -911,26 +1244,383 @@ class QuizAttempt(Base):
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
     quiz_id: Mapped[uuid.UUID] = _fk("quizzes.id")
+    user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
     staff_name: Mapped[str] = mapped_column(String(120), default="Floor")
     answers: Mapped[list] = mapped_column(JSON, default=list)
     score: Mapped[float] = mapped_column(Float, default=0)
+    # 10000 basis points is a perfect score. The service writes this; the UI does not recompute it.
+    score_bp: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    per_question: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = _stamp()
 
 
-class Tasting(Base):
-    __tablename__ = "tastings"
+class QuizReview(Base):
+    """One Leitner box for a person, a quiz, and a question."""
+
+    __tablename__ = "quiz_reviews"
+    __table_args__ = (
+        UniqueConstraint("user_id", "quiz_id", "question_id", name="uq_quiz_reviews_user_quiz_question"),
+        CheckConstraint("box >= 0 AND box <= 5", name="ck_quiz_reviews_box"),
+        CheckConstraint("last_result IN ('correct', 'wrong', '')", name="ck_quiz_reviews_last_result"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
-    supplier_id: Mapped[uuid.UUID] = _fk("suppliers.id")
+    user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    quiz_id: Mapped[uuid.UUID] = _fk("quizzes.id", index=True)
+    question_id: Mapped[str] = mapped_column(String(80))
+    box: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    due_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    last_result: Mapped[str] = mapped_column(String(16), default="", server_default=text("''"))
+    updated_at: Mapped[datetime] = _stamp()
+
+
+class Briefing(Base):
+    """One pre-shift briefing for a venue and a local service date."""
+
+    __tablename__ = "briefings"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "service_date", name="uq_briefings_venue_date"),
+        CheckConstraint("status IN ('draft', 'published')", name="ck_briefings_status"),
+        CheckConstraint("due_review_count >= 0", name="ck_briefings_due_reviews"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    service_date: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(16), default="draft", server_default=text("'draft'"))
+    intro: Mapped[str] = mapped_column(Text, default="")
+    cards: Mapped[list] = mapped_column(JSON, default=list)
+    push_sku_id: Mapped[uuid.UUID | None] = _fk("skus.id", nullable=True, index=True)
+    due_review_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    built_at: Mapped[datetime] = _stamp()
+    published_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    published_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+
+
+class BriefingAck(Base):
+    """One staff member's acknowledgement of a briefing."""
+
+    __tablename__ = "briefing_acks"
+    __table_args__ = (
+        UniqueConstraint("briefing_id", "user_id", name="uq_briefing_acks_briefing_user"),
+        CheckConstraint("seconds_to_ack >= 0", name="ck_briefing_acks_seconds"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    briefing_id: Mapped[uuid.UUID] = _fk("briefings.id", index=True)
+    user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    seconds_to_ack: Mapped[int] = mapped_column(Integer, default=0)
+    acknowledged_at: Mapped[datetime] = _stamp()
+
+
+TASTING_STATUSES = ("planned", "held", "closed")
+SAMPLE_DECISIONS = ("undecided", "buy", "list", "pass")
+
+
+class TastingSession(Base):
+    """A cellar tasting. The calendar file is generated when someone downloads it."""
+
+    __tablename__ = "tasting_sessions"
+    __table_args__ = (
+        CheckConstraint("status IN ('planned', 'held', 'closed')", name="ck_tasting_sessions_status"),
+        CheckConstraint("ends_at >= starts_at", name="ck_tasting_sessions_window"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    supplier_id: Mapped[uuid.UUID | None] = _fk("suppliers.id", nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200))
     starts_at: Mapped[datetime] = mapped_column(AwareDateTime)
     ends_at: Mapped[datetime] = mapped_column(AwareDateTime)
     location: Mapped[str] = mapped_column(String(200), default="Maison Madira cellar")
+    status: Mapped[str] = mapped_column(String(16), default="planned", server_default=text("'planned'"))
     notes: Mapped[str] = mapped_column(Text, default="")
-    ics: Mapped[str] = mapped_column(Text, default="")
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
     created_at: Mapped[datetime] = _stamp()
-    supplier: Mapped[Supplier] = relationship(back_populates="tastings")
+    supplier: Mapped[Supplier | None] = relationship(back_populates="sessions")
+    samples: Mapped[list[Sample]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="Sample.created_at",
+    )
+
+
+class Sample(Base):
+    """One bottle tasted in a session. Buy and list open drafts. Pass stores a reason."""
+
+    __tablename__ = "samples"
+    __table_args__ = (
+        CheckConstraint("score IS NULL OR (score >= 0 AND score <= 100)", name="ck_samples_score"),
+        CheckConstraint(
+            "decision IN ('undecided', 'buy', 'list', 'pass')",
+            name="ck_samples_decision",
+        ),
+        CheckConstraint(
+            "quoted_price_cents IS NULL OR quoted_price_cents >= 0",
+            name="ck_samples_quoted_price",
+        ),
+        Index("ix_samples_venue_session", "venue_id", "session_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    session_id: Mapped[uuid.UUID] = _fk("tasting_sessions.id", index=True)
+    product_id: Mapped[uuid.UUID | None] = _fk("products.id", nullable=True, index=True)
+    sku_id: Mapped[uuid.UUID | None] = _fk("skus.id", nullable=True, index=True)
+    supplier_id: Mapped[uuid.UUID | None] = _fk("suppliers.id", nullable=True, index=True)
+    offer_id: Mapped[uuid.UUID | None] = _fk("supplier_offers.id", nullable=True, index=True)
+    label_document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True, index=True)
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    quoted_price_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    decision: Mapped[str] = mapped_column(String(16), default="undecided", server_default=text("'undecided'"))
+    decided_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    pass_reason: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    purchase_order_id: Mapped[uuid.UUID | None] = _fk("purchase_orders.id", nullable=True, index=True)
+    po_line_id: Mapped[uuid.UUID | None] = _fk("po_lines.id", nullable=True, index=True)
+    list_id: Mapped[uuid.UUID | None] = _fk("beverage_lists.id", nullable=True, index=True)
+    list_version_id: Mapped[uuid.UUID | None] = _fk("list_versions.id", nullable=True, index=True)
+    created_at: Mapped[datetime] = _stamp()
+    session: Mapped[TastingSession] = relationship(back_populates="samples")
+    product: Mapped[Product | None] = relationship()
+
+
+class SourcingBrief(Base):
+    """A want list built from list-coverage gaps. The model phrases the rationale only."""
+
+    __tablename__ = "sourcing_briefs"
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'closed')", name="ck_sourcing_briefs_status"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    list_id: Mapped[uuid.UUID | None] = _fk("beverage_lists.id", nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(16), default="draft", server_default=text("'draft'"))
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    created_at: Mapped[datetime] = _stamp()
+    items: Mapped[list["WantItem"]] = relationship(
+        back_populates="brief",
+        cascade="all, delete-orphan",
+        order_by="WantItem.position",
+    )
+
+
+class WantItem(Base):
+    """One gap on a sourcing brief. Quantity and the price band come from services."""
+
+    __tablename__ = "want_items"
+    __table_args__ = (
+        CheckConstraint("quantity_hint >= 0", name="ck_want_items_quantity"),
+        CheckConstraint("position >= 0", name="ck_want_items_position"),
+        Index("ix_want_items_venue_brief", "venue_id", "brief_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    brief_id: Mapped[uuid.UUID] = _fk("sourcing_briefs.id", index=True)
+    category: Mapped[str] = mapped_column(String(32))
+    style: Mapped[str] = mapped_column(String(80))
+    price_band: Mapped[str] = mapped_column(String(16), default="", server_default=text("''"))
+    quantity_hint: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    dishes: Mapped[list] = mapped_column(JSON, default=list)
+    sample_id: Mapped[uuid.UUID | None] = _fk("samples.id", nullable=True, index=True)
+    offer_id: Mapped[uuid.UUID | None] = _fk("supplier_offers.id", nullable=True, index=True)
+    rationale: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    created_at: Mapped[datetime] = _stamp()
+    brief: Mapped[SourcingBrief] = relationship(back_populates="items")
+
+
+class RepFollowup(Base):
+    """A draft note to a supplier rep. Madira stores it and does not send it."""
+
+    __tablename__ = "rep_followups"
+    __table_args__ = (UniqueConstraint("session_id", name="uq_rep_followups_session"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    session_id: Mapped[uuid.UUID] = _fk("tasting_sessions.id", index=True)
+    supplier_id: Mapped[uuid.UUID | None] = _fk("suppliers.id", nullable=True, index=True)
+    to_email: Mapped[str] = mapped_column(String(320), default="", server_default=text("''"))
+    subject: Mapped[str] = mapped_column(String(200), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    purchase_order_id: Mapped[uuid.UUID | None] = _fk("purchase_orders.id", nullable=True, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    created_at: Mapped[datetime] = _stamp()
+    updated_at: Mapped[datetime] = _stamp()
+
+
+class TastingInvite(Base):
+    """A tasting invite stays a draft until an Owner or a Manager approves it.
+
+    Approval is the only path that builds the .ics and the email draft.
+    ``sent`` stays false: Madira does not send the invite.
+    """
+
+    __tablename__ = "tasting_invites"
+    __table_args__ = (
+        UniqueConstraint("session_id", name="uq_tasting_invites_session"),
+        CheckConstraint(
+            "status IN ('proposed', 'ready', 'rejected')",
+            name="ck_tasting_invites_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    session_id: Mapped[uuid.UUID] = _fk("tasting_sessions.id")
+    status: Mapped[str] = mapped_column(String(16), default="proposed")
+    agenda_note: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    agenda_facts: Mapped[dict] = mapped_column(JSON, default=dict)
+    approval_id: Mapped[uuid.UUID | None] = _fk("approvals.id", nullable=True, index=True)
+    ics_text: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    email_subject: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    email_body: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    email_mailto: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    driver: Mapped[str] = mapped_column(String(16), default="", server_default=text("''"))
+    sent: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    updated_at: Mapped[datetime] = _stamp()
+
+
+class TastingInviteSlot(Base):
+    __tablename__ = "tasting_invite_slots"
+    __table_args__ = (
+        UniqueConstraint("invite_id", "position", name="uq_tasting_invite_slots_position"),
+        Index("ix_tasting_invite_slots_venue", "venue_id", "invite_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id")
+    invite_id: Mapped[uuid.UUID] = _fk("tasting_invites.id")
+    position: Mapped[int] = mapped_column(Integer)
+    starts_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    ends_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    source: Mapped[str] = mapped_column(String(16), default="entered", server_default=text("'entered'"))
+    chosen: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+
+
+class TastingInviteAttendee(Base):
+    __tablename__ = "tasting_invite_attendees"
+    __table_args__ = (Index("ix_tasting_invite_attendees_venue", "venue_id", "invite_id"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id")
+    invite_id: Mapped[uuid.UUID] = _fk("tasting_invites.id")
+    kind: Mapped[str] = mapped_column(String(16))
+    name: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    email: Mapped[str] = mapped_column(String(320), default="", server_default=text("''"))
+    user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+
+
+class PosCredential(Base):
+    """Fernet ciphertext for one venue's POS access token. The raw token is never stored."""
+
+    __tablename__ = "pos_credentials"
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    ciphertext: Mapped[str] = mapped_column(Text)
+    key_last4: Mapped[str] = mapped_column(String(8), default="", server_default=text("''"))
+    created_at: Mapped[datetime] = _stamp()
+
+
+class PosConnection(Base):
+    __tablename__ = "pos_connections"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "provider", name="uq_pos_connections_venue_provider"),
+        CheckConstraint(
+            "provider IN ('square', 'demo')",
+            name="ck_pos_connections_provider",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'active', 'disconnected', 'error')",
+            name="ck_pos_connections_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    provider: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default=text("'pending'"))
+    location_id: Mapped[str] = mapped_column(String(64), default="", server_default=text("''"))
+    location_name: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    credential_id: Mapped[uuid.UUID | None] = _fk("pos_credentials.id", nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    last_cursor: Mapped[str] = mapped_column(String(512), default="", server_default=text("''"))
+    watermark: Mapped[str] = mapped_column(String(64), default="", server_default=text("''"))
+    actor_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    updated_at: Mapped[datetime] = _stamp()
+
+
+class PosItemMapping(Base):
+    __tablename__ = "pos_item_mappings"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "provider", "variation_id", name="uq_pos_item_mappings_variation"),
+        CheckConstraint("units_per_sale > 0", name="ck_pos_item_mappings_units"),
+        CheckConstraint("pour_ml IS NULL OR pour_ml > 0", name="ck_pos_item_mappings_pour"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    provider: Mapped[str] = mapped_column(String(16))
+    item_id: Mapped[str] = mapped_column(String(128), default="", server_default=text("''"))
+    variation_id: Mapped[str] = mapped_column(String(128))
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id")
+    pour_ml: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    units_per_sale: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+    created_at: Mapped[datetime] = _stamp()
+    updated_at: Mapped[datetime] = _stamp()
+
+
+class PosSale(Base):
+    """Idempotency ledger. One row per provider line item that posted stock."""
+
+    __tablename__ = "pos_sales"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "provider", "external_line_id", name="uq_pos_sales_line"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    provider: Mapped[str] = mapped_column(String(16))
+    external_line_id: Mapped[str] = mapped_column(String(200))
+    order_id: Mapped[str] = mapped_column(String(128), default="", server_default=text("''"))
+    variation_id: Mapped[str] = mapped_column(String(128), default="", server_default=text("''"))
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id")
+    movement_id: Mapped[uuid.UUID | None] = _fk("stock_movements.id", nullable=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+    closed_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+
+
+class PosSyncRun(Base):
+    __tablename__ = "pos_sync_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'completed', 'failed')",
+            name="ck_pos_sync_runs_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    connection_id: Mapped[uuid.UUID] = _fk("pos_connections.id")
+    status: Mapped[str] = mapped_column(String(16), default="running", server_default=text("'running'"))
+    started_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    counts: Mapped[dict] = mapped_column(JSON, default=dict)
+    error: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    actor_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
 
 
 class LlmCredential(Base):
@@ -949,12 +1639,42 @@ class LlmCredential(Base):
 
 class AgentRun(Base):
     __tablename__ = "agent_runs"
+    __table_args__ = (Index("ix_agent_runs_org_created", "organization_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = _pk()
     venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    # Filled for new runs so an organization limit can count them. Older rows stay null.
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
     message: Mapped[str] = mapped_column(Text, default="")
     reply: Mapped[str] = mapped_column(Text, default="")
     delegated: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = _stamp()
+
+
+class AgentUsage(Base):
+    """One metered subagent call. Cost is an estimate in micro-dollars, or zero in demo."""
+
+    __tablename__ = "agent_usage"
+    __table_args__ = (
+        CheckConstraint("tokens_in >= 0", name="ck_agent_usage_tokens_in"),
+        CheckConstraint("tokens_out >= 0", name="ck_agent_usage_tokens_out"),
+        CheckConstraint("cost_micro_usd >= 0", name="ck_agent_usage_cost"),
+        CheckConstraint("latency_ms >= 0", name="ck_agent_usage_latency"),
+        CheckConstraint("cost_label IN ('demo', 'estimate')", name="ck_agent_usage_label"),
+        Index("ix_agent_usage_org_created", "organization_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _fk("organizations.id", index=True)
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    agent_run_id: Mapped[uuid.UUID | None] = _fk("agent_runs.id", nullable=True, index=True)
+    subagent: Mapped[str] = mapped_column(String(64))
+    model: Mapped[str] = mapped_column(String(120))
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    cost_micro_usd: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    cost_label: Mapped[str] = mapped_column(String(16))
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     created_at: Mapped[datetime] = _stamp()
 
 
@@ -1052,6 +1772,7 @@ class StorageZone(Base):
     target_temp_max_c: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     target_humidity_min_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
     target_humidity_max_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    capacity_bottles: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = _stamp()
 
@@ -1100,3 +1821,359 @@ class ConditionExcursion(Base):
     acknowledged_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = _stamp()
+
+
+SENSOR_METRICS = ("temperature_c", "humidity_pct")
+SENSOR_IMPORT_STATUSES = ("pending_review", "applied", "rejected")
+REMINDER_SOURCE_TYPES = ("license", "certificate")
+REMINDER_STATUSES = ("acknowledged", "snoozed")
+
+
+class Sensor(Base):
+    """A venue probe. The signing secret is ciphertext; the API returns the last four characters."""
+
+    __tablename__ = "sensors"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "external_id", name="uq_sensors_venue_external"),
+        UniqueConstraint("sensor_key", name="uq_sensors_key"),
+        CheckConstraint(
+            "metric IN ('temperature_c', 'humidity_pct')",
+            name="ck_sensors_metric",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    zone_id: Mapped[uuid.UUID] = _fk("storage_zones.id", index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    metric: Mapped[str] = mapped_column(String(32))
+    external_id: Mapped[str] = mapped_column(String(120))
+    sensor_key: Mapped[str] = mapped_column(String(80))
+    secret_ciphertext: Mapped[str] = mapped_column(Text)
+    secret_last4: Mapped[str] = mapped_column(String(8), default="", server_default=text("''"))
+    created_at: Mapped[datetime] = _stamp()
+
+
+class SensorReading(Base):
+    """One accepted sensor sample. The same sensor and timestamp are stored once."""
+
+    __tablename__ = "sensor_readings"
+    __table_args__ = (
+        UniqueConstraint("sensor_id", "recorded_at", name="uq_sensor_readings_sensor_at"),
+        CheckConstraint(
+            "metric IN ('temperature_c', 'humidity_pct')",
+            name="ck_sensor_readings_metric",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    sensor_id: Mapped[uuid.UUID] = _fk("sensors.id", index=True)
+    condition_reading_id: Mapped[uuid.UUID] = _fk("condition_readings.id", index=True)
+    metric: Mapped[str] = mapped_column(String(32))
+    value: Mapped[Decimal] = mapped_column(Numeric(8, 2))
+    recorded_at: Mapped[datetime] = mapped_column(AwareDateTime)
+
+
+class SensorImport(Base):
+    """A CSV review. Rows are previewed, then applied or rejected."""
+
+    __tablename__ = "sensor_imports"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending_review', 'applied', 'rejected')",
+            name="ck_sensor_imports_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    filename: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    status: Mapped[str] = mapped_column(String(32), default="pending_review", server_default=text("'pending_review'"))
+    rows_json: Mapped[list] = mapped_column(JSON, default=list)
+    created_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    decided_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    decided_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class VenueLicense(Base):
+    """A recorded license expiry. The vault file has no date of its own."""
+
+    __tablename__ = "venue_licenses"
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True, index=True)
+    rule_code: Mapped[str] = mapped_column(String(64))
+    label: Mapped[str] = mapped_column(String(200))
+    expires_on: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = _stamp()
+
+
+class ReminderRule(Base):
+    """A venue copy of a seeded reminder. Wording stays neutral."""
+
+    __tablename__ = "reminder_rules"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "code", name="uq_reminder_rules_venue_code"),
+        CheckConstraint("lead_days >= 1 AND lead_days <= 365", name="ck_reminder_rules_lead"),
+        CheckConstraint(
+            "applies_to IN ('license', 'certificate')",
+            name="ck_reminder_rules_applies",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    jurisdiction: Mapped[str] = mapped_column(String(16))
+    code: Mapped[str] = mapped_column(String(64))
+    title: Mapped[str] = mapped_column(String(200))
+    detail: Mapped[str] = mapped_column(Text)
+    lead_days: Mapped[int] = mapped_column(Integer)
+    applies_to: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = _stamp()
+
+
+class ReminderState(Base):
+    """An in-app acknowledgement or snooze. Nothing is sent."""
+
+    __tablename__ = "reminder_states"
+    __table_args__ = (
+        UniqueConstraint("venue_id", "source_type", "source_id", name="uq_reminder_states_source"),
+        CheckConstraint(
+            "source_type IN ('license', 'certificate')",
+            name="ck_reminder_states_source",
+        ),
+        CheckConstraint(
+            "status IN ('acknowledged', 'snoozed')",
+            name="ck_reminder_states_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    source_type: Mapped[str] = mapped_column(String(32))
+    source_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
+    status: Mapped[str] = mapped_column(String(32))
+    snooze_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    actor_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    updated_at: Mapped[datetime] = _stamp()
+
+
+class VenueInvite(Base):
+    """An invitation to join a venue. Nothing is emailed. Sign-in accepts it."""
+
+    __tablename__ = "venue_invites"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('Owner', 'Sommelier', 'Manager', 'Staff', 'Auditor')",
+            name="ck_venue_invites_role",
+        ),
+        CheckConstraint(
+            "position IS NULL OR position IN ('server', 'bartender', 'barback', 'host')",
+            name="ck_venue_invites_position",
+        ),
+        CheckConstraint(
+            "(accepted_at IS NULL AND accepted_user_id IS NULL) OR "
+            "(accepted_at IS NOT NULL AND accepted_user_id IS NOT NULL)",
+            name="ck_venue_invites_acceptance",
+        ),
+        Index(
+            "uq_venue_invites_active_email",
+            "venue_id",
+            "email",
+            unique=True,
+            sqlite_where=text("accepted_at IS NULL AND revoked_at IS NULL"),
+            postgresql_where=text("accepted_at IS NULL AND revoked_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    email: Mapped[str] = mapped_column(String(320))
+    role: Mapped[str] = mapped_column(String(32))
+    position: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    invited_by_user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    created_at: Mapped[datetime] = _stamp()
+    accepted_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    accepted_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True, index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class RoleplaySession(Base):
+    """One staff-trainer roleplay. The service writes the 0-4 score."""
+
+    __tablename__ = "roleplay_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "persona IN ('skeptic', 'budget-conscious', 'connoisseur', 'celebration')",
+            name="ck_roleplay_sessions_persona",
+        ),
+        CheckConstraint("status IN ('open', 'scored')", name="ck_roleplay_sessions_status"),
+        CheckConstraint("score IS NULL OR (score >= 0 AND score <= 4)", name="ck_roleplay_sessions_score_range"),
+        CheckConstraint(
+            "(status = 'open' AND score IS NULL AND scored_at IS NULL) OR "
+            "(status = 'scored' AND score IS NOT NULL AND scored_at IS NOT NULL)",
+            name="ck_roleplay_sessions_scored",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    persona: Mapped[str] = mapped_column(String(32))
+    dish_id: Mapped[uuid.UUID | None] = _fk("dishes.id", nullable=True, index=True)
+    transcript: Mapped[list] = mapped_column(JSON, default=list)
+    rubric: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="open", server_default=text("'open'"))
+    started_at: Mapped[datetime] = _stamp()
+    scored_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class Certificate(Base):
+    """A staff certificate. Reminders start 30 days before expires_on."""
+
+    __tablename__ = "certificates"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('responsible_service', 'food_handler', 'other')",
+            name="ck_certificates_kind",
+        ),
+        CheckConstraint("expires_on >= issued_on", name="ck_certificates_dates"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    label: Mapped[str] = mapped_column(String(200))
+    issued_on: Mapped[date] = mapped_column(Date)
+    expires_on: Mapped[date] = mapped_column(Date)
+    document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True, index=True)
+    created_by_user_id: Mapped[uuid.UUID] = _fk("users.id", index=True)
+    created_at: Mapped[datetime] = _stamp()
+
+
+LIST_VERSION_STATUSES = ("draft", "pending_approval", "published", "superseded", "rejected")
+
+
+class ListVersion(Base):
+    """One immutable publication of a beverage list. Entries do not change after insert."""
+
+    __tablename__ = "list_versions"
+    __table_args__ = (
+        UniqueConstraint("list_id", "number", name="uq_list_versions_list_number"),
+        UniqueConstraint("public_token", name="uq_list_versions_public_token"),
+        CheckConstraint(
+            "status IN ('draft', 'pending_approval', 'published', 'superseded', 'rejected')",
+            name="ck_list_versions_status",
+        ),
+        CheckConstraint("number >= 1", name="ck_list_versions_number"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    list_id: Mapped[uuid.UUID] = _fk("beverage_lists.id", index=True)
+    number: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(32), default="draft", server_default=text("'draft'"))
+    approval_id: Mapped[uuid.UUID | None] = _fk("approvals.id", nullable=True, index=True)
+    submitted_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    published_by_user_id: Mapped[uuid.UUID | None] = _fk("users.id", nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    document_id: Mapped[uuid.UUID | None] = _fk("documents.id", nullable=True)
+    public_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    public_revoked_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    created_at: Mapped[datetime] = _stamp()
+    beverage_list: Mapped[BeverageList] = relationship()
+    entries: Mapped[list["ListEntry"]] = relationship(
+        back_populates="version",
+        order_by="ListEntry.position",
+        viewonly=True,
+    )
+
+
+class ListEntry(Base):
+    """Insert-only snapshot of one list row. Prices and guest text stay as they were."""
+
+    __tablename__ = "list_entries"
+    __table_args__ = (
+        CheckConstraint("position >= 0", name="ck_list_entries_position"),
+        CheckConstraint("bottle_price_cents >= 0", name="ck_list_entries_bottle_price"),
+        CheckConstraint("glass_price_cents >= 0", name="ck_list_entries_glass_price"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    venue_id: Mapped[uuid.UUID] = _fk("venues.id", index=True)
+    version_id: Mapped[uuid.UUID] = _fk("list_versions.id", index=True)
+    section_name: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    sku_id: Mapped[uuid.UUID] = _fk("skus.id", index=True)
+    bottle_price_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    glass_price_cents: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    currency: Mapped[str] = _currency()
+    display_name: Mapped[str] = mapped_column(String(200), default="")
+    display_detail: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    version: Mapped[ListVersion] = relationship(back_populates="entries")
+
+
+class Job(Base):
+    """One unit of work for the database queue.
+
+    ``payload`` is the job input. ``last_error`` is a short public message.
+    The payload is not copied into the error or the log.
+    """
+
+    __tablename__ = "jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed', 'dead')",
+            name="ck_jobs_status",
+        ),
+        CheckConstraint("attempts >= 0", name="ck_jobs_attempts"),
+        CheckConstraint("max_attempts >= 1", name="ck_jobs_max_attempts"),
+        Index("ix_jobs_status_run_at", "status", "run_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    venue_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("venues.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict] = mapped_column(JSON)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="queued", server_default=text("'queued'"))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3, server_default=text("3"))
+    run_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    locked_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    locked_until: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    last_error: Mapped[str] = mapped_column(String(300), default="", server_default=text("''"))
+    created_at: Mapped[datetime] = _stamp()
+    updated_at: Mapped[datetime] = _stamp()
+    started_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+class PublicListSnapshot(Base):
+    """Guest projection. The anonymous route reads only this table."""
+
+    __tablename__ = "public_list_snapshots"
+
+    token: Mapped[str] = mapped_column(String(128), primary_key=True)
+    venue_name: Mapped[str] = mapped_column(String(200))
+    rendered: Mapped[dict] = mapped_column(JSON)
+    published_at: Mapped[datetime] = mapped_column(AwareDateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(AwareDateTime, nullable=True)
+
+
+@event.listens_for(ListEntry, "before_update")
+def _list_entries_are_insert_only(_mapper, _connection, _target) -> None:
+    raise ValueError("List entries are a snapshot and cannot change.")
+
+
+@event.listens_for(ListEntry, "before_delete")
+def _list_entries_are_not_deleted(_mapper, _connection, _target) -> None:
+    raise ValueError("List entries are a snapshot and cannot be deleted.")

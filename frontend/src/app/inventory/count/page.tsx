@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CountSheet, formatCount } from "@/components/CountSheet";
 import { VarianceReport, type VarianceReportData } from "@/components/VarianceReport";
 import {
@@ -25,7 +25,7 @@ import {
   type ParProposalRecord,
   type StockItem,
 } from "@/lib/api";
-import { clearQueue, deviceId, mutationId, readQueue, writeQueue, type QueuedCount } from "@/lib/countQueue";
+import { clearOpenSheet, clearQueue, deviceId, mutationId, readOpenSheet, readQueue, writeOpenSheet, writeQueue, type QueuedCount } from "@/lib/countQueue";
 
 function reportView(report: CountReport): VarianceReportData {
   return {
@@ -54,14 +54,18 @@ export default function CountPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const proposalLoad = useRef(0);
+  const syncing = useRef<Promise<void> | null>(null);
 
   const refreshProposals = useCallback(async () => {
+    const token = ++proposalLoad.current;
     const body = await listParProposals("pending");
-    setProposals(body.proposals || []);
+    if (token === proposalLoad.current) setProposals(body.proposals || []);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+    const token = ++proposalLoad.current;
     Promise.all([listLocations(), getCellar(), listCountSessions(), listParProposals("pending")])
       .then(([places, cellar, sessions, pars]) => {
         if (cancelled) return;
@@ -69,12 +73,25 @@ export default function CountPage() {
         setItems(cellar.items || []);
         const cellarPlace = (places.locations || []).find((place) => place.name === "Main Cellar");
         setLocationId((current) => current || cellarPlace?.id || places.locations?.[0]?.id || "");
-        setProposals(pars.proposals || []);
+        if (token === proposalLoad.current) setProposals(pars.proposals || []);
         setOpenSessions((sessions.sessions || []).filter((row) => row.status === "in_progress"));
         setLoaded(true);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        const saved = typeof navigator !== "undefined" && !navigator.onLine ? readOpenSheet() : null;
+        if (saved) {
+          setLocations(saved.locations);
+          setItems(saved.items.map((item) => ({ ...item, on_hand: 0, par: 0, low: false, unit: "btl", depletion_30d: 0, valuation_cents: 0, currency: "USD", locations: [] })));
+          setLocationId(saved.locationId);
+          setSessionId(saved.sessionId);
+          setSessionName(saved.locationName);
+          setSessionStatus(saved.status);
+          setLines(saved.lines);
+          setQueued(readQueue(saved.sessionId));
+          setLoaded(true);
+          return;
+        }
         setLoaded(true);
         setError(err instanceof Error ? err.message : "The count could not be loaded.");
       });
@@ -82,6 +99,28 @@ export default function CountPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!sessionId || sessionStatus !== "in_progress") return;
+    writeOpenSheet({
+      sessionId,
+      locationId,
+      locationName: sessionName,
+      status: sessionStatus,
+      items: items.map((item) => ({ sku: item.sku, name: item.name })),
+      locations: locations.map((place) => ({ id: place.id, name: place.name, kind: place.kind, notes: place.notes })),
+      lines: lines.map((line) => ({
+        id: line.id,
+        sku: line.sku,
+        name: line.name,
+        counted_quantity: line.counted_quantity,
+        expected_quantity: line.expected_quantity ?? null,
+        device_id: line.device_id,
+        bin_code: line.bin_code || "",
+        counted_at: line.counted_at ?? null,
+      })),
+    });
+  }, [items, lines, locationId, locations, sessionId, sessionName, sessionStatus]);
 
   const loadSession = useCallback(async (id: string) => {
     const body = await getCountSession(id);
@@ -109,16 +148,25 @@ export default function CountPage() {
 
   const flush = useCallback(
     async (id: string) => {
-      const pending = readQueue(id);
-      if (!pending.length) {
+      if (syncing.current) return syncing.current;
+      const run = (async () => {
+        const pending = readQueue(id);
+        if (!pending.length) {
+          setQueued([]);
+          return;
+        }
+        if (typeof navigator !== "undefined" && !navigator.onLine) return;
+        await syncCountLines(id, pending);
+        clearQueue(id);
         setQueued([]);
-        return;
+        await loadSession(id);
+      })();
+      syncing.current = run;
+      try {
+        await run;
+      } finally {
+        if (syncing.current === run) syncing.current = null;
       }
-      if (typeof navigator !== "undefined" && !navigator.onLine) return;
-      await syncCountLines(id, pending);
-      clearQueue(id);
-      setQueued([]);
-      await loadSession(id);
     },
     [loadSession],
   );
@@ -239,6 +287,7 @@ export default function CountPage() {
       setReport(body);
       setLines(body.lines || []);
       setSessionStatus(body.session.status);
+      clearOpenSheet();
     } catch (err) {
       setError(err instanceof Error ? err.message : "The count could not be submitted.");
     } finally {
@@ -474,8 +523,11 @@ export default function CountPage() {
           onClick={() => {
             setBusy(true);
             setError("");
+            const token = ++proposalLoad.current;
             generateParProposals()
-              .then((body) => setProposals(body.proposals || []))
+              .then((body) => {
+                if (token === proposalLoad.current) setProposals(body.proposals || []);
+              })
               .catch((err: unknown) => setError(err instanceof Error ? err.message : "Par proposals could not be generated."))
               .finally(() => setBusy(false));
           }}

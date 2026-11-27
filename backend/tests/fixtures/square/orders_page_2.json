@@ -1,0 +1,35 @@
+{
+  "orders": [
+    {
+      "id": "ORDER_2",
+      "location_id": "L8H2K0DEMO01",
+      "state": "COMPLETED",
+      "closed_at": "2026-11-24T19:30:00Z",
+      "line_items": [
+        {
+          "uid": "LINE_GLASS",
+          "name": "Unlisted pour",
+          "quantity": "2",
+          "catalog_object_id": "VAR_GLASS",
+          "variation_name": "Glass",
+          "item_type": "ITEM",
+          "base_price_money": { "amount": 1600, "currency": "USD" },
+          "total_money": { "amount": 3200, "currency": "USD" }
+        }
+      ]
+    },
+    {
+      "id": "ORDER_OPEN",
+      "location_id": "L8H2K0DEMO01",
+      "state": "OPEN",
+      "line_items": [
+        {
+          "uid": "LINE_OPEN",
+          "name": "Still open",
+          "quantity": "1",
+          "catalog_object_id": "VAR_MUSCADET"
+        }
+      ]
+    }
+  ]
+}

@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from madira.auth import SESSION_COOKIE, session_subject, utcnow
+from madira.csrf import reject as reject_csrf
 from madira.db import SessionLocal
 from madira.models import ROLES, Membership, Organization, User, Venue
 
@@ -28,12 +29,21 @@ DEMO_VENUE_SLUG = "maison-madira"
 DEMO_USER_SUB = "madira-demo-owner"
 DEMO_USER_EMAIL = "owner@maison-madira.demo"
 DEMO_USER_NAME = "Demo Owner"
+DEMO_PERSONA_COOKIE = "madira_demo_persona"
 
 OWNER = "Owner"
 SOMMELIER = "Sommelier"
 MANAGER = "Manager"
 STAFF = "Staff"
 AUDITOR = "Auditor"
+
+# Demo floor users. The cookie is honored only while demo_posture() is true.
+_DEMO_PERSONAS = (
+    ("ana", "madira-demo-ana", "ana@maison-madira.demo", "Ana", STAFF, "server"),
+    ("ben", "madira-demo-ben", "ben@maison-madira.demo", "Ben", STAFF, "bartender"),
+    ("mia", "madira-demo-mia", "mia@maison-madira.demo", "Mia", MANAGER, None),
+    ("lea", "madira-demo-lea", "lea@maison-madira.demo", "Lea", SOMMELIER, None),
+)
 
 _request: ContextVar[RequestContext | None] = ContextVar("madira_request_context", default=None)
 
@@ -46,6 +56,8 @@ class RequestContext:
     venue_id: uuid.UUID
     organization_id: uuid.UUID
     role: str
+    # True when this request is a PIN switch on a shared tablet, not a Google sign-in.
+    pin_session: bool = False
 
 
 def current_request() -> RequestContext | None:
@@ -129,6 +141,7 @@ def ensure_demo_tenant(session: Session | None = None) -> RequestContext:
             session.flush()
         elif membership.role != OWNER:
             membership.role = OWNER
+        _ensure_demo_personas(session, venue, now)
         ctx = _context_from(user, membership, venue)
         session.commit()
         return ctx
@@ -166,6 +179,83 @@ def grant_configured_owner(session: Session, user: User) -> None:
         session.add(Membership(user_id=user.id, venue_id=venue.id, role=OWNER))
     else:
         membership.role = OWNER
+
+
+def _ensure_user(session: Session, *, sub: str, email: str, name: str, now) -> User:
+    user = session.scalar(select(User).where(User.google_sub == sub))
+    if user is None:
+        user = User(google_sub=sub, email=email, name=name, picture="", created_at=now, last_login_at=now)
+        session.add(user)
+        session.flush()
+        return user
+    if user.name != name:
+        user.name = name
+    if user.email != email:
+        user.email = email
+    return user
+
+
+def _ensure_demo_personas(session: Session, venue: Venue, now) -> None:
+    for _slug, sub, email, name, role, position in _DEMO_PERSONAS:
+        user = _ensure_user(session, sub=sub, email=email, name=name, now=now)
+        membership = session.scalar(
+            select(Membership).where(Membership.user_id == user.id, Membership.venue_id == venue.id)
+        )
+        if membership is None:
+            session.add(Membership(user_id=user.id, venue_id=venue.id, role=role, position=position))
+            continue
+        membership.role = role
+        membership.position = position
+    session.flush()
+
+
+def persona_context(session: Session, slug: str) -> RequestContext | None:
+    """The demo persona for a cookie value, or None when the slug is not one of them."""
+
+    slug = (slug or "").strip().lower()
+    spec = next((row for row in _DEMO_PERSONAS if row[0] == slug), None)
+    if spec is None:
+        return None
+    _slug, sub, _email, _name, _role, _position = spec
+    user = session.scalar(select(User).where(User.google_sub == sub))
+    if user is None:
+        return None
+    venue = session.scalar(select(Venue).where(Venue.slug == DEMO_VENUE_SLUG).order_by(Venue.id))
+    if venue is None:
+        return None
+    membership = session.scalar(
+        select(Membership).where(Membership.user_id == user.id, Membership.venue_id == venue.id)
+    )
+    if membership is None:
+        return None
+    return _context_from(user, membership, venue)
+
+
+def demo_persona_catalog() -> list[dict]:
+    """Names and roles for the demo switcher. Empty unless the model is in demo mode."""
+
+    if not demo_posture():
+        return []
+    ensure_demo_tenant()
+    session = SessionLocal()
+    try:
+        catalog = [
+            {"slug": "owner", "name": DEMO_USER_NAME, "role": OWNER, "position": None, "email": DEMO_USER_EMAIL}
+        ]
+        for slug, sub, email, name, role, position in _DEMO_PERSONAS:
+            user = session.scalar(select(User).where(User.google_sub == sub))
+            catalog.append(
+                {
+                    "slug": slug,
+                    "name": user.name if user is not None else name,
+                    "role": role,
+                    "position": position,
+                    "email": email,
+                }
+            )
+        return catalog
+    finally:
+        session.close()
 
 
 def _as_uuid(value) -> uuid.UUID:
@@ -225,12 +315,22 @@ def resolve_request(request: Request) -> RequestContext:
             venue = session.get(Venue, membership.venue_id)
             if venue is None:
                 raise HTTPException(status_code=403, detail="No venue membership.")
-            return _context_from(user, membership, venue)
-        if demo_posture():
-            return ensure_demo_tenant(session)
-        raise HTTPException(status_code=401, detail="Sign in required.")
+            host = _context_from(user, membership, venue)
+        elif demo_posture():
+            host = ensure_demo_tenant(session)
+            # A real session already returned above. This cookie is demo-only.
+            slug = (request.cookies.get(DEMO_PERSONA_COOKIE) or "").strip().lower()
+            if slug and slug != "owner":
+                switched = persona_context(session, slug)
+                if switched is not None:
+                    host = switched
+        else:
+            raise HTTPException(status_code=401, detail="Sign in required.")
     finally:
         session.close()
+    from madira.domain.tablet import overlay_tablet
+
+    return overlay_tablet(request, host)
 
 
 _EXEMPT = {"/health", "/status", "/fixtures/sample-menu", "/docs", "/redoc", "/openapi.json"}
@@ -240,6 +340,12 @@ def _exempt(path: str) -> bool:
     if path != "/" and path.endswith("/"):
         path = path.rstrip("/")
     if path in _EXEMPT or path.startswith("/auth"):
+        return True
+    # The guest list is a projection. It does not use a venue session.
+    if path.startswith("/public/lists/"):
+        return True
+    # Signed by the sensor secret. There is no session, and the venue comes from the sensor row.
+    if path.startswith("/sensors/webhook/"):
         return True
     return False
 
@@ -256,6 +362,10 @@ class TenancyMiddleware:
             return
         request = Request(scope, receive)
         path = request.url.path
+        blocked = reject_csrf(request)
+        if blocked is not None:
+            await blocked(scope, receive, send)
+            return
         if _exempt(path):
             await self.app(scope, receive, send)
             return

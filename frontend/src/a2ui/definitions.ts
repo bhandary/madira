@@ -22,6 +22,20 @@ export const catalogDefinitions = {
     description: "Curated list with cost, pour, bottle, and margin.",
     props: { items: "array" },
   },
+  ListEditor: {
+    description: "List sections and bottles, with reprice, reorder, remove, and add from cellar candidates.",
+    props: {
+      listId: "string",
+      currency: "string",
+      sections: "array of sections",
+      items: "array of list items",
+      candidates: "array of cellar candidates",
+    },
+  },
+  CoverageGrid: {
+    description: "Coverage matrix of category, style, and price band. Unfilled cells are buying suggestions.",
+    props: { cells: "array of coverage cells" },
+  },
   ListSummary: {
     description: "Budget, spend, coverage, and gaps.",
     props: { budget: "number", spent: "number", remaining: "number", targetMargin: "number", coverage: "object", gaps: "array" },
@@ -38,13 +52,29 @@ export const catalogDefinitions = {
     description: "Draft purchase orders by supplier.",
     props: { orders: "array" },
   },
+  RoleplayPanel: {
+    description: "A guest roleplay with the service-written score and rubric.",
+    props: { session: "object" },
+  },
   QuizCard: {
-    description: "Training quiz with scoring.",
+    description: "Training quiz. The score and the next review date come from the quiz service.",
     props: { quiz: "object" },
+  },
+  LessonCard: {
+    description: "One role lesson. Approve and edit are for authors. Citations are standards and bottles, never prices.",
+    props: { lesson: "object" },
   },
   LessonCards: {
     description: "Staff lessons and daily briefing.",
     props: { lessons: "array" },
+  },
+  BriefingCards: {
+    description: "Tonight's pre-shift card stack. The push reason is in words. Staff do not see cost or margin.",
+    props: { briefing: "object" },
+  },
+  FloorLookup: {
+    description: "Floor lookup for a dish, a bottle, or a guest preference. Pairing, script, glassware, temperature, pour, and stock.",
+    props: { lookup: "object" },
   },
   ScheduleForm: {
     description: "Draft tasting details and .ics.",
@@ -53,6 +83,42 @@ export const catalogDefinitions = {
   TastingCalendar: {
     description: "Calendar of supplier tastings.",
     props: { tastings: "array" },
+  },
+  SampleCard: {
+    description: "One tasting sample: label scan, score, list price and margin, the dishes it pairs with, and buy, list, or pass.",
+    props: { sample: "sample card" },
+  },
+  SourcingBrief: {
+    description: "Want list from list gaps: category, style, price band, quantity, dishes, and a rationale.",
+    props: { brief: "sourcing brief" },
+  },
+  RepFollowup: {
+    description: "Unsent draft note to a supplier rep, with the purchase order reference filled in by the service.",
+    props: { followup: "rep follow-up draft" },
+  },
+  PosStatus: {
+    description: "POS connection for this venue. The access token is not shown.",
+    props: { status: "provider, location, masked token, and last sync" },
+  },
+  UnmappedPos: {
+    description: "POS items that sold without a SKU mapping.",
+    props: { items: "array of unmapped POS items" },
+  },
+  SensorStatus: {
+    description: "Sensor last reading and whether it is stale. The signing secret is not shown.",
+    props: { sensors: "array of sensor status rows" },
+  },
+  ReminderList: {
+    description: "Open in-app reminders for licenses and certificates. Nothing is sent.",
+    props: { reminders: "array of reminder rows" },
+  },
+  AuditorTable: {
+    description: "A read-only compliance table with columns, typed rows, service totals, and links to source records.",
+    props: { table: "audit table with columns, rows, totals, and page" },
+  },
+  TastingHistory: {
+    description: "Tasted samples against bought purchase-order lines and invoice lines.",
+    props: { history: "tasting history rows" },
   },
   TastingNoteCard: {
     description: "Tasting note with a server hook, guest description, technical note, and flavor profile.",
@@ -83,10 +149,12 @@ export const catalogDefinitions = {
     },
   },
   ApprovalCard: {
-    description: "Owner approval for a purchase order, with comment, approve, and reject.",
+    description: "Owner or Manager approval for a purchase order, a list publish, or a tasting invite, with comment, approve, and reject.",
     props: {
       purchaseOrder: "purchase order number, supplier, totals, and delivery date",
-      approval: "pending, approved, or rejected owner decision",
+      approval: "pending, approved, or rejected decision",
+      listVersion: "list version id, name, number, and status when the card is a list publish",
+      invite: "tasting invite id, session, title, and status when the card is an invite",
     },
   },
   ReceivingChecklist: {
@@ -101,6 +169,20 @@ export const catalogDefinitions = {
     description: "Storage zone target temperature and humidity, the latest reading, and an excursion with affected SKUs.",
     props: {
       zone: "zone name, targets, latest reading, status, and excursion",
+    },
+  },
+  SupplierOffers: {
+    description: "Current supplier offers. Each price is the service price_label.",
+    props: {
+      offers: "array of current offers with price_label, supplier, and validity",
+      supplier: "supplier name when the list is filtered",
+    },
+  },
+  PriceHistory: {
+    description: "Dated offer and invoice costs for one product. Amounts are price_label from the service.",
+    props: {
+      product: "product id, name, and producer",
+      points: "array of dated price points",
     },
   },
 };

@@ -7,12 +7,32 @@ import uuid
 
 from madira.agents import tracker
 from madira.agents.presenters.inventory import with_count_report, with_inventory
-from madira.agents.presenters.lists import with_list
+from madira.agents.presenters.pos import with_status, with_unmapped
+from madira.agents.presenters.sensors import with_reminders, with_sensors
+from madira.agents.presenters.lists import with_list, with_list_approval
 from madira.agents.presenters.menu import with_dishes, with_pairings
 from madira.agents.presenters.notes import with_draft
-from madira.agents.presenters.procurement import with_scheduled, with_tasting_list
+from madira.agents.presenters.procurement import (
+    with_brief,
+    with_followup,
+    with_history,
+    with_invite,
+    with_offers,
+    with_price_history,
+    with_sample,
+    with_scheduled,
+    with_session,
+    with_tasting_list,
+)
 from madira.agents.presenters.purchasing import with_drafted, with_orders, with_purchase_order, with_receipt
-from madira.agents.presenters.training import with_briefing, with_quiz
+from madira.agents.presenters.training import (
+    with_lesson,
+    with_lessons,
+    with_lookup,
+    with_quiz,
+    with_roleplay,
+    with_tonight_briefing,
+)
 from madira.domain.catalog import notes as notes_service
 from madira.domain.errors import DraftFailed, NotFound
 from madira.domain.inventory import counts as count_service
@@ -20,14 +40,25 @@ from madira.domain.inventory import par as par_service
 from madira.domain.inventory import service as inventory_service
 from madira.domain.inventory.ledger import Rejected
 from madira.domain.lists import service as lists_service
+from madira.domain.lists import versions as list_versions
+from madira.domain.lists.versions import ListVersionError
 from madira.domain.menu import service as menu_service
+from madira.domain.procurement import offers as offer_service
 from madira.domain.procurement import orders as order_lifecycle
 from madira.domain.procurement import receiving as receiving_service
-from madira.domain.procurement import service as procurement_service
+from madira.domain.sourcing import service as sourcing_service
+from madira.domain.tastings import service as tasting_service
+from madira.domain.tastings.service import TastingError
+from madira.domain.procurement.offers import OfferError
 from madira.domain.procurement.orders import OrderError
 from madira.domain.procurement.receiving import ReceivingError
 from madira.domain.purchasing import service as purchasing_service
-from madira.domain.training import service as training_service
+from madira.domain.training import briefing as briefing_service
+from madira.domain.training import lessons as lessons_service
+from madira.domain.training import lookup as lookup_service
+from madira.domain.training import manager as manager_service
+from madira.domain.training import quizzes as quizzes_service
+from madira.domain.training import roleplay as roleplay_service
 from madira.domain.session import session_scope
 from madira.tenancy import active_venue_id, current_request
 
@@ -84,9 +115,86 @@ def recommend_pairings(menu_id: str = "") -> str:
     return _dumps(body)
 
 
-def curate_beverage_list(budget: float = 12000, target_margin: float = 3.2, name: str = "Maison Madira autumn list") -> str:
-    """Build a balanced wine/beer/spirit/sake list within a buying budget and target pour/bottle margin. Show coverage and gaps."""
+def _list_key(list_id: str) -> uuid.UUID:
+    text = (list_id or "").strip()
+    if text:
+        return uuid.UUID(text)
+    rows = lists_service.list_lists(_vid())["lists"]
+    if not rows:
+        raise NotFound("list not found")
+    return rows[0]["id"]
+
+
+def curate_beverage_list(
+    budget: float = 12000,
+    target_margin: float = 3.2,
+    name: str = "Maison Madira autumn list",
+) -> str:
+    """Build a list from the confirmed menu, the budget, the target beverage cost, and cellar capacity. Prices come from the pricing rules."""
     body = with_list(lists_service.curate(_vid(), budget=budget, target_margin=target_margin, name=name))
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("list-curator")
+    return _dumps(body)
+
+
+def get_list_health(list_id: str = "") -> str:
+    """Return list health flags. Every number comes from the list service."""
+    try:
+        payload = lists_service.health_for(_vid(), _list_key(list_id))
+    except (NotFound, DraftFailed, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "list not found")})
+    tracker.complete_delegation("list-curator")
+    return _dumps(payload)
+
+
+def submit_list_for_publish(list_id: str = "") -> str:
+    """Snapshot the list and open an Owner approval. This does not publish."""
+
+    try:
+        payload = list_versions.submit_list(_vid(), _list_key(list_id), _actor())
+    except (NotFound, ListVersionError, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "list not found")})
+    body = with_list_approval(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("list-curator")
+    return _dumps(body)
+
+
+def diff_list(list_id: str = "") -> str:
+    """Diff the current list against the published version. Added, removed, repriced, and moved."""
+
+    try:
+        key = _list_key(list_id)
+        payload = list_versions.diff_live(_vid(), key)
+        listed = lists_service.get_list(_vid(), key)
+    except (NotFound, ListVersionError, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "list not found")})
+    body = with_list(listed)
+    body["diff"] = payload
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("list-curator")
+    return _dumps(body)
+
+
+def get_coverage(list_id: str = "") -> str:
+    """Return the coverage matrix for a list. Unfilled cells have no product id."""
+    try:
+        payload = lists_service.coverage_for(_vid(), _list_key(list_id))
+    except (NotFound, DraftFailed, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "list not found")})
+    body = with_list(
+        {
+            "name": "Coverage",
+            "list_id": payload.get("list_id"),
+            "cells": payload.get("cells"),
+            "suggestions": payload.get("suggestions"),
+            "gaps": [cell["name"] for cell in payload.get("suggestions") or []] or ["none — categories covered"],
+            "items": [],
+            "sections": [],
+            "candidates": [],
+            "coverage": {},
+        }
+    )
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("list-curator")
     return _dumps(body)
@@ -95,6 +203,34 @@ def curate_beverage_list(budget: float = 12000, target_margin: float = 3.2, name
 def get_inventory() -> str:
     """Return current stock, par levels, 30-day depletion, and low-stock alerts."""
     body = with_inventory(inventory_service.snapshot(_vid()))
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("inventory-purchasing")
+    return _dumps(body)
+
+
+def get_pos_status() -> str:
+    """Return the venue POS connection. The access token is not included."""
+    from madira.domain.pos.adapter import PosError
+    from madira.domain.pos.service import status as pos_status
+
+    try:
+        body = with_status(pos_status(_vid()))
+    except (NotFound, Rejected, PosError) as exc:
+        return _dumps({"error": exc.message})
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("inventory-purchasing")
+    return _dumps(body)
+
+
+def list_unmapped_pos_items() -> str:
+    """List POS variations that sold and have no SKU mapping. Mapping is not done here."""
+    from madira.domain.pos.adapter import PosError
+    from madira.domain.pos.service import unmapped_items
+
+    try:
+        body = with_unmapped(unmapped_items(_vid()))
+    except (NotFound, Rejected, PosError) as exc:
+        return _dumps({"error": exc.message})
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("inventory-purchasing")
     return _dumps(body)
@@ -198,61 +334,260 @@ def get_receiving_checklist(po_id: str = "", receipt_id: str = "") -> str:
     return _dumps(body)
 
 
-def get_training_briefing() -> str:
-    """Daily menu pairing briefing and wine/service lessons for waitstaff and bartenders."""
-    body = with_briefing(training_service.briefing(_vid()))
+def list_lessons() -> str:
+    """List the lessons this person can read. Scores and citations come from the training service."""
+    try:
+        payload = lessons_service.list_lessons(_vid())
+    except DraftFailed as exc:
+        return _dumps({"error": exc.message})
+    body = with_lessons(payload)
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("staff-trainer")
     return _dumps(body)
 
 
-def grade_quiz(answers: str, staff_name: str = "Floor") -> str:
-    """Grade a training quiz. `answers` is a comma-separated list of choice indexes (0-based), e.g. '1,2,2,1'."""
-    payload = training_service.grade(_vid(), answers, staff_name=staff_name)
-    if "error" in payload:
-        return _dumps({"error": payload["error"]})
+def draft_lesson(position: str = "server") -> str:
+    """Draft a lesson for server, bartender, barback, host, or all, grounded on house standards and on-list bottles."""
+    try:
+        payload = lessons_service.draft_lesson(_vid(), position)
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": exc.message})
+    body = with_lesson(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def get_quiz(quiz_id: str) -> str:
+    """Return one quiz. The answer key stays on the server."""
+    try:
+        payload = quizzes_service.get_quiz(_vid(), uuid.UUID(quiz_id))
+    except (DraftFailed, NotFound, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "quiz not found")})
     body = with_quiz(payload)
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("staff-trainer")
     return _dumps(body)
 
 
-def start_roleplay() -> str:
-    """Start diner roleplay: the agent plays a skeptical guest at Maison Madira."""
-    payload = training_service.roleplay()
+def grade_quiz(quiz_id: str, answers: str) -> str:
+    """Grade a quiz for the signed-in user. `answers` is a comma-separated list of choice indexes."""
+    try:
+        payload = quizzes_service.grade(_vid(), uuid.UUID(quiz_id), answers)
+    except (DraftFailed, NotFound, ValueError) as exc:
+        return _dumps({"error": getattr(exc, "message", "quiz not found")})
+    body = with_quiz(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def get_due_reviews() -> str:
+    """List quiz questions that are due for this person. Dates come from the review service."""
+    try:
+        payload = quizzes_service.due_reviews(_vid())
+    except DraftFailed as exc:
+        return _dumps({"error": exc.message})
     tracker.complete_delegation("staff-trainer")
     return _dumps(payload)
 
 
-def list_tastings() -> str:
-    """List scheduled supplier tastings (drafts only; nothing is sent)."""
-    body = with_tasting_list(procurement_service.list_tastings(_vid()))
+def get_tonight_briefing() -> str:
+    """Return tonight's pre-shift briefing. The push reason is in words. Do not add cost or margin."""
+    try:
+        payload = briefing_service.get_or_build_today()
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": getattr(exc, "message", "briefing failed")})
+    body = with_tonight_briefing(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def floor_lookup(query: str) -> str:
+    """Look up a dish, a bottle, or a guest preference. Stock and scripts come from the floor services."""
+    try:
+        payload = lookup_service.lookup(query)
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": getattr(exc, "message", "lookup failed")})
+    body = with_lookup(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def _roleplay_id(session_id: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(session_id)
+    except ValueError as exc:
+        raise NotFound("roleplay not found") from exc
+
+
+def start_roleplay(persona: str = "skeptic", dish: str = "") -> str:
+    """Start a roleplay. persona is skeptic, budget-conscious, connoisseur, or celebration. dish is optional."""
+    dish_id = None
+    name = (dish or "").strip()
+    if name:
+        try:
+            dish_id = uuid.UUID(name)
+            name = ""
+        except ValueError:
+            dish_id = None
+    try:
+        payload = roleplay_service.start(persona, dish_id=dish_id, dish=name)
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": exc.message})
+    body = with_roleplay(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def roleplay_reply(session_id: str, text: str) -> str:
+    """Send the staff line for an open roleplay. The guest reply comes from the service."""
+    try:
+        payload = roleplay_service.reply(_roleplay_id(session_id), text)
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": exc.message})
+    body = with_roleplay(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def score_roleplay(session_id: str) -> str:
+    """Score a roleplay. The service checks evidence quotes and writes the 0-4 score."""
+    try:
+        payload = roleplay_service.finish(_roleplay_id(session_id))
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": exc.message})
+    body = with_roleplay(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(body)
+
+
+def get_team_progress() -> str:
+    """Team completion, weak topics, and expiring certificates. Role-checked. No model numbers."""
+    from madira.domain.training.access import actor
+    from madira.rbac import MATRIX, Capability
+
+    try:
+        ctx = actor()
+    except DraftFailed as exc:
+        return _dumps({"error": exc.message})
+    if ctx.role not in MATRIX[Capability.TEAM_VIEW]:
+        return _dumps({"error": "This role cannot do that."})
+    try:
+        payload = manager_service.progress()
+    except (DraftFailed, NotFound) as exc:
+        return _dumps({"error": exc.message})
+    tracker.complete_delegation("staff-trainer")
+    return _dumps(payload)
+
+
+def get_supplier_offers(product: str = "", supplier: str = "") -> str:
+    """Current offers for a product, a supplier, or both. Prices come from the offer service."""
+    try:
+        payload = offer_service.tool_offers(_vid(), product=product, supplier=supplier)
+    except (NotFound, OfferError) as exc:
+        return _dumps({"error": exc.message})
+    body = with_offers(payload)
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("supplier-scheduler")
     return _dumps(body)
 
 
-def schedule_tasting(
-    supplier_name: str = "Kermit Lynch Wine Merchant",
-    title: str = "New Loire releases tasting",
-    starts_at: str = "",
-    ends_at: str = "",
+def get_price_history(product: str = "") -> str:
+    """Dated offer and invoice costs for one product. Amounts come from the price history service."""
+    if not (product or "").strip():
+        return _dumps({"error": "Name a product."})
+    try:
+        payload = offer_service.tool_history(_vid(), product)
+    except (NotFound, OfferError) as exc:
+        return _dumps({"error": exc.message})
+    body = with_price_history(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("supplier-scheduler")
+    return _dumps(body)
+
+
+def plan_tasting(
+    supplier: str = "",
+    when: str = "",
+    title: str = "",
     location: str = "Maison Madira cellar",
     notes: str = "Draft hold — export .ics, do not send invites.",
 ) -> str:
-    """Schedule a tasting with an importer or distributor. Produces a draft .ics only — never sends email or calendar invites."""
-    payload = procurement_service.schedule(
-        _vid(),
-        supplier_name=supplier_name,
-        title=title,
-        starts_at=starts_at,
-        ends_at=ends_at,
-        location=location,
-        notes=notes,
-    )
+    """Plan a tasting with a supplier. The .ics is a download, never an email or an invite."""
+    try:
+        payload = tasting_service.plan(
+            _vid(),
+            supplier=supplier,
+            when=when,
+            title=title,
+            location=location,
+            notes=notes,
+        )
+    except (NotFound, TastingError) as exc:
+        return _dumps({"error": exc.message})
     if "error" in payload:
         return _dumps({"error": payload["error"]})
     body = with_scheduled(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("supplier-scheduler")
+    return _dumps(body)
+
+
+def get_tasting(session_id: str = "") -> str:
+    """One tasting session, or the venue calendar when session_id is empty. Nothing is sent."""
+    text = (session_id or "").strip()
+    if not text:
+        body = with_tasting_list(tasting_service.list_sessions(_vid()))
+        tracker.record_operations(body["a2ui_operations"])
+        tracker.complete_delegation("supplier-scheduler")
+        return _dumps(body)
+    try:
+        payload = tasting_service.get_session(_vid(), uuid.UUID(text))
+    except ValueError:
+        return _dumps({"error": "tasting not found"})
+    except NotFound as exc:
+        return _dumps({"error": exc.message})
+    body = with_session(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("supplier-scheduler")
+    return _dumps(body)
+
+
+def propose_tasting_invite(session_id: str) -> str:
+    """Propose a tasting invite from the venue schedule. Nothing is sent until an Owner or Manager approves it."""
+    from madira.domain.tastings import invites as invite_service
+
+    try:
+        session_uuid = uuid.UUID(session_id)
+    except ValueError:
+        return _dumps({"error": "tasting not found"})
+    try:
+        payload = invite_service.propose(_vid(), session_uuid)
+    except (NotFound, TastingError, DraftFailed) as exc:
+        return _dumps({"error": exc.message})
+    body = with_invite(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("supplier-scheduler")
+    return _dumps(body)
+
+
+def score_sample(sample_id: str, score: int = 0, note: str = "") -> str:
+    """Record a 0-100 score and a note. The number is stored as given, not invented."""
+    try:
+        sample_uuid = uuid.UUID(sample_id)
+    except ValueError:
+        return _dumps({"error": "sample not found"})
+    try:
+        payload = tasting_service.score_sample(_vid(), sample_uuid, score, note if note else None)
+    except (NotFound, TastingError) as exc:
+        return _dumps({"error": exc.message})
+    body = with_sample(payload)
     tracker.record_operations(body["a2ui_operations"])
     tracker.complete_delegation("supplier-scheduler")
     return _dumps(body)
@@ -282,13 +617,102 @@ def get_audit_pack_summary(start_date: str = "", end_date: str = "") -> str:
 
 
 def find_compliance_gaps() -> str:
-    """Find missing invoices, hash-chain status, and open storage excursions. Read only."""
+    """Find missing invoices, hash-chain status, open storage excursions, and certificate expiry. Read only."""
     from madira.domain.compliance.audit_pack import compliance_gaps
 
     with session_scope() as session:
         payload = compliance_gaps(session, _vid())
     tracker.complete_delegation("compliance-auditor")
     return _dumps(payload)
+
+
+def get_sensor_status() -> str:
+    """Return each sensor's last reading and whether it is stale. Read only. The secret is not included."""
+    from madira.domain.errors import NotFound
+    from madira.domain.sensors.service import SensorError, list_sensors
+
+    try:
+        body = with_sensors(list_sensors(_vid()))
+    except (NotFound, SensorError) as exc:
+        return _dumps({"error": exc.message})
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("compliance-auditor")
+    return _dumps(body)
+
+
+def list_reminders() -> str:
+    """List open in-app reminders. Does not acknowledge them and does not send anything."""
+    from madira.domain.reminders.service import ReminderError, list_reminders as reminders_for
+
+    try:
+        body = with_reminders(reminders_for(_vid()))
+    except (NotFound, ReminderError) as exc:
+        return _dumps({"error": exc.message})
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("compliance-auditor")
+    return _dumps(body)
+
+
+def _query_tool(fn, **kwargs) -> str:
+    from madira.agents.presenters.queries import with_table
+    from madira.domain.compliance.queries import QueryError
+
+    try:
+        body = with_table(fn(_vid(), **kwargs))
+    except (NotFound, QueryError) as exc:
+        return _dumps({"error": exc.message})
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("compliance-auditor")
+    return _dumps(body)
+
+
+def query_stock_movements(sku: str = "", start_date: str = "", end_date: str = "", limit: int = 25, offset: int = 0) -> str:
+    """Stock movements and sale depletion for one SKU and date range. Read only."""
+    from madira.domain.compliance.queries import stock_movements
+
+    return _query_tool(stock_movements, sku=sku, start_date=start_date, end_date=end_date, limit=limit, offset=offset)
+
+
+def query_conditions(limit: int = 25, offset: int = 0) -> str:
+    """Condition excursions and stale sensor gaps. Read only."""
+    from madira.domain.compliance.queries import conditions
+
+    return _query_tool(conditions, limit=limit, offset=offset)
+
+
+def query_compliance_status(limit: int = 25, offset: int = 0) -> str:
+    """License and certificate status, plus open reminders. Read only. Nothing is sent."""
+    from madira.domain.compliance.queries import compliance_status
+
+    return _query_tool(compliance_status, limit=limit, offset=offset)
+
+
+def query_pos_gaps(limit: int = 25, offset: int = 0) -> str:
+    """POS sync gaps and unmapped items. Read only."""
+    from madira.domain.compliance.queries import pos_gaps
+
+    return _query_tool(pos_gaps, limit=limit, offset=offset)
+
+
+def query_list_versions(limit: int = 25, offset: int = 0) -> str:
+    """List versions and publish history. Read only."""
+    from madira.domain.compliance.queries import list_versions
+
+    return _query_tool(list_versions, limit=limit, offset=offset)
+
+
+def query_purchases(limit: int = 25, offset: int = 0) -> str:
+    """Purchase orders and receipts. Amounts come from the purchasing records. Read only."""
+    from madira.domain.compliance.queries import purchases
+
+    return _query_tool(purchases, limit=limit, offset=offset)
+
+
+def query_audit_events(action: str = "", actor: str = "", limit: int = 25, offset: int = 0) -> str:
+    """Audit events filtered by action and actor. Read only."""
+    from madira.domain.compliance.queries import audit_events
+
+    return _query_tool(audit_events, action=action, actor=actor, limit=limit, offset=offset)
 
 
 def get_storage_zones_status() -> str:
@@ -306,9 +730,11 @@ def get_storage_zones_status() -> str:
 
 MENU_ANALYST_TOOLS = [parse_menu]
 PAIRING_TOOLS = [recommend_pairings, draft_tasting_note]
-LIST_TOOLS = [curate_beverage_list]
+LIST_TOOLS = [curate_beverage_list, get_list_health, get_coverage, submit_list_for_publish, diff_list]
 INVENTORY_TOOLS = [
     get_inventory,
+    get_pos_status,
+    list_unmapped_pos_items,
     update_stock,
     draft_purchase_orders,
     draft_case_purchase_orders,
@@ -317,9 +743,140 @@ INVENTORY_TOOLS = [
     propose_par_changes,
     get_count_variance,
 ]
-TRAINING_TOOLS = [get_training_briefing, grade_quiz, start_roleplay]
-SUPPLIER_TOOLS = [list_tastings, schedule_tasting]
-COMPLIANCE_TOOLS = [get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status]
+TRAINING_TOOLS = [
+    list_lessons,
+    draft_lesson,
+    get_quiz,
+    grade_quiz,
+    get_due_reviews,
+    get_tonight_briefing,
+    floor_lookup,
+    start_roleplay,
+    roleplay_reply,
+    score_roleplay,
+    get_team_progress,
+]
+def build_sourcing_brief() -> str:
+    """Turn list gaps into a want list. Quantities and price bands come from the list service."""
+    try:
+        payload = sourcing_service.build_brief(_vid())
+    except (NotFound, TastingError, DraftFailed) as exc:
+        return _dumps({"error": exc.message})
+    body = with_brief(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("buyer")
+    return _dumps(body)
+
+
+def decide_sample(sample_id: str, decision: str = "undecided", reason: str = "") -> str:
+    """Apply a tasting decision. Buy and list create drafts only. Pass stores a reason."""
+    try:
+        sample_uuid = uuid.UUID(sample_id)
+    except ValueError:
+        return _dumps({"error": "sample not found"})
+    try:
+        payload = sourcing_service.apply_decision(_vid(), _sample_session(sample_uuid), sample_uuid, decision, reason or None)
+    except (NotFound, TastingError, DraftFailed) as exc:
+        return _dumps({"error": exc.message})
+    body = with_sample(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("buyer")
+    return _dumps(body)
+
+
+def draft_rep_followup(session_id: str) -> str:
+    """Draft a follow-up note for the supplier rep. The note is stored and not sent."""
+    try:
+        session_uuid = uuid.UUID(session_id)
+    except ValueError:
+        return _dumps({"error": "tasting not found"})
+    try:
+        payload = sourcing_service.draft_followup(_vid(), session_uuid)
+    except (NotFound, TastingError, DraftFailed) as exc:
+        return _dumps({"error": exc.message})
+    body = with_followup(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("buyer")
+    return _dumps(body)
+
+
+def get_tasting_history(supplier: str = "", product: str = "") -> str:
+    """Tasted samples against bought lines. Counts and amounts come from services."""
+    try:
+        payload = sourcing_service.tasting_history(
+            _vid(),
+            supplier_id=_named_supplier(supplier),
+            product_id=_named_product(product),
+        )
+    except (NotFound, TastingError) as exc:
+        return _dumps({"error": exc.message})
+    body = with_history(payload)
+    tracker.record_operations(body["a2ui_operations"])
+    tracker.complete_delegation("buyer")
+    return _dumps(body)
+
+
+def _sample_session(sample_id: uuid.UUID) -> uuid.UUID:
+    from madira.models import Sample
+
+    with session_scope() as session:
+        sample = session.get(Sample, sample_id)
+        if sample is None or sample.venue_id != _vid():
+            raise NotFound("sample not found")
+        return sample.session_id
+
+
+def _named_supplier(name: str) -> uuid.UUID | None:
+    text = " ".join((name or "").split()).casefold()
+    if not text:
+        return None
+    from sqlalchemy import select
+
+    from madira.models import Supplier
+
+    with session_scope() as session:
+        rows = session.scalars(select(Supplier).where(Supplier.venue_id == _vid())).all()
+    matches = [row for row in rows if " ".join(row.name.split()).casefold() == text]
+    if len(matches) != 1:
+        raise NotFound("supplier not found")
+    return matches[0].id
+
+
+def _named_product(name: str) -> uuid.UUID | None:
+    text = " ".join((name or "").split()).casefold()
+    if not text:
+        return None
+    from sqlalchemy import select
+
+    from madira.models import Product, Venue
+
+    with session_scope() as session:
+        venue = session.get(Venue, _vid())
+        if venue is None:
+            raise NotFound("venue not found")
+        rows = session.scalars(select(Product).where(Product.organization_id == venue.organization_id)).all()
+    matches = [row for row in rows if " ".join(row.name.split()).casefold() == text]
+    if len(matches) != 1:
+        raise NotFound("product not found")
+    return matches[0].id
+
+
+SUPPLIER_TOOLS = [plan_tasting, get_tasting, propose_tasting_invite, score_sample, get_supplier_offers, get_price_history]
+BUYER_TOOLS = [build_sourcing_brief, decide_sample, draft_rep_followup, get_tasting_history]
+COMPLIANCE_TOOLS = [
+    get_audit_pack_summary,
+    find_compliance_gaps,
+    get_storage_zones_status,
+    get_sensor_status,
+    list_reminders,
+    query_stock_movements,
+    query_conditions,
+    query_compliance_status,
+    query_pos_gaps,
+    query_list_versions,
+    query_purchases,
+    query_audit_events,
+]
 
 ALL_TOOLS = (
     MENU_ANALYST_TOOLS
@@ -328,5 +885,6 @@ ALL_TOOLS = (
     + INVENTORY_TOOLS
     + TRAINING_TOOLS
     + SUPPLIER_TOOLS
+    + BUYER_TOOLS
     + COMPLIANCE_TOOLS
 )

@@ -376,7 +376,20 @@ def test_seeded_zones_stay_in_range_and_do_not_grow_on_a_second_seed():
 
 def test_compliance_auditor_tools_are_read_only():
     names = [tool.__name__ for tool in COMPLIANCE_TOOLS]
-    assert names == ["get_audit_pack_summary", "find_compliance_gaps", "get_storage_zones_status"]
+    assert names == [
+        "get_audit_pack_summary",
+        "find_compliance_gaps",
+        "get_storage_zones_status",
+        "get_sensor_status",
+        "list_reminders",
+        "query_stock_movements",
+        "query_conditions",
+        "query_compliance_status",
+        "query_pos_gaps",
+        "query_list_versions",
+        "query_purchases",
+        "query_audit_events",
+    ]
     spec = next(row for row in SUBAGENT_SPECS if row["name"] == "compliance-auditor")
     assert [tool.__name__ for tool in spec["tools"]] == names
     assert "read-only" in spec["system_prompt"].lower()
@@ -409,7 +422,7 @@ from alembic import command
 from madira.db import _alembic_config
 
 cfg = _alembic_config()
-command.upgrade(cfg, "head")
+command.upgrade(cfg, "0014_storage_zones")
 engine = sa.create_engine(os.environ["DATABASE_URL"])
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
@@ -430,7 +443,7 @@ with engine.connect() as conn:
     assert "storage_zones" not in tables
     assert "condition_readings" not in tables
     assert "condition_excursions" not in tables
-command.upgrade(cfg, "head")
+command.upgrade(cfg, "0014_storage_zones")
 with engine.connect() as conn:
     version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
     assert version == "0014_storage_zones"

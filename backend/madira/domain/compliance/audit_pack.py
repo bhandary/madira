@@ -517,6 +517,24 @@ def build_audit_pack(session: Session, venue_id: uuid.UUID, start_date: date, en
     }
 
 
+def _certificate_gaps(session: Session, venue_id: uuid.UUID) -> list[dict]:
+    from madira.domain.team.certificates import due_certificates
+
+    return due_certificates(session, venue_id)
+
+
+def _pos_gaps(session: Session, venue_id: uuid.UUID) -> list[dict]:
+    from madira.domain.pos.service import gap_alerts
+
+    return gap_alerts(session, venue_id)
+
+
+def _reminder_gaps(session: Session, venue_id: uuid.UUID) -> list[dict]:
+    from madira.domain.reminders.service import open_reminders
+
+    return open_reminders(session, venue_id)
+
+
 def compliance_gaps(session: Session, venue_id: uuid.UUID) -> dict:
     _venue(session, venue_id)
     excursions = session.scalars(
@@ -540,6 +558,9 @@ def compliance_gaps(session: Session, venue_id: uuid.UUID) -> dict:
             }
             for row in excursions
         ],
+        "certificate_gaps": _certificate_gaps(session, venue_id),
+        "pos_gaps": _pos_gaps(session, venue_id),
+        "reminders": _reminder_gaps(session, venue_id),
         "chain": chain_public(verify_audit_chain(session, venue_id)),
     }
 

@@ -17,7 +17,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from madira.domain.compliance.service import document_public, get_document_bytes, record_audit_event, store_document
+from madira.domain.compliance.service import document_public, get_document, record_audit_event, store_document
 from madira.domain.errors import NotFound
 from madira.domain.inventory.ledger import as_qty, ensure_location, post_movement, public_qty
 from madira.domain.procurement import orders as lifecycle
@@ -259,11 +259,11 @@ def get_invoice(venue_id: uuid.UUID, invoice_id: uuid.UUID) -> dict:
         return _invoice_public(row, document)
 
 
-def invoice_document(venue_id: uuid.UUID, invoice_id: uuid.UUID) -> tuple[str, str, bytes]:
+def invoice_document(venue_id: uuid.UUID, invoice_id: uuid.UUID) -> tuple[str, str, str]:
     with session_scope() as session:
         row = _invoice(session, venue_id, invoice_id)
-        document, payload = get_document_bytes(session, venue_id, row.document_id)
-        return document.filename, document.content_type or "application/octet-stream", payload
+        document = get_document(session, venue_id, row.document_id)
+        return document.filename, document.content_type or "application/octet-stream", document.storage_key
 
 
 def stage_receipt(
@@ -568,13 +568,11 @@ def _call_vision(*, filename: str, content_type: str | None, body: bytes, po_lin
             {"type": "text", "text": prompt},
             {"type": "image_url", "image_url": {"url": f"data:{media};base64,{encoded}"}},
         ]
-    from langchain.chat_models import init_chat_model
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    kwargs = {}
-    if runtime.api_key:
-        kwargs["api_key"] = runtime.api_key
-    model = init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+    from madira.model_tiers import bind_chat_model
+
+    model = bind_chat_model("inventory-purchasing")
     result = model.invoke(
         [
             SystemMessage(content="You read invoices. Reply with one JSON object and no other text."),

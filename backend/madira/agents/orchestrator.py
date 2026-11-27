@@ -13,6 +13,7 @@ from madira.agents.tools import (
     LIST_TOOLS,
     MENU_ANALYST_TOOLS,
     PAIRING_TOOLS,
+    BUYER_TOOLS,
     SUPPLIER_TOOLS,
     TRAINING_TOOLS,
 )
@@ -24,11 +25,12 @@ HEAD_PROMPT = """You are the Head Sommelier of Maison Madira, a California-Frenc
 You do not do specialist work yourself. You ALWAYS delegate with the `task` tool:
 - menu-analyst — parse an uploaded or pasted menu into dishes, flavor profiles, cuisine, price tier
 - pairing-sommelier — wine, beer, spirit, and sake pairings per dish with rationale and price-tier fit; tasting notes and service cards for a catalog product
-- list-curator — balanced lists within a stated budget and target pour/bottle margin, with coverage and gaps
+- list-curator — lists from the confirmed menu within budget and cellar capacity, with a coverage grid and health flags. Prices and margins come from the list service. The curator writes section notes only.
 - inventory-purchasing — stock, par, depletion, low-stock alerts, count variance, par proposals, draft purchase orders (never transmit)
-- staff-trainer — wine knowledge, service etiquette, daily briefing, quizzes, diner roleplay
-- supplier-scheduler — draft tastings with importers/distributors; .ics only, never send email or invites
-- compliance-auditor — read-only audit pack summary, missing-invoice gaps, hash-chain status, and storage-zone conditions. Never write.
+- staff-trainer — lessons by role, quizzes, spaced reviews, tonight's briefing, floor lookup, guest roleplay, and team progress. Scores, dates, citations, and stock come from tools. Do not invent them and do not show cost or margin.
+- supplier-scheduler — plan tastings, propose an unsent tasting invite, and score samples (.ics download only, never send email or invites); current supplier offers and price history. Amounts, margins, and scores come from those tools.
+- buyer — sourcing briefs from list gaps, post-tasting decisions, rep follow-up drafts, and tasted-versus-bought history. Buy and list create drafts only. Nothing is sent.
+- compliance-auditor — read-only audit pack, gaps, storage, sensors, reminders, and parameterized audit tables (stock, conditions, licenses, POS, lists, purchases, audit events). Answer from those tables. Never write.
 
 For a new menu, call menu-analyst first, then pairing-sommelier.
 Keep write_todos current so the floor can see who is working.
@@ -54,8 +56,16 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "list-curator",
-        "description": "Build a balanced wine/beer/spirit/sake list to complement the menu within a budget and target margin. Show coverage, gaps, and cost/margin math.",
-        "system_prompt": "You are the List Curator. Call curate_beverage_list with budget and target_margin from the task.",
+        "description": "Build a list from the confirmed menu within budget and cellar capacity. Show the coverage grid, section margins, and health flags. Do not invent prices.",
+        "system_prompt": (
+            "You are the List Curator. Call curate_beverage_list with the budget and target margin from the task. "
+            "Then call get_list_health and get_coverage. "
+            "Call diff_list to compare the list with the published version. "
+            "Call submit_list_for_publish when asked to publish. That only opens an Owner approval. "
+            "You do not publish. Publishing happens only after the Owner approves. "
+            "You write section notes only. Every price, cost, margin, and health flag comes from those tools. "
+            "Do not invent a bottle, a price, or a number."
+        ),
         "tools": LIST_TOOLS,
     },
     {
@@ -64,7 +74,9 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
         "system_prompt": (
             "You are Inventory & Purchasing, also called the cellar manager for counts and par. "
             "Use get_inventory, update_stock, draft_purchase_orders, draft_case_purchase_orders, "
-            "get_purchase_order, get_receiving_checklist, propose_par_changes, and get_count_variance as needed. "
+            "get_purchase_order, get_receiving_checklist, propose_par_changes, get_count_variance, "
+            "get_pos_status, and list_unmapped_pos_items as needed. "
+            "POS sync posts stock. You do not map items or invent a count. "
             "get_purchase_order shows an ApprovalCard. get_receiving_checklist shows a ReceivingChecklist. "
             "Only the Owner can approve. Do not email suppliers."
         ),
@@ -72,22 +84,66 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "staff-trainer",
-        "description": "Wine knowledge, service etiquette, daily pairing briefings, flavor-profile explainers, quizzes, and diner roleplay.",
-        "system_prompt": "You are the Staff Trainer. Use get_training_briefing, grade_quiz, or start_roleplay depending on the task.",
+        "description": "Role lessons grounded on house standards, quizzes, and spaced reviews. Scores and dates come from tools.",
+        "system_prompt": (
+            "You are the Staff Trainer. Call list_lessons for the lessons this person can read. "
+            "Call draft_lesson with a position when asked to draft. "
+            "Call get_quiz, then grade_quiz with quiz_id and answers. "
+            "Call get_due_reviews for questions that are due. "
+            "Call get_tonight_briefing for the daily briefing. "
+            "Call floor_lookup with the guest's words for a dish, a bottle, or a preference. "
+            "Call start_roleplay with a persona (skeptic, budget-conscious, connoisseur, or celebration) and an optional dish. "
+            "Call roleplay_reply with the session id and the staff line. "
+            "Call score_roleplay when the exchange should be scored. The service writes the 0-4 score. Do not invent it. "
+            "Call get_team_progress for completion, weak topics, and certificate expiry. "
+            "Scores, next review dates, citations, and stock come from those tools. Do not invent them. "
+            "Do not show cost or margin. The push reason is already in words."
+        ),
         "tools": TRAINING_TOOLS,
     },
     {
         "name": "supplier-scheduler",
-        "description": "Schedule tastings with importers and distributors. Produce .ics drafts only — never send email or calendar invites.",
-        "system_prompt": "You are the Supplier Scheduler. Use list_tastings or schedule_tasting. Always mark results as drafts, never sent.",
+        "description": "Plan tastings, propose an unsent tasting invite, score samples, and read supplier offers and price history. Produce an .ics download only — never send email or calendar invites. Do not ingest price sheets.",
+        "system_prompt": (
+            "You are the Supplier Scheduler. Use plan_tasting(supplier, when) to plan a tasting. "
+            "Use get_tasting(session_id) for one session, or with an empty session_id for the calendar. "
+            "Use propose_tasting_invite(session_id) to draft an invite from the venue schedule. "
+            "That call only proposes. It does not approve and it does not send. "
+            "Use score_sample(sample_id, score, note) to record a score. "
+            "Use get_supplier_offers for current offers and get_price_history for a product's price history. "
+            "Prices, margins, and scores come from those tools. Do not invent a price or a score. "
+            "Do not ingest a price sheet. Post-tasting decisions belong to the buyer. "
+            "The calendar file is a download. Never send email or invites."
+        ),
         "tools": SUPPLIER_TOOLS,
+    },
+    {
+        "name": "buyer",
+        "description": "Turn list gaps into a sourcing brief, apply a tasting decision as a draft, and draft an unsent rep follow-up.",
+        "system_prompt": (
+            "You are the Buyer. Call build_sourcing_brief for a want list. "
+            "Call decide_sample(sample_id, decision, reason) to buy, list, or pass a sample. "
+            "Buy adds a line to a draft purchase order. List adds the bottle to a draft list version. "
+            "Pass stores a reason. Do not approve a purchase order, publish a list, or send email. "
+            "Call draft_rep_followup(session_id) for a draft note. It is stored only. "
+            "Call get_tasting_history for tasted versus bought. "
+            "Quantities, prices, margins, and purchase-order numbers come from those tools. Do not invent them."
+        ),
+        "tools": BUYER_TOOLS,
     },
     {
         "name": "compliance-auditor",
         "description": "Read-only compliance review: audit pack summary, missing invoices, hash-chain integrity, and storage zone conditions.",
         "system_prompt": (
             "You are the compliance auditor. You are strictly read-only. "
-            "Call get_audit_pack_summary, find_compliance_gaps, or get_storage_zones_status. "
+            "Call get_audit_pack_summary, find_compliance_gaps, get_storage_zones_status, "
+            "get_sensor_status, or list_reminders. "
+            "For a table, call query_stock_movements, query_conditions, query_compliance_status, "
+            "query_pos_gaps, query_list_versions, query_purchases, or query_audit_events. "
+            "Those return an AuditTable. Quote its totals. Do not add a number that is not in the table. "
+            "find_compliance_gaps includes certificate expiry and open reminders. "
+            "get_sensor_status returns the last reading and whether it is stale. The signing secret is not in the tool. "
+            "list_reminders is in-app only. Do not send email and do not acknowledge a reminder. "
             "get_storage_zones_status returns ZoneConditionCard surfaces. "
             "Never create zones, readings, acknowledgements, orders, or exports."
         ),
@@ -99,13 +155,16 @@ SUBAGENT_SPECS: list[dict[str, Any]] = [
 SPECIALIST_NAMES = [spec["name"] for spec in SUBAGENT_SPECS]
 
 
-def _live_model(runtime: LlmRuntime):
+def _live_model(runtime: LlmRuntime, role: str):
     from langchain.chat_models import init_chat_model
+
+    from madira.model_tiers import model_for_specialist
 
     kwargs: dict[str, Any] = {}
     if runtime.api_key:
         kwargs["api_key"] = runtime.api_key
-    return init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+    model_id = model_for_specialist(role, runtime)
+    return init_chat_model(f"{runtime.provider}:{model_id}", **kwargs)
 
 
 def _model_for(role: str, runtime: LlmRuntime | None = None):
@@ -114,7 +173,7 @@ def _model_for(role: str, runtime: LlmRuntime | None = None):
         from madira.agents.demo.model import DemoChatModel
 
         return DemoChatModel(role=role)
-    return _live_model(runtime)
+    return _live_model(runtime, role)
 
 
 def specialist_specs(runtime: LlmRuntime | None = None) -> list[dict[str, Any]]:
@@ -215,40 +274,71 @@ def invoke_head_sommelier(message: str, thread_id: str | None = None) -> dict[st
 
 
 def _invoke_head_sommelier(message: str, thread_id: str | None, venue_id: uuid.UUID) -> dict[str, Any]:
+    import time
+
+    from madira.domain.usage.service import UsageError, begin_run, finish_run
+
+    try:
+        run_id = begin_run(venue_id, message)
+    except UsageError as exc:
+        runtime = resolve_runtime()
+        return {
+            "reply": exc.message,
+            "delegation": [],
+            "todos": [],
+            "a2ui_operations": [],
+            "demo_mode": runtime.demo_mode,
+            "thread_id": thread_id,
+            "messages_count": 0,
+            "usage_error": exc.message,
+        }
+    started = time.perf_counter()
     tracker.start_run()
     runtime = resolve_runtime()
     agent = build_head_sommelier()
-    # A checkpointer refuses invoke unless the run names a thread.
-    # madira_venue_id is read by tools if the context variable does not cross a worker thread.
-    result = agent.invoke(
-        {"messages": [{"role": "user", "content": message}]},
-        config={
-            "configurable": {
-                "thread_id": thread_id or str(uuid.uuid4()),
-                "madira_venue_id": str(venue_id),
-            }
-        },
-    )
-    messages = result.get("messages", []) if isinstance(result, dict) else []
-    snap = tracker.snapshot()
-    delegated = snap["delegation"] or extract_task_delegations(messages)
-    ops = snap["a2ui_operations"] or extract_a2ui(messages)
     reply = ""
-    for msg in reversed(messages):
-        if getattr(msg, "type", "") == "ai" or msg.__class__.__name__ == "AIMessage":
-            if not getattr(msg, "tool_calls", None):
-                reply = _message_text(msg)
-                if reply:
-                    break
-    return {
-        "reply": reply,
-        "delegation": delegated,
-        "todos": snap["todos"],
-        "a2ui_operations": ops,
-        "demo_mode": runtime.demo_mode,
-        "thread_id": thread_id,
-        "messages_count": len(messages),
-    }
+    delegated: list[dict[str, str]] = []
+    try:
+        # A checkpointer refuses invoke unless the run names a thread.
+        # madira_venue_id is read by tools if the context variable does not cross a worker thread.
+        result = agent.invoke(
+            {"messages": [{"role": "user", "content": message}]},
+            config={
+                "configurable": {
+                    "thread_id": thread_id or str(uuid.uuid4()),
+                    "madira_venue_id": str(venue_id),
+                }
+            },
+        )
+        messages = result.get("messages", []) if isinstance(result, dict) else []
+        snap = tracker.snapshot()
+        delegated = snap["delegation"] or extract_task_delegations(messages)
+        ops = snap["a2ui_operations"] or extract_a2ui(messages)
+        for msg in reversed(messages):
+            if getattr(msg, "type", "") == "ai" or msg.__class__.__name__ == "AIMessage":
+                if not getattr(msg, "tool_calls", None):
+                    reply = _message_text(msg)
+                    if reply:
+                        break
+        return {
+            "reply": reply,
+            "delegation": delegated,
+            "todos": snap["todos"],
+            "a2ui_operations": ops,
+            "demo_mode": runtime.demo_mode,
+            "thread_id": thread_id,
+            "messages_count": len(messages),
+        }
+    finally:
+        names = [item.get("subagent", "") for item in delegated if isinstance(item, dict)]
+        finish_run(
+            run_id,
+            reply=reply,
+            delegated=names,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            tokens_in=max(1, len(message) // 4) if (message or "").strip() else 0,
+            tokens_out=max(1, len(reply) // 4) if (reply or "").strip() else 0,
+        )
 
 
 def inspect_subagents(agent=None) -> dict[str, Any]:

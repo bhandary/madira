@@ -140,7 +140,7 @@ def test_schema_retry_then_a_clear_error(client: TestClient):
     set_menu_completer(still_invalid)
     failed = _post(client, data={"text": "Grilled octopus, chili, olive oil — $24\n"})
     assert failed.status_code == 422
-    assert failed.json()["detail"] == "The menu did not match the schema after one retry."
+    assert failed.json()["detail"] == "The menu did not match the schema after 2 attempts."
     assert len(calls) == 2
     assert "Dungeness" not in failed.text
 
@@ -364,6 +364,9 @@ def test_roles_and_venue_isolation(client: TestClient, monkeypatch):
 
 def test_live_extraction_does_not_use_fixtures(client: TestClient, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-live-not-a-fixture")
+    # A live process leaves the ingest queued for the worker. This test checks
+    # the model path, so the job runs in the request.
+    monkeypatch.setenv("MADIRA_JOBS_INLINE", "1")
     assert resolve_runtime().demo_mode is False
     seen = {}
 

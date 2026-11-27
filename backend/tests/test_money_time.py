@@ -12,9 +12,9 @@ from pathlib import Path
 from sqlalchemy import func, select, text
 
 from madira.db import SessionLocal, init_db
-from madira.domain.procurement.service import build_ics
-from madira.agents.demo.fixtures import curate_list
-from madira.models import Supplier, Tasting
+from madira.domain.lists.pricing import economics, price_for
+from madira.domain.tastings.service import build_ics, ics_text
+from madira.models import Supplier, TastingSession
 from madira.money import bottle_multiple, format_whole, pour_multiple, to_minor
 from madira.seed import seed
 from madira.tenancy import bind, ensure_demo_tenant, reset
@@ -38,25 +38,14 @@ def test_to_minor_rounds_half_away_from_zero():
 
 
 def test_list_math_stays_in_minor_units_and_displays_the_same_dollars():
-    payload = curate_list(budget=12000, target_margin=3.2)
-    assert payload["budget"] == 1_200_000
-    assert payload["currency"] == "USD"
-    assert payload["spent"] == 519_760
-    assert payload["remaining"] == 1_200_000 - 519_760
-    assert payload["spent"] == sum(item["line_cost"] for item in payload["items"])
-    assert payload["target_margin"] == 3.2
-    assert "Buys stay at $5,198 of $12,000." in payload["notes"]
-    assert "3.2x" in payload["notes"]
-    muscadet = payload["items"][0]
-    assert muscadet["cost"] == 1800
-    assert muscadet["line_cost"] == 1800 * 12
-    assert muscadet["pour_multiple"] == 4.44
-    assert muscadet["margin_pct"] == 77.5
-    kolsch = next(item for item in payload["items"] if item["name"] == "Kölsch")
-    assert kolsch["cost"] == 240
-    assert kolsch["line_cost"] == 240 * 24
-    assert format_whole(payload["spent"]) == "5,198"
-    assert format_whole(payload["budget"]) == "12,000"
+    assert to_minor(12000) == 1_200_000
+    assert format_whole(1_200_000) == "12,000"
+    muscadet = price_for(1800, "wine")
+    assert muscadet["bottle_price"] == 5400
+    assert muscadet["glass_price"] == 1300
+    priced = economics(1800, muscadet["bottle_price"], muscadet["glass_price"])
+    assert priced["margin_pct"] == 66.7
+    assert priced["beverage_cost_pct"] == 33.3
     assert float(pour_multiple(1600, 1800)) == 4.44
     assert float(bottle_multiple(4800, 1800)) == 2.67
 
@@ -78,12 +67,11 @@ def test_tasting_clock_round_trips_and_ics_text_is_unchanged():
     notes = "Draft hold — export .ics, do not send invites."
     title = "Clock round trip"
     location = "Maison Madira cellar"
-    ics = build_ics(title, start, end, location, notes)
     session = SessionLocal()
     try:
         supplier = session.scalar(select(Supplier).where(Supplier.venue_id == ctx.venue_id))
         assert supplier is not None
-        tasting = Tasting(
+        tasting = TastingSession(
             venue_id=ctx.venue_id,
             supplier_id=supplier.id,
             title=title,
@@ -91,7 +79,7 @@ def test_tasting_clock_round_trips_and_ics_text_is_unchanged():
             ends_at=parse_stamp(end),
             location=location,
             notes=notes,
-            ics=ics,
+            status="planned",
         )
         session.add(tasting)
         session.commit()
@@ -102,7 +90,7 @@ def test_tasting_clock_round_trips_and_ics_text_is_unchanged():
 
     session = SessionLocal()
     try:
-        loaded = session.get(Tasting, tasting_id)
+        loaded = session.get(TastingSession, tasting_id)
         assert loaded is not None
         assert loaded.starts_at == parse_stamp(start)
         assert loaded.ends_at == parse_stamp(end)
@@ -110,10 +98,18 @@ def test_tasting_clock_round_trips_and_ics_text_is_unchanged():
         assert loaded.starts_at.utcoffset() == timezone.utc.utcoffset(None)
         assert format_wall(loaded.starts_at) == start
         assert format_wall(loaded.ends_at) == end
-        assert loaded.ics == ics
-        assert loaded.ics == build_ics(title, format_wall(loaded.starts_at), format_wall(loaded.ends_at), location, notes)
-        assert "DTSTART:20261201T1500" in loaded.ics
-        assert "DTEND:20261201T1700" in loaded.ics
+        text = ics_text(ctx.venue_id, tasting_id)
+        assert text == build_ics(
+            title,
+            loaded.starts_at,
+            loaded.ends_at,
+            location,
+            notes,
+            uid=f"{loaded.id}@madira.local",
+            dtstamp=loaded.created_at,
+        )
+        assert "DTSTART:20261201T150000Z" in text
+        assert "DTEND:20261201T170000Z" in text
     finally:
         session.close()
 
@@ -126,7 +122,7 @@ import os
 from sqlalchemy import create_engine, func, select, text
 from alembic import command
 from madira.db import _alembic_config
-from madira.models import BeverageList, InventoryItem, Sku, Tasting, Venue
+from madira.models import BeverageList, InventoryItem, Sku, TastingSession, Venue
 from madira.timestamps import parse_stamp
 
 url = os.environ["DATABASE_URL"]
@@ -191,7 +187,7 @@ try:
         (Venue, before["venues"]),
         (InventoryItem, before["inventory_items"]),
         (BeverageList, before["beverage_lists"]),
-        (Tasting, before["tastings"]),
+        (TastingSession, before["tastings"]),
     ):
         assert session.scalar(select(func.count()).select_from(model)) == count
     item = session.scalar(
@@ -204,11 +200,16 @@ try:
     assert listing.budget == 1_200_000
     assert listing.currency == "USD"
     assert listing.target_margin == 3.2
-    tasting = session.scalar(select(Tasting))
+    tasting = session.scalar(select(TastingSession))
+    assert tasting.title == "New Loire"
+    assert tasting.status == "planned"
     assert tasting.starts_at == parse_stamp("2026-12-01T15:00")
     assert tasting.ends_at == parse_stamp("2026-12-01T17:00")
-    assert tasting.ics == "BEGIN:VCALENDAR"
     assert tasting.venue_id == item.venue_id
+    from sqlalchemy import inspect as sa_inspect
+    names = sa_inspect(session.connection()).get_table_names()
+    assert "tastings" not in names
+    assert "tasting_sessions" in names
     assert item.supplier_id is not None
 finally:
     session.close()
@@ -233,7 +234,7 @@ with engine.connect() as conn:
     version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
     orgs = conn.execute(text("SELECT COUNT(*) FROM organizations")).scalar()
     suppliers = conn.execute(text("SELECT COUNT(*) FROM suppliers")).scalar()
-    assert version == "0014_storage_zones"
+    assert version == "0030_catalog_embeddings"
 assert orgs == 1
 assert suppliers == 0
 """

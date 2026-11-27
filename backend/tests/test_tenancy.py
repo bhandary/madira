@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
 
-from madira.agents.tools import get_inventory, get_training_briefing, list_tastings, update_stock
+from madira.agents.tools import get_inventory, get_tasting, list_lessons, update_stock
 from madira.auth import issue_session, upsert_google_user, utcnow
 from madira.db import SessionLocal, engine
 from madira.main import app
@@ -32,7 +32,7 @@ from madira.models import (
     QuizAttempt,
     Sku,
     Supplier,
-    Tasting,
+    TastingSession,
     User,
     Venue,
 )
@@ -250,10 +250,12 @@ def _plant_other_venue() -> dict:
             session.add(
                 QuizAttempt(venue_id=venue.id, quiz_id=quiz.id, staff_name="B secret staff", answers=[], score=1)
             )
-        tasting = session.scalar(select(Tasting).where(Tasting.venue_id == venue.id, Tasting.title == "B secret tasting"))
+        tasting = session.scalar(
+            select(TastingSession).where(TastingSession.venue_id == venue.id, TastingSession.title == "B secret tasting")
+        )
         if tasting is None:
             session.add(
-                Tasting(
+                TastingSession(
                     venue_id=venue.id,
                     supplier_id=supplier.id,
                     title="B secret tasting",
@@ -261,7 +263,7 @@ def _plant_other_venue() -> dict:
                     ends_at="2026-12-01T17:00",
                     location="Other House",
                     notes="secret",
-                    ics="BEGIN:VCALENDAR",
+                    status="planned",
                 )
             )
         user = _user(session, "venue-b-owner", "b@example.com", venue.id, OWNER)
@@ -281,7 +283,9 @@ def _plant_other_venue() -> dict:
             "list_id": beverage_list.id,
             "order_id": order.id,
             "tasting_id": tasting.id if tasting is not None else session.scalar(
-                select(Tasting.id).where(Tasting.venue_id == venue.id, Tasting.title == "B secret tasting")
+                select(TastingSession.id).where(
+                    TastingSession.venue_id == venue.id, TastingSession.title == "B secret tasting"
+                )
             ),
             "pairing_id": pairing.id,
             "demo": demo,
@@ -349,7 +353,7 @@ def test_two_venues_are_isolated(client: TestClient, monkeypatch):
     tastings = client.get("/tastings")
     assert tastings.status_code == 200
     assert "B secret tasting" not in tastings.text
-    assert client.get(f"/tastings/{planted['tasting_id']}/ics").status_code == 404
+    assert client.get(f"/tastings/{planted['tasting_id']}.ics").status_code == 404
 
     session = SessionLocal()
     try:
@@ -416,8 +420,8 @@ def test_agent_tools_cannot_cross_venues(client: TestClient, monkeypatch):
         house = json.loads(get_inventory())
         assert "B-SECRET-BOTTLE" not in json.dumps(house)
         assert json.loads(update_stock("B-ONLY-01", 1))["error"]
-        assert "B secret tasting" not in list_tastings()
-        assert "b-secret-lesson" not in get_training_briefing()
+        assert "B secret tasting" not in get_tasting("")
+        assert "b-secret-lesson" not in list_lessons()
     finally:
         reset(token)
 
@@ -426,7 +430,7 @@ def test_agent_tools_cannot_cross_venues(client: TestClient, monkeypatch):
         cellar = json.loads(get_inventory())
         assert "B-SECRET-BOTTLE" in json.dumps(cellar)
         assert "Muscadet Domaine de l'Ecu" not in json.dumps(cellar)
-        assert "B secret tasting" in list_tastings()
+        assert "B secret tasting" in get_tasting("")
         changed = json.loads(update_stock("B-ONLY-01", 4))
         assert "error" not in changed
     finally:

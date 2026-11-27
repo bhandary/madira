@@ -48,17 +48,22 @@ test("phone count queues offline, posts the variance, and accepts a par proposal
   await expect(page.getByTestId("chain-status")).toHaveText("Verified");
 
   await page.goto("/inventory/count");
+  const generated = page.waitForResponse(
+    (res) => res.url().includes("/par-proposals/generate") && res.request().method() === "POST" && res.ok(),
+  );
   await page.getByTestId("par-generate").click();
-  const proposal = page.getByTestId("par-proposal").first();
-  await expect(proposal).toBeVisible();
-  const sku = await proposal.getAttribute("data-sku");
-  const proposed = await proposal.getAttribute("data-proposed");
-  expect(sku).toBeTruthy();
-  expect(proposed).toBeTruthy();
+  const payload = await (await generated).json();
+  const created = payload.proposals?.[0];
+  expect(created?.sku).toBeTruthy();
+  expect(String(created?.proposed_par ?? "")).toBeTruthy();
+  const proposal = page.locator(
+    `[data-testid="par-proposal"][data-sku="${created.sku}"][data-proposed="${created.proposed_par}"]`,
+  );
+  await expect(proposal).toHaveCount(1);
   await proposal.getByTestId("par-accept").click();
-  await expect(page.locator(`[data-testid="par-proposal"][data-sku="${sku}"]`)).toHaveCount(0);
+  await expect(proposal).toHaveCount(0);
 
   await page.goto("/inventory");
-  const row = page.locator(`[data-testid="sku-row"][data-sku="${sku}"]`);
-  await expect(row.getByTestId("sku-par")).toHaveText(proposed!);
+  const row = page.locator(`[data-testid="sku-row"][data-sku="${created.sku}"]`);
+  await expect(row.getByTestId("sku-par")).toHaveText(String(created.proposed_par));
 });

@@ -2,7 +2,7 @@ import { z } from "zod/v3";
 
 const pathBinding = z.object({ path: z.string() });
 
-const jsonObject = z.record(z.any());
+const jsonObject = z.record(z.unknown());
 
 export const auditEvent = z.object({
   id: z.string(),

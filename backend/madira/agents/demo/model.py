@@ -27,6 +27,7 @@ SPECIALISTS = (
     "inventory-purchasing",
     "staff-trainer",
     "supplier-scheduler",
+    "buyer",
     "compliance-auditor",
 )
 
@@ -38,6 +39,7 @@ INTENT_FLOW = {
     "inventory": ["inventory-purchasing"],
     "training": ["staff-trainer"],
     "supplier": ["supplier-scheduler"],
+    "buyer": ["buyer"],
     "compliance": ["compliance-auditor"],
 }
 
@@ -53,6 +55,17 @@ def classify_intent(text: str) -> str:
             "storage zone",
             "condition excursion",
             "excursion",
+            "sensor",
+            "audit table",
+            "stock movement",
+            "depletion by",
+            "sensor gap",
+            "license status",
+            "certificate status",
+            "publish history",
+            "audit event",
+            "audit purchase",
+            "pos gap",
             "journal entry",
             "qbo",
             "xero",
@@ -61,15 +74,56 @@ def classify_intent(text: str) -> str:
         return "compliance"
     if any(k in t for k in ("tasting note", "tasting notes", "service card", "talking point", "server hook")):
         return "notes"
+    if any(k in t for k in ("floor lookup", "look up", "lookup")):
+        return "training"
+    if "tonight" in t and "briefing" in t:
+        return "training"
+    if "team progress" in t or "weak topic" in t or "expiring certificate" in t:
+        return "training"
+    if "reminder" in t:
+        return "compliance"
     if any(k in t for k in ("quiz", "training", "lesson", "etiquette", "roleplay", "briefing", "flashcard", "waitstaff")):
         return "training"
+    if any(
+        k in t
+        for k in (
+            "sourcing brief",
+            "want list",
+            "sourcing",
+            "follow-up",
+            "follow up",
+            "rep email",
+            "tasting history",
+            "tasted versus",
+            "tasted vs",
+            "decide the sample",
+            "post-tasting",
+        )
+    ):
+        return "buyer"
+    if re.search(r"\bpos\b", t) or any(k in t for k in ("square", "unmapped item", "point of sale")):
+        return "inventory"
     if any(k in t for k in ("inventory", "stock", "par level", "reorder", "purchase order", "on-hand", "on hand", "sku", "propose par", "par proposal", "count variance", "count session")):
         return "inventory"
-    if any(k in t for k in ("budget", "margin", "wine list", "curate", "beverage list", "coverage")):
+    if any(
+        k in t
+        for k in (
+            "budget",
+            "margin",
+            "wine list",
+            "curate",
+            "beverage list",
+            "coverage",
+            "submit for publish",
+            "diff the list",
+            "list diff",
+            "list version",
+        )
+    ):
         return "list"
     if any(k in t for k in ("menu", "dish", "pairing", "parse", "upload", "yuzu", "ribeye", "tasting menu")):
         return "menu"
-    if any(k in t for k in ("importer", "distributor", ".ics", "calendar", "supplier")) or (
+    if any(k in t for k in ("importer", "distributor", ".ics", "calendar", "supplier", "price history", "supplier offer", "current offer", "sample")) or (
         "tasting" in t and "schedule" in t
     ) or ("tasting" in t and "menu" not in t):
         return "supplier"
@@ -109,6 +163,21 @@ def _task_subagents_called(messages: list[BaseMessage]) -> list[str]:
             if name:
                 found.append(name)
     return found
+
+
+def _table_answer(messages: list[BaseMessage]) -> str:
+    from madira.domain.compliance.queries import answer_from_audit_table
+
+    last_tool = next((msg for msg in reversed(messages) if isinstance(msg, ToolMessage)), None)
+    if last_tool is not None and isinstance(last_tool.content, str):
+        try:
+            data = json.loads(last_tool.content)
+        except json.JSONDecodeError:
+            data = None
+        table = data.get("audit_table") if isinstance(data, dict) else None
+        if isinstance(table, dict):
+            return answer_from_audit_table(table)
+    return "The audit table is on the card. Totals come from that table."
 
 
 def _call(name: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -157,9 +226,34 @@ class DemoChatModel(BaseChatModel):
             return self._draft_note(messages)
         if self.role == "menu-extractor":
             return self._extract_menu(messages)
+        if self.role == "price-sheet-parser":
+            from madira.agents.demo.prices import price_sheet_json
+
+            return _ai(content=price_sheet_json(last_human(messages)))
+        if self.role == "label-scanner":
+            return _ai(content=_label_match(last_human(messages)))
+        if self.role == "buyer-phrasing":
+            return _ai(content=_buyer_rationales(last_human(messages)))
+        if self.role == "rep-drafter":
+            return _ai(content='{"thanks":"Thank you for pouring with us."}')
+        if self.role == "invite-drafter":
+            return _ai(content='{"agenda":"Please taste these open styles with us."}')
+        text = last_human(messages)
+        if self.role == "briefing-intro":
+            return self._briefing_intro(messages)
+        if self.role == "staff-trainer" and "LESSON_GROUNDING" in text:
+            from madira.agents.demo.lessons import lesson_draft_json
+
+            return _ai(content=lesson_draft_json(text))
         if self.role in SPECIALISTS:
             return self._specialist(messages)
         return self._orchestrator(messages)
+
+    def _briefing_intro(self, messages: list[BaseMessage]) -> AIMessage:
+        text = last_human(messages)
+        match = re.search(r"SERVICE_DATE (\d{4}-\d{2}-\d{2})", text)
+        day = match.group(1) if match else "tonight"
+        return _ai(content=f"Tonight's briefing for {day}. Walk the cards, then acknowledge.")
 
     def _draft_note(self, messages: list[BaseMessage]) -> AIMessage:
         from madira.agents.demo.notes import note_draft_json
@@ -238,11 +332,20 @@ class DemoChatModel(BaseChatModel):
                 )
             return "Recommend wine, beer, spirit, and sake pairings for each parsed dish, with rationale and price-tier fit."
         if specialist == "list-curator":
+            lowered = text.lower()
+            if "submit" in lowered and "publish" in lowered:
+                return f"Submit this list for publish. Call submit_list_for_publish. Do not publish it. {text}"
+            if "diff" in lowered:
+                return f"Diff the list against the published list. Call diff_list. {text}"
             budget = _extract_budget(text)
             margin = _extract_margin(text)
             return f"Curate a balanced beverage list. Budget ${budget:.0f}. Target pour/bottle margin {margin}x. Complement the current menu."
         if specialist == "inventory-purchasing":
             lowered = text.lower()
+            if "unmapped" in lowered and "pos" in lowered:
+                return "List POS items that sold without a SKU mapping. Do not invent a mapping."
+            if re.search(r"\bpos\b", lowered) or "square" in lowered or "point of sale" in lowered:
+                return "Report the POS connection status. Do not invent a count or a mapping."
             if "propose par" in lowered or "par proposal" in lowered:
                 return "Propose par updates from 30-day depletion. Do not change par until a person accepts."
             if "count variance" in lowered or "variance report" in lowered or "count session" in lowered:
@@ -255,22 +358,59 @@ class DemoChatModel(BaseChatModel):
                 return "Draft purchase orders for every SKU below par, grouped by supplier."
             return "Report cellar inventory, par levels, depletion, and low-stock alerts. Draft reorders if stock is short."
         if specialist == "staff-trainer":
-            if "quiz" in text.lower() or "grade" in text.lower() or re.search(r"\d,\s*\d", text):
-                answers = _extract_answers(text)
-                return f"Grade the floor quiz with answers {answers} for staff name Floor."
-            if "roleplay" in text.lower():
-                return "Start diner roleplay as a skeptical guest who ordered the ribeye."
-            return "Deliver today's pairing briefing, wine-knowledge lesson, and the floor quiz."
+            lowered = text.lower()
+            if "look up" in lowered or "lookup" in lowered:
+                return f"Look up this floor question: {text}"
+            if "tonight" in lowered and "briefing" in lowered:
+                return "Get tonight's briefing for the floor."
+            if "team progress" in lowered or "weak topic" in lowered or "expiring certificate" in lowered:
+                return "Show team progress, weak topics, and expiring certificates."
+            if "roleplay" in lowered:
+                return "Start diner roleplay as a skeptical guest."
+            if "draft" in lowered and "lesson" in lowered:
+                return f"Draft a lesson. {text}"
+            if "due" in lowered and "review" in lowered:
+                return "List quiz questions that are due for review."
+            if "grade" in lowered or re.search(r"\d,\s*\d", text):
+                return f"Grade the quiz named in the request. {text}"
+            return "List the lessons for this role."
         if specialist == "compliance-auditor":
             lowered = text.lower()
+            if "stock movement" in lowered or "depletion" in lowered:
+                return "Query stock movements and depletion. Read only. Answer from the audit table."
+            if "sensor gap" in lowered or "condition excursion" in lowered:
+                return "Query condition excursions and sensor gaps. Read only. Answer from the audit table."
+            if "license status" in lowered or "certificate status" in lowered:
+                return "Query license and certificate status and reminders. Read only. Answer from the audit table."
+            if "pos gap" in lowered:
+                return "Query POS gaps and unmapped items. Read only. Answer from the audit table."
+            if "publish history" in lowered or "list version" in lowered:
+                return "Query list versions and publish history. Read only. Answer from the audit table."
+            if "audit purchase" in lowered or "receipt" in lowered:
+                return "Query purchase orders and receipts. Read only. Answer from the audit table."
+            if "audit event" in lowered:
+                return "Query audit events. Read only. Answer from the audit table."
+            if "sensor" in lowered:
+                return "Report sensor status. Read only. Do not reveal a signing secret."
+            if "reminder" in lowered:
+                return "List open reminders. Read only. Do not send anything."
             if "storage" in lowered or "zone" in lowered or "excursion" in lowered:
                 return "Report storage zone conditions. Read only."
             if "gap" in lowered or "missing invoice" in lowered:
                 return "Find compliance gaps: missing invoices and hash-chain integrity. Read only."
             start, end = _audit_dates(text)
             return f"Summarize the audit pack from {start} to {end}. Read only."
+        if specialist == "buyer":
+            return text
         if specialist == "supplier-scheduler":
-            if any(k in text.lower() for k in ("schedule", "book", "set up", "hold")):
+            lowered = text.lower()
+            if "score" in lowered and "sample" in lowered:
+                return text
+            if "price history" in lowered:
+                return f"PRICE_HISTORY product={_named_hint(text)}"
+            if "offer" in lowered:
+                return f"SUPPLIER_OFFERS product={_named_hint(text)} supplier={_supplier_hint(text)}"
+            if any(k in lowered for k in ("schedule", "book", "set up", "hold", "plan")):
                 return (
                     "Schedule a draft tasting with Kermit Lynch Wine Merchant titled "
                     "'New Loire releases tasting' next week at the cellar. Produce .ics only — do not send."
@@ -316,7 +456,16 @@ class DemoChatModel(BaseChatModel):
             return finish("Pairings posted for wine, beer, spirit, and sake on each dish.")
 
         if role == "list-curator":
-            if "curate_beverage_list" not in done:
+            if "SECTIONS_JSON=" in text:
+                return _ai(content=_section_notes_json(text))
+            lowered = text.lower()
+            # A curate already returns the coverage grid and the health payload.
+            # A second surface would paint a second budget summary.
+            if "submit" in lowered and "publish" in lowered and "submit_list_for_publish" not in done:
+                return _ai([_call("submit_list_for_publish", {"list_id": _extract_list_id(text)})])
+            if "diff" in lowered and "diff_list" not in done:
+                return _ai([_call("diff_list", {"list_id": _extract_list_id(text)})])
+            if "curate_beverage_list" not in done and ("curate" in lowered or "budget" in lowered):
                 return _ai(
                     [
                         _call(
@@ -329,10 +478,23 @@ class DemoChatModel(BaseChatModel):
                         )
                     ]
                 )
-            return finish("Beverage list curated with coverage, gaps, and cost/margin math.")
+            if "curate_beverage_list" in done:
+                return finish("Beverage list curated from the menu. Coverage, section margins, and health come from the list service.")
+            if "get_list_health" not in done and "health" in lowered:
+                return _ai([_call("get_list_health", {"list_id": _extract_list_id(text)})])
+            if "get_coverage" not in done and "coverage" in lowered:
+                return _ai([_call("get_coverage", {"list_id": _extract_list_id(text)})])
+            return finish("Beverage list curated from the menu. Coverage, section margins, and health come from the list service.")
 
         if role == "inventory-purchasing":
             lowered = text.lower()
+            mentions_pos = re.search(r"\bpos\b", lowered) is not None or "square" in lowered or "point of sale" in lowered
+            if "unmapped" in lowered and mentions_pos and "list_unmapped_pos_items" not in done:
+                return _ai([_call("list_unmapped_pos_items", {})])
+            if mentions_pos and "get_pos_status" not in done:
+                return _ai([_call("get_pos_status", {})])
+            if mentions_pos and ("get_pos_status" in done or "list_unmapped_pos_items" in done):
+                return finish("POS status comes from the register. Mapping stays on the POS page.")
             if ("propose par" in lowered or "par proposal" in lowered or "par update" in lowered) and "propose_par_changes" not in done:
                 return _ai([_call("propose_par_changes", {"lead_time_days": 7, "safety_days": 4})])
             if ("variance" in lowered or "count sheet" in lowered) and "get_count_variance" not in done:
@@ -362,16 +524,95 @@ class DemoChatModel(BaseChatModel):
             return finish("Inventory reviewed; draft purchase orders grouped by supplier where stock is under par.")
 
         if role == "staff-trainer":
-            if ("quiz" in text.lower() or "grade" in text.lower() or re.search(r"\d,\s*\d", text)) and "grade_quiz" not in done:
-                return _ai([_call("grade_quiz", {"answers": _extract_answers(text), "staff_name": "Floor"})])
-            if "roleplay" in text.lower() and "start_roleplay" not in done:
-                return _ai([_call("start_roleplay", {})])
-            if "get_training_briefing" not in done and "grade_quiz" not in done:
-                return _ai([_call("get_training_briefing", {})])
-            return finish("Training surfaces ready: briefing, quiz, and roleplay opener.")
+            lowered = text.lower()
+            if ("look up" in lowered or "lookup" in lowered or "floor question" in lowered) and "floor_lookup" not in done:
+                query = text
+                marker = "floor question:"
+                if marker in lowered:
+                    query = text[lowered.index(marker) + len(marker) :].strip()
+                return _ai([_call("floor_lookup", {"query": query or text})])
+            if "tonight" in lowered and "briefing" in lowered and "get_tonight_briefing" not in done:
+                return _ai([_call("get_tonight_briefing", {})])
+            if ("team progress" in lowered or "weak topic" in lowered or "expiring certificate" in lowered) and "get_team_progress" not in done:
+                return _ai([_call("get_team_progress", {})])
+            session_match = re.search(
+                r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+                text,
+            )
+            session_id = session_match.group(0) if session_match else ""
+            if session_id and re.search(r"\bscore\b", lowered) and "score_roleplay" not in done:
+                return _ai([_call("score_roleplay", {"session_id": session_id})])
+            if session_id and "reply" in lowered and "roleplay_reply" not in done:
+                marker = "reply:"
+                reply = text[lowered.index(marker) + len(marker) :].strip() if marker in lowered else text
+                return _ai([_call("roleplay_reply", {"session_id": session_id, "text": reply or text})])
+            if "roleplay" in lowered and "start_roleplay" not in done:
+                persona = "skeptic"
+                if "budget" in lowered:
+                    persona = "budget-conscious"
+                elif "connoisseur" in lowered:
+                    persona = "connoisseur"
+                elif "celebrat" in lowered:
+                    persona = "celebration"
+                elif "skeptic" in lowered:
+                    persona = "skeptic"
+                return _ai([_call("start_roleplay", {"persona": persona, "dish": ""})])
+            if "due" in lowered and "review" in lowered and "get_due_reviews" not in done:
+                return _ai([_call("get_due_reviews", {})])
+            if "draft" in lowered and "lesson" in lowered and "draft_lesson" not in done:
+                position = "server"
+                for name in ("bartender", "barback", "host", "server", "all"):
+                    if re.search(rf"\b{name}\b", lowered):
+                        position = name
+                        break
+                return _ai([_call("draft_lesson", {"position": position})])
+            quiz_id = _extract_product_id(text)
+            if quiz_id and ("grade" in lowered or re.search(r"\d,\s*\d", text)) and "grade_quiz" not in done:
+                return _ai([_call("grade_quiz", {"quiz_id": quiz_id, "answers": _extract_answers(text)})])
+            if quiz_id and "quiz" in lowered and "get_quiz" not in done:
+                return _ai([_call("get_quiz", {"quiz_id": quiz_id})])
+            if "list_lessons" not in done:
+                return _ai([_call("list_lessons", {})])
+            return finish("Lessons are on the card. Scores and review dates come from the quiz service.")
 
         if role == "compliance-auditor":
             lowered = text.lower()
+            if ("stock movement" in lowered or "depletion" in lowered) and "query_stock_movements" not in done:
+                return _ai([_call("query_stock_movements", {"sku": "", "start_date": "", "end_date": ""})])
+            if ("stock movement" in lowered or "depletion" in lowered):
+                return finish(_table_answer(messages))
+            if ("sensor gap" in lowered or "condition excursion" in lowered) and "query_conditions" not in done:
+                return _ai([_call("query_conditions", {})])
+            if "sensor gap" in lowered or "condition excursion" in lowered:
+                return finish(_table_answer(messages))
+            if ("license status" in lowered or "certificate status" in lowered) and "query_compliance_status" not in done:
+                return _ai([_call("query_compliance_status", {})])
+            if "license status" in lowered or "certificate status" in lowered:
+                return finish(_table_answer(messages))
+            if "pos gap" in lowered and "query_pos_gaps" not in done:
+                return _ai([_call("query_pos_gaps", {})])
+            if "pos gap" in lowered:
+                return finish(_table_answer(messages))
+            if ("publish history" in lowered or "list version" in lowered) and "query_list_versions" not in done:
+                return _ai([_call("query_list_versions", {})])
+            if "publish history" in lowered or "list version" in lowered:
+                return finish(_table_answer(messages))
+            if ("audit purchase" in lowered or "receipt" in lowered) and "query_purchases" not in done:
+                return _ai([_call("query_purchases", {})])
+            if "audit purchase" in lowered or "receipt" in lowered:
+                return finish(_table_answer(messages))
+            if "audit event" in lowered and "query_audit_events" not in done:
+                return _ai([_call("query_audit_events", {"action": "", "actor": ""})])
+            if "audit event" in lowered:
+                return finish(_table_answer(messages))
+            if "sensor" in lowered and "get_sensor_status" not in done:
+                return _ai([_call("get_sensor_status", {})])
+            if "sensor" in lowered:
+                return finish("Sensor status is on the card. The signing secret stays on the server.")
+            if "reminder" in lowered and "list_reminders" not in done:
+                return _ai([_call("list_reminders", {})])
+            if "reminder" in lowered:
+                return finish("Reminders are on the card. Nothing was sent.")
             if "audit pack" in lowered and "get_audit_pack_summary" not in done:
                 start, end = _audit_dates(text)
                 return _ai([_call("get_audit_pack_summary", {"start_date": start, "end_date": end})])
@@ -384,13 +625,50 @@ class DemoChatModel(BaseChatModel):
             return finish("Compliance review is read-only. Nothing was changed.")
 
         if role == "supplier-scheduler":
-            if any(k in text.lower() for k in ("schedule", "book", "set up", "hold", "new loire")) and "schedule_tasting" not in done:
+            lowered = text.lower()
+            if lowered.startswith("price_history"):
+                if "get_price_history" not in done:
+                    return _ai([_call("get_price_history", {"product": _marked(text, "product")})])
+                return finish("Price history comes from offers and invoices. The amounts are on the card.")
+            if lowered.startswith("supplier_offers"):
+                if "get_supplier_offers" not in done:
+                    return _ai(
+                        [
+                            _call(
+                                "get_supplier_offers",
+                                {"product": _marked(text, "product"), "supplier": _marked(text, "supplier")},
+                            )
+                        ]
+                    )
+                return finish("Current offers come from the supplier service. The amounts are on the card.")
+            if (
+                "tasting invite" in lowered or "propose an invite" in lowered or "propose invite" in lowered
+            ) and "propose_tasting_invite" not in done:
+                return _ai([_call("propose_tasting_invite", {"session_id": _extract_product_id(text)})])
+            if "score" in lowered and "sample" in lowered and "score_sample" not in done:
                 return _ai(
                     [
                         _call(
-                            "schedule_tasting",
+                            "score_sample",
                             {
-                                "supplier_name": "Kermit Lynch Wine Merchant",
+                                "sample_id": _extract_product_id(text),
+                                "score": _extract_score(text),
+                                "note": _marked(text, "note"),
+                            },
+                        )
+                    ]
+                )
+            if _extract_product_id(text) and "get_tasting" not in done and "plan_tasting" not in done and "score_sample" not in done:
+                if "sample" not in lowered:
+                    return _ai([_call("get_tasting", {"session_id": _extract_product_id(text)})])
+            if any(k in lowered for k in ("schedule", "book", "set up", "hold", "new loire", "plan")) and "plan_tasting" not in done:
+                return _ai(
+                    [
+                        _call(
+                            "plan_tasting",
+                            {
+                                "supplier": "Kermit Lynch Wine Merchant",
+                                "when": "next week",
                                 "title": "New Loire releases tasting",
                                 "location": "Maison Madira cellar",
                                 "notes": "Draft hold — export .ics, do not send invites.",
@@ -398,11 +676,61 @@ class DemoChatModel(BaseChatModel):
                         )
                     ]
                 )
-            if "list_tastings" not in done and "schedule_tasting" not in done:
-                return _ai([_call("list_tastings", {})])
-            return finish("Supplier tasting is a draft only. .ics is attached; nothing was sent.")
+            if "get_tasting" not in done and "plan_tasting" not in done:
+                return _ai([_call("get_tasting", {"session_id": ""})])
+            return finish("Supplier tasting is a draft only. The .ics is a download; nothing was sent.")
+
+        if role == "buyer":
+            lowered = text.lower()
+            if ("follow" in lowered or "rep email" in lowered) and "draft_rep_followup" not in done:
+                return _ai([_call("draft_rep_followup", {"session_id": _extract_product_id(text)})])
+            if "history" in lowered and "get_tasting_history" not in done:
+                return _ai([_call("get_tasting_history", {"supplier": "", "product": ""})])
+            if _wants_decision(lowered) and "decide_sample" not in done:
+                decision = "pass" if "pass" in lowered else "list" if "list" in lowered else "buy"
+                return _ai(
+                    [
+                        _call(
+                            "decide_sample",
+                            {
+                                "sample_id": _extract_product_id(text),
+                                "decision": decision,
+                                "reason": _marked(text, "reason"),
+                            },
+                        )
+                    ]
+                )
+            if "build_sourcing_brief" not in done:
+                return _ai([_call("build_sourcing_brief", {})])
+            return finish("Sourcing brief and tasting decisions are drafts. Nothing was sent or approved.")
 
         return finish("Done.")
+
+
+def _wants_decision(lowered: str) -> bool:
+    if "decide" in lowered:
+        return True
+    return "sample" in lowered and any(word in lowered for word in ("buy", "list", "pass"))
+
+
+def _buyer_rationales(text: str) -> str:
+    rows = []
+    started = False
+    for line in text.splitlines():
+        if line.strip() == "GAPS":
+            started = True
+            continue
+        if line.strip() == "END":
+            break
+        if not started or "\t" not in line:
+            continue
+        parts = line.split("\t")
+        if len(parts) < 5 or not parts[0].isdigit():
+            continue
+        style = parts[2].strip() or "that style"
+        dishes = parts[4].strip() or "the cellar"
+        rows.append({"index": int(parts[0]), "rationale": f"This covers {style} for {dishes}."})
+    return json.dumps({"lines": rows})
 
 
 def _audit_dates(text: str) -> tuple[str, str]:
@@ -423,6 +751,40 @@ def _extract_budget(text: str) -> float:
     if match:
         return float(match.group(1).replace(",", ""))
     return 12000.0
+
+
+def _extract_list_id(text: str) -> str:
+    found = re.search(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        text or "",
+    )
+    return found.group(0) if found else ""
+
+
+def _section_notes_json(text: str) -> str:
+    """Prose only. The pricing service owns every number, so these notes have none."""
+
+    marker = "SECTIONS_JSON="
+    start = text.find(marker)
+    names = ["Wine"]
+    if start >= 0:
+        line = text[start + len(marker) :].splitlines()[0].strip()
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            parsed = []
+        if isinstance(parsed, list) and parsed:
+            names = [str(name) for name in parsed]
+    sections = []
+    for name in names:
+        label = " ".join(str(name).split()) or "List"
+        sections.append(
+            {
+                "name": label,
+                "note": f"The {label} section follows the menu and leaves room to buy what is still missing.",
+            }
+        )
+    return json.dumps({"sections": sections})
 
 
 def _extract_margin(text: str) -> float:
@@ -447,6 +809,46 @@ def _extract_answers(text: str) -> str:
 def _wants_note(text: str) -> bool:
     folded = text.lower()
     return any(key in folded for key in ("tasting note", "tasting notes", "service card", "talking point", "server hook"))
+
+
+def _label_match(text: str) -> str:
+    """Echo one catalog row when its name or barcode is in the filename. Never invent one."""
+
+    import json
+
+    filename = ""
+    marker = "FILENAME="
+    for line in (text or "").splitlines():
+        if line.startswith(marker):
+            filename = line[len(marker) :].strip()
+            break
+    folded = filename.casefold()
+    catalog = ""
+    start = (text or "").find("CATALOG<<<")
+    end = (text or "").find(">>>", start + 1) if start >= 0 else -1
+    if start >= 0 and end > start:
+        catalog = text[start + len("CATALOG<<<") : end]
+    for raw in catalog.splitlines():
+        parts = raw.split("\t")
+        if len(parts) < 4:
+            continue
+        _row_id, name, producer, barcode = (part.strip() for part in parts[:4])
+        if name and name.casefold() in folded:
+            return json.dumps({"name": name, "producer": producer, "barcode": barcode})
+        if barcode and barcode.casefold() in folded:
+            return json.dumps({"name": name, "producer": producer, "barcode": barcode})
+    return json.dumps({"name": "", "producer": "", "barcode": ""})
+
+
+def _extract_score(text: str) -> int:
+    match = re.search(r"\bscore\s+(\d{1,3})\b", text or "", re.I)
+    if match:
+        return int(match.group(1))
+    match = re.search(r"\b(\d{1,3})\b", text or "")
+    if not match:
+        return 0
+    number = int(match.group(1))
+    return number if number <= 100 else 0
 
 
 def _extract_product_id(text: str) -> str:
@@ -477,3 +879,26 @@ def _extract_menu_id(messages: list[BaseMessage]) -> str:
             if isinstance(data, dict) and data.get("menu_id"):
                 return str(data["menu_id"])
     return ""
+
+
+def _marked(text: str, key: str) -> str:
+    match = re.search(rf"\b{key}=([^\n]*?)(?:\s+\w+=|$)", text or "", re.I)
+    return match.group(1).strip() if match else ""
+
+
+def _named_hint(text: str) -> str:
+    found = _extract_product_id(text)
+    if found:
+        return found
+    match = re.search(r"\bfor\s+([^.]+)", text or "", re.I)
+    if not match:
+        return ""
+    hint = re.split(r"\b(?:from|at|with)\b", match.group(1), maxsplit=1, flags=re.I)[0]
+    return hint.strip(" .")
+
+
+def _supplier_hint(text: str) -> str:
+    match = re.search(r"\b(?:from|supplier)\s+([^.]+)", text or "", re.I)
+    if not match:
+        return ""
+    return match.group(1).strip(" .")

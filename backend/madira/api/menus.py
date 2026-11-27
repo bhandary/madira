@@ -13,11 +13,12 @@ from madira.domain.menu.service import (
     confirm_version,
     edit_dish,
     get_menu,
-    ingest_menu,
     list_menus,
     parse_menu,
     recommend_pairings,
 )
+from madira.jobs.handlers import REQUEST_ATTEMPTS, file_args
+from madira.jobs.runner import accept
 from madira.domain.pairing.service import grid as pairing_grid
 from madira.domain.pairing.service import pin as pin_pairing
 from madira.domain.pairing.service import reject as reject_pairing
@@ -64,7 +65,6 @@ async def _ingest(
     url: str,
     menu_id: str,
 ) -> dict[str, Any]:
-    venue_id = active_venue_id()
     body = b""
     filename = ""
     content_type = None
@@ -76,18 +76,21 @@ async def _ingest(
         else:
             body = b""
     try:
-        payload = ingest_menu(
-            venue_id,
-            filename=filename,
-            body=body,
-            content_type=content_type,
-            text="" if body else text,
-            url="" if body else url,
-            menu_id=_menu_key(menu_id),
+        key = _menu_key(menu_id)
+        return accept(
+            "menu.ingest",
+            file_args(
+                body,
+                filename,
+                content_type,
+                text="" if body else text,
+                url="" if body else url,
+                menu_id="" if key is None else str(key),
+            ),
+            max_attempts=REQUEST_ATTEMPTS,
         )
     except (NotFound, DraftFailed, StorageError) as exc:
         raise _fail(exc) from exc
-    return with_review(payload)
 
 
 @router.post("/menus/upload", dependencies=[require(Capability.EDIT)])

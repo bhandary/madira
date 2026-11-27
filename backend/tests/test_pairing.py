@@ -15,7 +15,20 @@ from madira.db import SessionLocal, init_db
 from madira.domain.catalog.service import ensure_sku
 from madira.domain.pairing.copy import set_pairing_completer
 from madira.main import app
-from madira.models import BeverageList, Dish, InventoryItem, ListItem, Membership, Pairing, User, Venue
+from madira.domain.pairing.cache import read_result
+from madira.domain.pairing.slots import assign as score_assign
+from madira.models import (
+    BeverageList,
+    Dish,
+    InventoryItem,
+    ListItem,
+    ListVersion,
+    Membership,
+    Pairing,
+    PairingCache,
+    User,
+    Venue,
+)
 from madira.seed import seed
 from madira.tenancy import AUDITOR, DEMO_USER_SUB, MANAGER, OWNER, SOMMELIER, STAFF, ensure_demo_tenant
 
@@ -498,7 +511,7 @@ def test_invented_sku_is_rejected_and_a_schema_miss_retries_once(client, monkeyp
     other = _menu(client, "Crab toast — $16\n")
     missed = _pair(client, other["menu_id"])
     assert missed.status_code == 422
-    assert missed.json()["detail"] == "The pairing copy did not match the schema after one retry."
+    assert missed.json()["detail"] == "The pairing copy did not match the schema after 2 attempts."
     assert len(calls) == 2
 
 
@@ -637,3 +650,112 @@ def test_roles_and_venue_isolation(client, monkeypatch):
     _as(client, monkeypatch, f"owner-{other.slug}")
     foreign = client.post(f"/menus/{review['menu_id']}/pairings/{pairing_id}/pin")
     assert foreign.status_code == 404
+
+
+def _count_assign(monkeypatch) -> dict[str, int]:
+    calls = {"n": 0}
+
+    def wrapped(*args, **kwargs):
+        calls["n"] += 1
+        return score_assign(*args, **kwargs)
+
+    monkeypatch.setattr("madira.domain.pairing.service.assign", wrapped)
+    return calls
+
+
+def test_pairing_cache_hits_and_invalidates_each_input(client, monkeypatch):
+    venue = _sign_in(client, monkeypatch, _slug("cache"))
+    _import_list(client)
+    review = _menu(client, OCTOPUS)
+    first = _pair(client, review["menu_id"])
+    assert first.status_code == 200, first.text
+
+    def slots(payload: dict) -> list:
+        found = []
+        for dish in payload["dishes"]:
+            found.append(
+                (
+                    dish["name"],
+                    [(row["slot"], row["sku_id"], row["status"], row["rationale"]) for row in dish["pairings"]],
+                )
+            )
+        return found
+
+    calls = _count_assign(monkeypatch)
+    again = _pair(client, review["menu_id"])
+    assert again.status_code == 200, again.text
+    assert calls["n"] == 0
+    assert slots(again.json()) == slots(first.json())
+
+    session = SessionLocal()
+    try:
+        dish = session.scalar(select(Dish).where(Dish.venue_id == venue.id, Dish.name.contains("octopus")))
+        assert dish is not None
+        dish.richness = 0 if dish.richness == 5 else 5
+        session.commit()
+        dish_id = dish.id
+    finally:
+        session.close()
+    calls["n"] = 0
+    edited = _pair(client, review["menu_id"])
+    assert edited.status_code == 200, edited.text
+    assert calls["n"] >= 1
+
+    session = SessionLocal()
+    try:
+        item = session.scalar(select(ListItem).where(ListItem.venue_id == venue.id))
+        assert item is not None
+        item.bottle_price = int(item.bottle_price or 0) + 250
+        session.commit()
+    finally:
+        session.close()
+    calls["n"] = 0
+    priced = _pair(client, review["menu_id"])
+    assert priced.status_code == 200, priced.text
+    assert calls["n"] >= 1
+
+    session = SessionLocal()
+    try:
+        listing = session.scalar(select(BeverageList).where(BeverageList.venue_id == venue.id))
+        assert listing is not None
+        session.add(ListVersion(venue_id=venue.id, list_id=listing.id, number=1, status="published"))
+        session.commit()
+    finally:
+        session.close()
+    calls["n"] = 0
+    versioned = _pair(client, review["menu_id"])
+    assert versioned.status_code == 200, versioned.text
+    assert calls["n"] >= 1
+
+    session = SessionLocal()
+    try:
+        listed = session.scalar(select(ListItem).where(ListItem.venue_id == venue.id))
+        assert listed is not None
+        stock = session.scalar(
+            select(InventoryItem).where(InventoryItem.venue_id == venue.id, InventoryItem.sku_id == listed.sku_id)
+        )
+        if stock is None:
+            stock = InventoryItem(venue_id=venue.id, sku_id=listed.sku_id, on_hand=0, unit="btl")
+            session.add(stock)
+        else:
+            stock.on_hand = 0
+        session.commit()
+    finally:
+        session.close()
+    calls["n"] = 0
+    emptied = _pair(client, review["menu_id"])
+    assert emptied.status_code == 200, emptied.text
+    assert calls["n"] >= 1
+
+    other = _venue(_slug("cache-other"))
+    session = SessionLocal()
+    try:
+        row = session.scalar(select(PairingCache).where(PairingCache.venue_id == venue.id, PairingCache.dish_id == dish_id))
+        assert row is not None
+        assert row.venue_id == venue.id
+        assert read_result(session, venue.id, row.dish_id, row.cache_key) is not None
+        assert read_result(session, other.id, row.dish_id, row.cache_key) is None
+        foreign_rows = session.scalars(select(PairingCache).where(PairingCache.venue_id == other.id)).all()
+        assert foreign_rows == []
+    finally:
+        session.close()

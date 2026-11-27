@@ -8,9 +8,23 @@ import { receivingChecklistProps } from "./receivingChecklistSchema";
 import { auditTableProps } from "./auditTableSchema";
 import { countSheetProps } from "./countSheetSchema";
 import { dishReviewProps } from "./dishReviewSchema";
+import { coverageGridProps } from "./coverageGridSchema";
+import { listEditorProps } from "./listEditorSchema";
+import { briefingCardsProps } from "./briefingCardsSchema";
+import { floorLookupProps } from "./floorLookupSchema";
+import { lessonCardProps } from "./lessonCardSchema";
 import { pairingGridProps } from "./pairingGridSchema";
+import { quizCardProps } from "./quizCardSchema";
+import { roleplayPanelProps } from "./roleplayPanelSchema";
 import { varianceReportProps } from "./varianceReportSchema";
 import { zoneConditionCardProps } from "./zoneConditionCardSchema";
+import { supplierOffersProps } from "./supplierOffersSchema";
+import { priceHistoryProps } from "./priceHistorySchema";
+import { sampleCardProps } from "./sampleCardSchema";
+import { repFollowupProps, sourcingBriefProps, tastingHistoryProps } from "./sourcingSchema";
+import { posStatusProps, unmappedPosProps } from "./posSchema";
+import { reminderListProps, sensorStatusProps } from "./sensorSchema";
+import { auditorTableProps } from "./auditorTableSchema";
 import { MADIRA_CATALOG_ID, catalogDefinitions } from "./definitions";
 
 /**
@@ -41,8 +55,22 @@ const definitions = Object.fromEntries(
       props:
         name === "DishReview"
           ? dishReviewProps.describe(def.description)
-          : name === "PairingGrid"
+            : name === "PairingGrid"
             ? pairingGridProps.describe(def.description)
+            : name === "QuizCard"
+              ? quizCardProps.describe(def.description)
+              : name === "RoleplayPanel"
+                ? roleplayPanelProps.describe(def.description)
+              : name === "LessonCard"
+                ? lessonCardProps.describe(def.description)
+                : name === "BriefingCards"
+                  ? briefingCardsProps.describe(def.description)
+                  : name === "FloorLookup"
+                    ? floorLookupProps.describe(def.description)
+            : name === "CoverageGrid"
+              ? coverageGridProps.describe(def.description)
+              : name === "ListEditor"
+                ? listEditorProps.describe(def.description)
             : name === "AuditTable"
               ? auditTableProps.describe(def.description)
               : name === "CountSheet"
@@ -55,7 +83,29 @@ const definitions = Object.fromEntries(
                       ? receivingChecklistProps.describe(def.description)
                       : name === "ZoneConditionCard"
                         ? zoneConditionCardProps.describe(def.description)
-                        : schemaFor(def.props).describe(def.description),
+                        : name === "SupplierOffers"
+                          ? supplierOffersProps.describe(def.description)
+                          : name === "PriceHistory"
+                            ? priceHistoryProps.describe(def.description)
+                            : name === "SampleCard"
+                              ? sampleCardProps.describe(def.description)
+                              : name === "SourcingBrief"
+                                ? sourcingBriefProps.describe(def.description)
+                                : name === "RepFollowup"
+                                  ? repFollowupProps.describe(def.description)
+                                  : name === "TastingHistory"
+                                    ? tastingHistoryProps.describe(def.description)
+                                    : name === "PosStatus"
+                                      ? posStatusProps.describe(def.description)
+                                      : name === "UnmappedPos"
+                                        ? unmappedPosProps.describe(def.description)
+                                        : name === "SensorStatus"
+                                          ? sensorStatusProps.describe(def.description)
+                                          : name === "ReminderList"
+                                            ? reminderListProps.describe(def.description)
+                                            : name === "AuditorTable"
+                                              ? auditorTableProps.describe(def.description)
+                                              : schemaFor(def.props).describe(def.description),
     },
   ]),
 );

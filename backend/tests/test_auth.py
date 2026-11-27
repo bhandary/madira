@@ -27,13 +27,17 @@ from madira.models import (
     CountSession,
     Document,
     Invoice,
+    Lesson,
     Membership,
     MenuVersion,
     ParProposal,
     PurchaseOrder,
+    QuizAttempt,
+    QuizReview,
     Receipt,
     ReceiptLine,
     ServiceCard,
+    Standard,
     TastingNote,
     User,
 )
@@ -113,13 +117,84 @@ def _wipe() -> None:
         session.execute(delete(Invoice))
         session.execute(update(PurchaseOrder).values(pdf_document_id=None))
         session.execute(delete(AuditEvent))
+        bind = session.get_bind()
+        if bind is not None and inspect(bind).has_table("certificates"):
+            session.execute(text("DELETE FROM certificates"))
+        if bind is not None and inspect(bind).has_table("roleplay_sessions"):
+            session.execute(text("DELETE FROM roleplay_sessions"))
+        if bind is not None and inspect(bind).has_table("venue_invites"):
+            session.execute(text("DELETE FROM venue_invites"))
+        if bind is not None and inspect(bind).has_table("samples"):
+            session.execute(
+                text(
+                    "UPDATE samples SET label_document_id = NULL, decided_by_user_id = NULL, "
+                    "purchase_order_id = NULL, po_line_id = NULL, list_id = NULL, list_version_id = NULL"
+                )
+            )
+        if bind is not None and inspect(bind).has_table("want_items"):
+            session.execute(text("UPDATE want_items SET sample_id = NULL, offer_id = NULL"))
+        if bind is not None and inspect(bind).has_table("sourcing_briefs"):
+            session.execute(text("UPDATE sourcing_briefs SET created_by_user_id = NULL"))
+        if bind is not None and inspect(bind).has_table("rep_followups"):
+            session.execute(text("UPDATE rep_followups SET created_by_user_id = NULL, purchase_order_id = NULL"))
+        if bind is not None and inspect(bind).has_table("list_entries"):
+            session.execute(text("DELETE FROM list_entries"))
+        if bind is not None and inspect(bind).has_table("list_versions"):
+            session.execute(text("DELETE FROM list_versions"))
+        if bind is not None and inspect(bind).has_table("public_list_snapshots"):
+            session.execute(text("DELETE FROM public_list_snapshots"))
+        if bind is not None and inspect(bind).has_table("tasting_sessions"):
+            session.execute(text("UPDATE tasting_sessions SET created_by_user_id = NULL"))
+        if bind is not None and inspect(bind).has_table("tasting_invite_attendees"):
+            session.execute(text("DELETE FROM tasting_invite_attendees"))
+        if bind is not None and inspect(bind).has_table("tasting_invite_slots"):
+            session.execute(text("DELETE FROM tasting_invite_slots"))
+        if bind is not None and inspect(bind).has_table("tasting_invites"):
+            session.execute(text("DELETE FROM tasting_invites"))
+        if bind is not None and inspect(bind).has_table("pos_sales"):
+            session.execute(text("DELETE FROM pos_sales"))
+        if bind is not None and inspect(bind).has_table("pos_item_mappings"):
+            session.execute(text("DELETE FROM pos_item_mappings"))
+        if bind is not None and inspect(bind).has_table("pos_sync_runs"):
+            session.execute(text("DELETE FROM pos_sync_runs"))
+        if bind is not None and inspect(bind).has_table("pos_connections"):
+            session.execute(text("DELETE FROM pos_connections"))
+        if bind is not None and inspect(bind).has_table("pos_credentials"):
+            session.execute(text("DELETE FROM pos_credentials"))
+        if bind is not None and inspect(bind).has_table("sensor_readings"):
+            session.execute(text("DELETE FROM sensor_readings"))
+        if bind is not None and inspect(bind).has_table("sensor_imports"):
+            session.execute(text("DELETE FROM sensor_imports"))
+        if bind is not None and inspect(bind).has_table("sensors"):
+            session.execute(text("DELETE FROM sensors"))
+        if bind is not None and inspect(bind).has_table("reminder_states"):
+            session.execute(text("DELETE FROM reminder_states"))
+        if bind is not None and inspect(bind).has_table("venue_licenses"):
+            session.execute(text("DELETE FROM venue_licenses"))
+        if bind is not None and inspect(bind).has_table("reminder_rules"):
+            session.execute(text("DELETE FROM reminder_rules"))
         session.execute(delete(Document))
         session.execute(delete(Approval))
-        bind = session.get_bind()
         if bind is not None and inspect(bind).has_table("condition_readings"):
             session.execute(text("UPDATE condition_readings SET recorded_by_user_id = NULL"))
         if bind is not None and inspect(bind).has_table("condition_excursions"):
             session.execute(text("UPDATE condition_excursions SET acknowledged_by_user_id = NULL"))
+        if bind is not None and inspect(bind).has_table("quiz_reviews"):
+            session.execute(delete(QuizReview))
+        if bind is not None and inspect(bind).has_table("standards"):
+            session.execute(update(Standard).values(updated_by_user_id=None))
+        if bind is not None and inspect(bind).has_table("lessons"):
+            session.execute(update(Lesson).values(approved_by=None))
+        if bind is not None and inspect(bind).has_table("quiz_attempts"):
+            session.execute(update(QuizAttempt).values(user_id=None))
+        if bind is not None and inspect(bind).has_table("briefing_acks"):
+            session.execute(text("DELETE FROM briefing_acks"))
+        if bind is not None and inspect(bind).has_table("briefings"):
+            session.execute(text("UPDATE briefings SET published_by_user_id = NULL"))
+        if bind is not None and inspect(bind).has_table("skus"):
+            columns = {col["name"] for col in inspect(bind).get_columns("skus")}
+            if "eighty_sixed_by_user_id" in columns:
+                session.execute(text("UPDATE skus SET eighty_sixed_by_user_id = NULL"))
         session.execute(delete(User))
         session.commit()
     finally:
@@ -170,10 +245,11 @@ def _load(sub: str = "google-sub-1"):
 
 
 def _count() -> int:
+    seeded = {DEMO_USER_SUB, "madira-demo-ana", "madira-demo-ben", "madira-demo-mia", "madira-demo-lea"}
     session = SessionLocal()
     try:
         return int(
-            session.scalar(select(func.count()).select_from(User).where(User.google_sub != DEMO_USER_SUB)) or 0
+            session.scalar(select(func.count()).select_from(User).where(User.google_sub.not_in(seeded))) or 0
         )
     finally:
         session.close()

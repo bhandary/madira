@@ -1,4 +1,4 @@
-"""Tasting surfaces. The draft calendar text comes from the procurement service."""
+"""Tasting, offer, and price-history surfaces. Calendar text is built for download only."""
 
 from __future__ import annotations
 
@@ -21,14 +21,158 @@ def tasting_surface(title: str, draft: dict, tastings: list[dict]) -> list[dict[
 def with_tasting_list(payload: dict) -> dict:
     tastings = payload["tastings"]
     return {
+        "sessions": payload.get("sessions", tastings),
         "tastings": tastings,
         "a2ui_operations": tasting_surface("Supplier calendar", {}, tastings),
     }
 
 
 def with_scheduled(payload: dict) -> dict:
+    tastings = payload["tastings"]
     return {
         "draft": payload["draft"],
-        "tastings": payload["tastings"],
-        "a2ui_operations": tasting_surface("Tasting scheduled (draft)", payload["draft"], payload["tastings"]),
+        "sessions": payload.get("sessions", tastings),
+        "tastings": tastings,
+        "a2ui_operations": tasting_surface("Tasting scheduled (draft)", payload["draft"], tastings),
     }
+
+
+SAMPLE_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "card"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "card", "component": "SampleCard", "sample": {"path": "/sample"}},
+]
+
+SESSION_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "form"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "form", "component": "ScheduleForm", "draft": {"path": "/session"}},
+]
+
+
+def with_session(payload: dict) -> dict:
+    tasting = payload["session"]
+    samples = payload.get("samples") or []
+    operations = surface("tasting-session", SESSION_SCHEMA, {"title": tasting.get("title") or "Tasting", "session": tasting})
+    for sample in samples:
+        label = sample.get("product_name") or "Unmatched sample"
+        operations.extend(
+            surface(
+                f"sample-{sample['id']}",
+                SAMPLE_SCHEMA,
+                {"title": label, "sample": sample},
+            )
+        )
+    return {**payload, "a2ui_operations": operations}
+
+
+def with_sample(payload: dict) -> dict:
+    sample = payload["sample"]
+    label = sample.get("product_name") or "Unmatched sample"
+    return {
+        **payload,
+        "a2ui_operations": surface("sample-card", SAMPLE_SCHEMA, {"title": label, "sample": sample}),
+    }
+
+
+BRIEF_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "brief"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "brief", "component": "SourcingBrief", "brief": {"path": "/brief"}},
+]
+
+FOLLOWUP_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "note"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "note", "component": "RepFollowup", "followup": {"path": "/followup"}},
+]
+
+TASTING_HISTORY_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "history"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "history", "component": "TastingHistory", "history": {"path": "/history"}},
+]
+
+
+def with_brief(payload: dict) -> dict:
+    brief = payload["brief"]
+    return {
+        **payload,
+        "a2ui_operations": surface("sourcing-brief", BRIEF_SCHEMA, {"title": brief.get("title") or "Sourcing brief", "brief": brief}),
+    }
+
+
+INVITE_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "card"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "card", "component": "ApprovalCard", "invite": {"path": "/invite"}, "approval": {"path": "/approval"}},
+]
+
+
+def with_invite(payload: dict) -> dict:
+    invite = payload.get("invite") or {}
+    approval = invite.get("approval") if isinstance(invite, dict) else None
+    return {
+        **payload,
+        "a2ui_operations": surface(
+            "tasting-invite",
+            INVITE_SCHEMA,
+            {
+                "title": invite.get("title") or "Tasting invite",
+                "invite": invite,
+                "approval": approval or {"decision": "pending", "required_role": "owner_or_manager"},
+            },
+        ),
+    }
+
+
+def with_followup(payload: dict) -> dict:
+    followup = payload.get("followup") or {}
+    return {
+        **payload,
+        "a2ui_operations": surface(
+            "rep-followup",
+            FOLLOWUP_SCHEMA,
+            {"title": followup.get("subject") or "Rep follow-up", "followup": followup},
+        ),
+    }
+
+
+def with_history(payload: dict) -> dict:
+    return {
+        **payload,
+        "history": payload,
+        "a2ui_operations": surface("tasting-history", TASTING_HISTORY_SCHEMA, {"title": "Tasted and bought", "history": payload}),
+    }
+
+
+OFFER_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "offers"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "offers", "component": "SupplierOffers", "offers": {"path": "/offers"}, "supplier": {"path": "/supplier"}},
+]
+
+HISTORY_SCHEMA = [
+    {"id": "root", "component": "Column", "children": ["title", "history"]},
+    {"id": "title", "component": "Text", "text": {"path": "/title"}, "variant": "h2"},
+    {"id": "history", "component": "PriceHistory", "product": {"path": "/product"}, "points": {"path": "/points"}},
+]
+
+
+def with_offers(payload: dict) -> dict:
+    data = {
+        "title": payload.get("title") or "Current supplier offers",
+        "supplier": payload.get("supplier") or "",
+        "product": payload.get("product") or "",
+        "offers": payload.get("offers") or [],
+    }
+    return {**data, "a2ui_operations": surface("supplier-offers", OFFER_SCHEMA, data)}
+
+
+def with_price_history(payload: dict) -> dict:
+    data = {
+        "title": payload.get("title") or "Price history",
+        "product": payload.get("product") or {},
+        "points": payload.get("points") or [],
+    }
+    return {**data, "a2ui_operations": surface("price-history", HISTORY_SCHEMA, data)}

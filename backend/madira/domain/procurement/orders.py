@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from madira.domain.compliance.service import get_document_bytes, record_audit_event, store_document
+from madira.domain.compliance.service import get_document, record_audit_event, store_document
 from madira.domain.errors import NotFound
 from madira.domain.inventory.ledger import public_qty
 from madira.domain.inventory.service import rows as inventory_rows
@@ -196,6 +196,66 @@ def create_purchase_order(venue_id: uuid.UUID, supplier_id: uuid.UUID, lines: li
         return body
 
 
+def place_draft_line(session: Session, venue_id: uuid.UUID, supplier_id: uuid.UUID, raw: dict, actor, notes: str | None = None) -> tuple[PurchaseOrder, POLine, bool]:
+    """Add one line to an open draft, or open a draft. Never approves or sends.
+
+    A draft that already has this SKU keeps that line. ``created`` is true when
+    a new line was inserted.
+    """
+
+    supplier = _supplier(session, venue_id, supplier_id)
+    sku_key = raw.get("sku_id")
+    sku_id = _uuid(sku_key, "sku_id") if sku_key else None
+    draft = session.scalar(
+        select(PurchaseOrder)
+        .where(
+            PurchaseOrder.venue_id == venue_id,
+            PurchaseOrder.supplier_id == supplier.id,
+            PurchaseOrder.status == "draft",
+        )
+        .order_by(PurchaseOrder.created_at.desc(), PurchaseOrder.id.desc())
+    )
+    if draft is not None and sku_id is not None:
+        held = session.scalar(
+            select(POLine).where(POLine.po_id == draft.id, POLine.venue_id == venue_id, POLine.sku_id == sku_id)
+        )
+        if held is not None:
+            return draft, held, False
+    if draft is None:
+        order = _create_in_session(session, venue_id, supplier.id, [raw], actor, notes)
+        line = session.scalar(select(POLine).where(POLine.po_id == order.id, POLine.venue_id == venue_id))
+        if line is None:
+            raise OrderError("The draft purchase order has no line.", 500)
+        return order, line, True
+    venue = _venue(session, venue_id)
+    built = _build_line(session, venue_id, supplier, raw)
+    built.po_id = draft.id
+    session.add(built)
+    session.flush()
+    totals = session.scalars(select(POLine).where(POLine.po_id == draft.id, POLine.venue_id == venue_id)).all()
+    subtotal = sum(int(line.line_total_cents or 0) for line in totals)
+    draft.subtotal_cents = subtotal
+    draft.minimum_met = subtotal >= int(draft.order_minimum_cents or 0)
+    draft.updated_at = datetime.now(timezone.utc)
+    _audit(
+        session,
+        venue,
+        draft,
+        "purchase_order.line_added",
+        actor,
+        before={"subtotal_cents": None},
+        after={
+            "status": "draft",
+            "po_number": draft.po_number,
+            "sku_id": None if built.sku_id is None else str(built.sku_id),
+            "line_total_cents": int(built.line_total_cents or 0),
+            "subtotal_cents": subtotal,
+            "minimum_met": draft.minimum_met,
+        },
+    )
+    return draft, built, True
+
+
 def draft_orders_from_reorder(venue_id: uuid.UUID, actor) -> dict:
     with session_scope() as session:
         _venue(session, venue_id)
@@ -356,13 +416,13 @@ def transition_purchase_order(venue_id: uuid.UUID, po_id: uuid.UUID, target: str
         return body
 
 
-def purchase_order_pdf(venue_id: uuid.UUID, po_id: uuid.UUID) -> tuple[str, bytes]:
+def purchase_order_pdf(venue_id: uuid.UUID, po_id: uuid.UUID) -> tuple[str, str]:
     with session_scope() as session:
         order = _order(session, venue_id, po_id)
         if order.pdf_document_id is None:
             raise NotFound("purchase order pdf not found")
-        document, payload = get_document_bytes(session, venue_id, order.pdf_document_id)
-        return document.filename, payload
+        document = get_document(session, venue_id, order.pdf_document_id)
+        return document.filename, document.storage_key
 
 
 def finalize_legacy_draft(session: Session, order: PurchaseOrder, supplier: Supplier, total_cents: int) -> dict:
@@ -749,6 +809,10 @@ def _supplier_public(session: Session, row: Supplier) -> dict:
         "lead_time_days": int(row.lead_time_days or 0),
         "payment_terms": row.payment_terms,
         "notes": row.notes or "",
+        "rep_name": row.rep_name or "",
+        "rep_email": row.rep_email or "",
+        "rep_phone": row.rep_phone,
+        "order_minimum_currency": row.order_minimum_currency or DEFAULT_CURRENCY,
         "created_at": _iso(row.created_at),
         "contacts": [_contact_public(contact) for contact in contacts],
     }

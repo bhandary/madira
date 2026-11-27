@@ -344,6 +344,8 @@ code {
   .field,
   .field-area {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     min-height: 44px;
     border: 1px solid var(--md-input-border);
     border-radius: 4px;
@@ -925,6 +927,15 @@ code {
   :is(.btn, .text-link, .bento):hover .hover-arrow,
   :is(.btn, .text-link, .bento):focus-visible .hover-arrow {
     --hover: 1;
+  }
+}
+
+@media print {
+  .public-list,
+  .public-list * {
+    background: #fff !important;
+    color: #111 !important;
+    box-shadow: none !important;
   }
 }
 

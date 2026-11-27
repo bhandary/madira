@@ -1,39 +1,65 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { AccountMenu, useAccount } from "@/components/AccountMenu";
-import { getStatus } from "@/lib/api";
+import { TabletChrome } from "@/components/TabletMode";
+import { getDemoPersonas, getStatus, getTablet, getTonight } from "@/lib/api";
 
 const SIDEBAR = [
-  { href: "/", label: "Floor" },
+  { href: "/", label: "Tonight" },
+  { href: "/lookup", label: "Lookup" },
   { href: "/menu", label: "Menu & pairings" },
   { href: "/list", label: "List curation" },
   { href: "/inventory", label: "Inventory" },
   { href: "/purchasing", label: "Purchasing" },
   { href: "/inventory/count", label: "Phone count" },
   { href: "/training", label: "Staff training" },
-  { href: "/suppliers", label: "Supplier tastings" },
+  { href: "/suppliers", label: "Suppliers" },
+  { href: "/tastings", label: "Tastings" },
+  { href: "/sourcing", label: "Sourcing" },
+  { href: "/pos", label: "POS" },
+  { href: "/sensors", label: "Sensors" },
+  { href: "/audit", label: "Audit" },
+  { href: "/usage", label: "Usage" },
   { href: "/records", label: "Records" },
   { href: "/settings", label: "Settings" },
 ];
 
 const TABS = [
-  { href: "/", label: "Floor", icon: "floor" },
+  { href: "/", label: "Tonight", icon: "floor" },
   { href: "/menu", label: "Menu", icon: "menu" },
   { href: "/inventory", label: "Cellar", icon: "cellar" },
   { href: "/list", label: "List", icon: "list" },
   { href: "/training", label: "Team", icon: "team" },
 ] as const;
 
+const STAFF_SIDEBAR = [
+  { href: "/", label: "Tonight" },
+  { href: "/lookup", label: "Lookup" },
+  { href: "/training", label: "Lessons" },
+];
+
+const STAFF_TABS = [
+  { href: "/", label: "Tonight", icon: "floor" },
+  { href: "/lookup", label: "Lookup", icon: "lookup" },
+  { href: "/training", label: "Lessons", icon: "team" },
+] as const;
+
 const MORE = [
-  { href: "/purchasing", label: "Purchasing" },
-  { href: "/inventory/count", label: "Phone count" },
-  { href: "/suppliers", label: "Supplier tastings" },
+  { href: "/suppliers", label: "Suppliers" },
+  { href: "/tastings", label: "Tastings" },
+  { href: "/sourcing", label: "Sourcing" },
+  { href: "/pos", label: "POS" },
+  { href: "/sensors", label: "Sensors" },
+  { href: "/audit", label: "Audit" },
+  { href: "/usage", label: "Usage" },
   { href: "/records", label: "Records" },
   { href: "/settings", label: "Settings" },
 ];
+
+const STAFF_PATHS = new Set(["/", "/lookup", "/training", "/login"]);
 
 function Brand() {
   return (
@@ -46,7 +72,7 @@ function Brand() {
   );
 }
 
-function TabIcon({ name }: { name: (typeof TABS)[number]["icon"] | "more" }) {
+function TabIcon({ name }: { name: (typeof TABS)[number]["icon"] | (typeof STAFF_TABS)[number]["icon"] | "more" }) {
   const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   if (name === "floor") {
     return (
@@ -78,6 +104,14 @@ function TabIcon({ name }: { name: (typeof TABS)[number]["icon"] | "more" }) {
       </svg>
     );
   }
+  if (name === "lookup") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path {...common} d="M11 16.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Z" />
+        <path {...common} d="M15.2 15.2 19 19" />
+      </svg>
+    );
+  }
   if (name === "team") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -91,6 +125,26 @@ function TabIcon({ name }: { name: (typeof TABS)[number]["icon"] | "more" }) {
       <path {...common} d="M6.5 12h.01M12 12h.01M17.5 12h.01" />
       <path {...common} d="M6.5 12a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8ZM12 12a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8ZM17.5 12a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8Z" />
     </svg>
+  );
+}
+
+function OfflineBanner() {
+  const [offline, setOffline] = useState(false);
+  useEffect(() => {
+    const sync = () => setOffline(!navigator.onLine);
+    sync();
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
+  if (!offline) return null;
+  return (
+    <div className="announce" role="status" data-testid="offline-banner">
+      <span className="min-w-0">Offline. Tonight, lookup, and open counts stay on this phone.</span>
+    </div>
   );
 }
 
@@ -110,22 +164,34 @@ function ModeBanner({ status }: { status: { demo_mode?: boolean; label?: string 
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const moreId = useId();
   const moreButton = useRef<HTMLButtonElement>(null);
   const [openPath, setOpenPath] = useState<string | null>(null);
   const moreOpen = openPath === pathname;
   const [status, setStatus] = useState<{ demo_mode?: boolean; label?: string; llm_model?: string } | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const { user, signOut } = useAccount();
+  const staff = role === "Staff";
+  const sidebar = staff ? STAFF_SIDEBAR : SIDEBAR;
+  const tabs = staff ? STAFF_TABS : TABS;
   const moreCurrent =
-    pathname === "/purchasing" ||
     pathname === "/suppliers" ||
+    pathname === "/tastings" ||
+    pathname === "/sourcing" ||
+    pathname === "/pos" ||
+    pathname === "/sensors" ||
+    pathname === "/audit" ||
+    pathname === "/usage" ||
     pathname === "/records" ||
     pathname === "/settings" ||
     pathname === "/login";
+  const bare = pathname.startsWith("/l/");
 
   useEffect(() => {
     let cancelled = false;
     const load = () => {
+      if (bare) return;
       getStatus()
         .then((next) => {
           if (!cancelled) setStatus(next);
@@ -140,7 +206,44 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       cancelled = true;
       window.removeEventListener("madira-status", load);
     };
-  }, [pathname]);
+  }, [pathname, bare]);
+
+  useEffect(() => {
+    if (bare) return;
+    let cancelled = false;
+    getTablet()
+      .then(async (tablet) => {
+        if (cancelled) return;
+        if (tablet.actor) {
+          setRole(tablet.actor.role);
+          return;
+        }
+        const payload = await getDemoPersonas();
+        if (cancelled) return;
+        if (payload) {
+          const active = payload.personas.find((persona) => persona.slug === payload.active);
+          setRole(active?.role || "Owner");
+          return;
+        }
+        try {
+          const board = await getTonight();
+          if (!cancelled) setRole(board.role || "");
+        } catch {
+          if (!cancelled) setRole("");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRole("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, bare]);
+
+  useEffect(() => {
+    if (bare || role !== "Staff" || STAFF_PATHS.has(pathname)) return;
+    router.replace("/");
+  }, [bare, role, pathname, router]);
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -154,6 +257,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [moreOpen]);
 
+  if (bare) return <>{children}</>;
+
   return (
     <div className="min-h-dvh bg-canvas md:flex">
       <a className="skip-link" href="#content">
@@ -166,8 +271,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <p className="mt-2 text-xs leading-5 text-muted">Maison Madira</p>
             <p className="text-xs leading-5 text-muted">Beverage program</p>
           </div>
-          <nav id="app-nav" className="flex min-h-0 flex-1 flex-col gap-0.5 px-2 pb-3" aria-label="Sections">
-            {SIDEBAR.map((item) => {
+          <nav id="app-nav" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3" aria-label="Sections">
+            {sidebar.map((item) => {
               const active = pathname === item.href;
               return (
                 <Link key={item.href} href={item.href} className="nav-link" aria-current={active ? "page" : undefined}>
@@ -183,6 +288,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <ModeBanner status={status} />
+        <TabletChrome pathname={pathname} onRole={setRole} />
+        <OfflineBanner />
         <header className="flex items-center border-b border-line bg-panel px-4 py-3 md:hidden">
           <Brand />
         </header>
@@ -190,8 +297,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
-      <nav className="tabbar md:hidden" aria-label="Sections">
-        {TABS.map((item) => {
+      <nav className="tabbar md:hidden" aria-label="Sections" data-testid="phone-tabs">
+        {tabs.map((item) => {
           const active = pathname === item.href;
           return (
             <Link key={item.href} href={item.href} className="tab" aria-current={active ? "page" : undefined}>
@@ -200,20 +307,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           );
         })}
-        <button
-          ref={moreButton}
-          type="button"
-          className="tab"
-          aria-expanded={moreOpen}
-          aria-controls={moreId}
-          aria-current={moreCurrent && !moreOpen ? "page" : undefined}
-          onClick={() => setOpenPath(moreOpen ? null : pathname)}
-        >
-          <TabIcon name="more" />
-          More
-        </button>
+        {staff ? null : (
+          <button
+            ref={moreButton}
+            type="button"
+            className="tab"
+            aria-expanded={moreOpen}
+            aria-controls={moreId}
+            aria-current={moreCurrent && !moreOpen ? "page" : undefined}
+            onClick={() => setOpenPath(moreOpen ? null : pathname)}
+          >
+            <TabIcon name="more" />
+            More
+          </button>
+        )}
       </nav>
-      {moreOpen ? (
+      {moreOpen && !staff ? (
         <>
           <div className="more-backdrop md:hidden" onClick={() => setOpenPath(null)} />
           <div id={moreId} className="more-sheet md:hidden" data-testid="mobile-menu">

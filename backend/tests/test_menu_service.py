@@ -75,7 +75,7 @@ def test_menus_are_isolated_by_venue():
 
 def test_pairings_use_service_prices_for_the_owning_venue():
     from madira.domain.lists.service import curate
-    from madira.models import ListItem
+    from madira.models import BeverageList, ListItem
 
     demo = ensure_demo_tenant()
     curate(demo.venue_id)
@@ -95,7 +95,10 @@ def test_pairings_use_service_prices_for_the_owning_venue():
     try:
         for row in suggested:
             item = session.scalar(
-                select(ListItem).where(ListItem.sku_id == row["sku_id"], ListItem.venue_id == demo.venue_id)
+                select(ListItem)
+                .join(BeverageList, BeverageList.id == ListItem.list_id)
+                .where(ListItem.sku_id == row["sku_id"], ListItem.venue_id == demo.venue_id)
+                .order_by(BeverageList.created_at.desc(), ListItem.position.asc(), ListItem.id.asc())
             )
             assert item is not None
             assert row["glass_price"] == item.pour_price

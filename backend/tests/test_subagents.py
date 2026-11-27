@@ -37,6 +37,7 @@ def test_specialist_specs_cover_the_floor():
         "staff-trainer",
         "supplier-scheduler",
         "compliance-auditor",
+        "buyer",
     }
     for spec in specialist_specs():
         assert spec["tools"], spec["name"]
@@ -98,11 +99,27 @@ def test_inventory_delegates_and_drafts_po():
 
 
 def test_training_quiz_delegates_to_staff_trainer():
-    result = invoke_head_sommelier("Grade the floor quiz with answers 1,2,2,1")
+    from sqlalchemy import select
+
+    from madira.db import SessionLocal
+    from madira.models import Quiz
+    from madira.tenancy import ensure_demo_tenant
+
+    demo = ensure_demo_tenant()
+    session = SessionLocal()
+    try:
+        quiz = session.scalar(
+            select(Quiz).where(Quiz.venue_id == demo.venue_id, Quiz.title == "Floor quiz — autumn pairings")
+        )
+        assert quiz is not None
+        quiz_id = quiz.id
+    finally:
+        session.close()
+    result = invoke_head_sommelier(f"Grade quiz {quiz_id} with answers 1,2,2,1")
     assert "staff-trainer" in _delegated_names(result)
     blob = json.dumps(result["a2ui_operations"])
     assert "QuizCard" in blob
-    assert "100" in blob or "score" in blob.lower()
+    assert "100" in blob
 
 
 def test_supplier_schedule_delegates():

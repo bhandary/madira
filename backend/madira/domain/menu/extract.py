@@ -237,13 +237,11 @@ def live_complete(prompt: str, image: tuple[str, bytes] | None = None) -> str:
             {"type": "image_url", "image_url": {"url": f"data:{media};base64,{encoded}"}},
         ]
     try:
-        from langchain.chat_models import init_chat_model
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        kwargs = {}
-        if runtime.api_key:
-            kwargs["api_key"] = runtime.api_key
-        model = init_chat_model(f"{runtime.provider}:{runtime.model}", **kwargs)
+        from madira.model_tiers import bind_chat_model
+
+        model = bind_chat_model("menu-analyst")
         result = model.invoke(
             [
                 SystemMessage(

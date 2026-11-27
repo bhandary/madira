@@ -109,7 +109,7 @@ def client():
         yield test_client
 
 
-def test_sync_is_idempotent_conflict_blocks_approval_until_resolved():
+def test_sync_is_idempotent_conflict_blocks_approval_until_resolved(monkeypatch):
     _org, venue_id = _venue()
     actor = _actor()
     counted = _sku(venue_id, f"CNT-{uuid.uuid4().hex[:6].upper()}", par_level=6, cost=2500)
@@ -156,6 +156,37 @@ def test_sync_is_idempotent_conflict_blocks_approval_until_resolved():
             sa.select(sa.func.count()).select_from(CountLine).where(CountLine.session_id == uuid.UUID(session_id))
         )
         assert stored == 1
+    from sqlalchemy.orm import Session
+
+    real_scalar = Session.scalar
+    missed = {"n": 0}
+
+    def scalar(self, statement, *args, **kwargs):
+        sql = str(statement)
+        if "count_lines" in sql and "client_mutation_id" in sql and missed["n"] == 0:
+            missed["n"] += 1
+            return None
+        return real_scalar(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "scalar", scalar)
+    raced = counts.sync_count_lines(
+        venue_id,
+        session_id,
+        [
+            {
+                "client_mutation_id": "m1",
+                "device_id": "phone-a",
+                "sku": counted,
+                "counted_quantity": "9",
+                "counted_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ],
+        actor,
+    )
+    assert missed["n"] == 1
+    assert raced["lines"][0]["id"] == first["lines"][0]["id"]
+    assert raced["lines"][0]["counted_quantity"] == 1.4
+    monkeypatch.undo()
     counts.sync_count_lines(
         venue_id,
         session_id,

@@ -1,17 +1,41 @@
 "use client";
 
+import type { LessonPayload } from "@/a2ui/lessonCardSchema";
+import type { QuizPayload } from "@/a2ui/quizCardSchema";
 import { ApprovalCard } from "@/components/ApprovalCard";
-import type { ApprovalPurchaseOrder, ApprovalRecord } from "@/components/ApprovalCard";
+import { briefingPayload } from "@/a2ui/briefingCardsSchema";
+import { lookupPayload } from "@/a2ui/floorLookupSchema";
+import { BriefingCards } from "@/components/BriefingCards";
+import { FloorLookup } from "@/components/FloorLookup";
+import { LessonCard } from "@/components/LessonCard";
+import { QuizCard } from "@/components/QuizCard";
+import { RoleplayPanel } from "@/components/RoleplayPanel";
+import { roleplaySession } from "@/a2ui/roleplayPanelSchema";
+import type { ApprovalInvite, ApprovalListVersion, ApprovalPurchaseOrder, ApprovalRecord } from "@/components/ApprovalCard";
 import { ReceivingChecklist } from "@/components/ReceivingChecklist";
 import type { ReceivingLineView, ReceivingOrder, ReceivingReceiptView } from "@/components/ReceivingChecklist";
 import { asAudit, AuditTable } from "@/components/AuditTable";
 import { CountSheet } from "@/components/CountSheet";
 import { asReview, DishReview } from "@/components/DishReview";
+import { CoverageGrid } from "@/components/CoverageGrid";
+import { ListEditor } from "@/components/ListEditor";
 import { asPairings, PairingGrid } from "@/components/PairingGrid";
 import { asCard, asNote, ServiceCard, TastingNoteCard } from "@/components/TastingNotes";
 import { VarianceReport } from "@/components/VarianceReport";
 import { ZoneConditionCard } from "@/components/ZoneConditionCard";
 import type { StorageZone } from "@/lib/api";
+import type { SupplierOfferCard } from "@/a2ui/supplierOffersSchema";
+import type { PriceHistoryProduct, PricePoint } from "@/a2ui/priceHistorySchema";
+import { sampleCard } from "@/a2ui/sampleCardSchema";
+import { repFollowup, sourcingBrief, tastingHistory } from "@/a2ui/sourcingSchema";
+import { SampleCard } from "@/components/SampleCard";
+import { RepFollowupView, SourcingBriefView, TastingHistoryView } from "@/components/SourcingViews";
+import { posStatus, unmappedPosItem } from "@/a2ui/posSchema";
+import { PosStatusView, UnmappedPosView } from "@/components/PosViews";
+import { reminderItem, sensorStatusItem } from "@/a2ui/sensorSchema";
+import { ReminderListView, SensorStatusView } from "@/components/SensorViews";
+import { auditorTable } from "@/a2ui/auditorTableSchema";
+import { AuditorTableView } from "@/components/AuditorTable";
 
 function money(n: unknown, currency?: unknown) {
   const code = typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
@@ -184,42 +208,6 @@ function PurchaseOrderTable({ orders }: { orders: unknown }) {
   );
 }
 
-function QuizCard({ quiz }: { quiz: unknown }) {
-  const q = (quiz || {}) as Record<string, unknown>;
-  const questions = (q.questions as Record<string, unknown>[]) || [];
-  const review = (q.review as Record<string, unknown>[]) || [];
-  return (
-    <div className="panel p-3" data-testid="quiz-card">
-      <h3 className="text-base font-medium">{String(q.title || "Quiz")}</h3>
-      {q.score != null && (
-        <p className="mt-1 text-sm" data-testid="quiz-score">
-          Score {String(q.score)}% ({String(q.correct)}/{String(q.total)})
-        </p>
-      )}
-      <ol className="mt-3 space-y-3">
-        {questions.map((item, i) => (
-          <li key={i}>
-            <div className="text-sm font-medium">{String(item.prompt)}</div>
-            <ul className="mt-1 text-sm text-muted">
-              {((item.choices as string[]) || []).map((c, idx) => (
-                <li key={idx}>
-                  {idx}. {c}
-                </li>
-              ))}
-            </ul>
-            {review[i] && (
-              <p className="mt-1 text-sm text-ok">
-                {review[i].ok ? "Correct. " : "Missed. "}
-                {String(review[i].explain)}
-              </p>
-            )}
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
-
 function LessonCards({ lessons }: { lessons: unknown }) {
   const list = Array.isArray(lessons) ? lessons : [];
   return (
@@ -307,23 +295,111 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
   DishList: (p) => <DishList dishes={p.dishes} />,
   DishReview: (p) => <DishReviewSurface review={p.review} />,
   ListSummary: (p) => <ListSummary {...p} />,
+  ListEditor: (p) => (
+    <ListEditor listId={p.listId} currency={p.currency} sections={p.sections} items={p.items} candidates={p.candidates} />
+  ),
+  CoverageGrid: (p) => <CoverageGrid cells={p.cells} />,
   BeverageListTable: (p) => <BeverageListTable items={p.items} />,
   InventoryTable: (p) => <InventoryTable items={p.items} />,
   StockAlerts: (p) => <StockAlerts alerts={p.alerts} />,
   PurchaseOrderTable: (p) => <PurchaseOrderTable orders={p.orders} />,
-  QuizCard: (p) => <QuizCard quiz={p.quiz} />,
+  QuizCard: (p) => {
+    const quiz = p.quiz as QuizPayload | undefined;
+    if (!quiz || typeof quiz !== "object" || !Array.isArray(quiz.questions)) return null;
+    return <QuizCard quiz={quiz} />;
+  },
+  RoleplayPanel: (p) => {
+    const parsed = roleplaySession.safeParse(p.session);
+    if (!parsed.success) return null;
+    return <RoleplayPanel session={parsed.data} />;
+  },
+  LessonCard: (p) => {
+    const lesson = p.lesson as LessonPayload | undefined;
+    if (!lesson || typeof lesson !== "object" || typeof lesson.title !== "string") return null;
+    return <LessonCard lesson={lesson} />;
+  },
   LessonCards: (p) => <LessonCards lessons={p.lessons} />,
+  BriefingCards: (p) => {
+    const parsed = briefingPayload.safeParse(p.briefing);
+    if (!parsed.success) return null;
+    return <BriefingCards briefing={parsed.data} />;
+  },
+  FloorLookup: (p) => {
+    const parsed = lookupPayload.safeParse(p.lookup);
+    if (!parsed.success) return null;
+    return <FloorLookup results={parsed.data.results} />;
+  },
   ScheduleForm: (p) => <ScheduleForm draft={p.draft} />,
   TastingCalendar: (p) => <TastingCalendar tastings={p.tastings} />,
+  SampleCard: (p) => {
+    const parsed = sampleCard.safeParse(p.sample);
+    if (!parsed.success) return null;
+    const card = parsed.data;
+    return (
+      <SampleCard
+        key={`${card.id}:${card.score ?? ""}:${card.product_id ?? ""}:${card.quoted_price_cents ?? ""}:${card.decision}:${card.pass_reason}:${card.purchase_order_id ?? ""}:${card.list_version_id ?? ""}:${card.label_document_id ?? ""}`}
+        sample={card}
+      />
+    );
+  },
+  SourcingBrief: (p) => {
+    const parsed = sourcingBrief.safeParse(p.brief);
+    if (!parsed.success) return null;
+    return <SourcingBriefView brief={parsed.data} />;
+  },
+  RepFollowup: (p) => {
+    const parsed = repFollowup.safeParse(p.followup);
+    if (!parsed.success) return null;
+    return <RepFollowupView followup={parsed.data} />;
+  },
+  PosStatus: (p) => {
+    const parsed = posStatus.safeParse(p.status);
+    if (!parsed.success) return null;
+    return <PosStatusView status={parsed.data} />;
+  },
+  UnmappedPos: (p) => {
+    const parsed = unmappedPosItem.array().safeParse(p.items);
+    if (!parsed.success) return null;
+    return <UnmappedPosView items={parsed.data} />;
+  },
+  SensorStatus: (p) => {
+    const parsed = sensorStatusItem.array().safeParse(p.sensors);
+    if (!parsed.success) return null;
+    return <SensorStatusView sensors={parsed.data} />;
+  },
+  ReminderList: (p) => {
+    const parsed = reminderItem.array().safeParse(p.reminders);
+    if (!parsed.success) return null;
+    return <ReminderListView reminders={parsed.data} />;
+  },
+  AuditorTable: (p) => {
+    const parsed = auditorTable.safeParse(p.table);
+    if (!parsed.success) return null;
+    return <AuditorTableView table={parsed.data} />;
+  },
+  TastingHistory: (p) => {
+    const parsed = tastingHistory.safeParse(p.history);
+    if (!parsed.success) return null;
+    return <TastingHistoryView history={parsed.data} />;
+  },
   TastingNoteCard: (p) => <TastingNoteSurface note={p.note} />,
   AuditTable: (p) => <AuditSurface events={p.events} chain={p.chain} />,
   ServiceCard: (p) => <ServiceCardSurface card={p.card} />,
   CountSheet: (p) => <CountSheet session={p.session} lines={p.lines} />,
   VarianceReport: (p) => <VarianceReport report={p.report} />,
   ApprovalCard: (p) => {
+    const approval = (p.approval as ApprovalRecord) || null;
+    const invite = p.invite as ApprovalInvite | undefined;
+    if (invite && typeof invite === "object" && invite.id && invite.session_id) {
+      return <ApprovalCard invite={invite} approval={approval} />;
+    }
+    const listVersion = p.listVersion as ApprovalListVersion | undefined;
+    if (listVersion && typeof listVersion === "object" && listVersion.id) {
+      return <ApprovalCard listVersion={listVersion} approval={approval} />;
+    }
     const order = p.purchaseOrder as ApprovalPurchaseOrder | undefined;
     if (!order || typeof order !== "object" || !order.id) return null;
-    return <ApprovalCard purchaseOrder={order} approval={(p.approval as ApprovalRecord) || null} />;
+    return <ApprovalCard purchaseOrder={order} approval={approval} />;
   },
   ReceivingChecklist: (p) => {
     const order = p.purchaseOrder as ReceivingOrder | undefined;
@@ -340,6 +416,43 @@ const CUSTOM: Record<string, (props: Record<string, unknown>) => React.ReactNode
     const zone = p.zone as StorageZone | undefined;
     if (!zone || typeof zone !== "object" || !zone.id) return null;
     return <ZoneConditionCard zone={zone} />;
+  },
+  SupplierOffers: (p) => {
+    const offers = Array.isArray(p.offers) ? (p.offers as SupplierOfferCard[]) : [];
+    if (!offers.length) return <p className="text-sm text-muted">No current offer.</p>;
+    return (
+      <ul className="space-y-2" data-testid="a2ui-supplier-offers">
+        {offers.map((offer) => (
+          <li key={offer.id} className="rounded-md border border-line px-3 py-2">
+            <p className="font-medium">{offer.product_name}</p>
+            <p>
+              {offer.supplier} · {offer.price_label}
+            </p>
+            <p className="text-sm text-muted">
+              {offer.valid_from}
+              {offer.valid_to ? ` – ${offer.valid_to}` : ""} · {offer.unit || "unit"} · case {offer.case_size}
+            </p>
+          </li>
+        ))}
+      </ul>
+    );
+  },
+  PriceHistory: (p) => {
+    const product = p.product as PriceHistoryProduct | undefined;
+    const points = Array.isArray(p.points) ? (p.points as PricePoint[]) : [];
+    return (
+      <div data-testid="a2ui-price-history">
+        <p className="font-medium">{product?.name || "Product"}</p>
+        {points.length === 0 ? <p className="text-sm text-muted">No prices yet.</p> : null}
+        <ul className="mt-2 space-y-2">
+          {points.map((point, index) => (
+            <li key={`${point.kind}-${point.date}-${index}`}>
+              {point.date} · {point.kind} · {point.price_label} · {point.supplier}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
   },
 };
 

@@ -1,0 +1,340 @@
+[
+  {
+    "query": "oaky Chardonnay under $80",
+    "id": "{\"acidity\":[],\"body\":[],\"dish\":\"\",\"grape\":\"Chardonnay\",\"intensity\":[],\"max_price_cents\":8000,\"oak\":[\"light\",\"medium\",\"heavy\"],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "Chardonnay",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": 8000,
+      "body": [],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [],
+      "oak": [
+        "light",
+        "medium",
+        "heavy"
+      ],
+      "intensity": []
+    }
+  },
+  {
+    "query": "crisp Riesling under 45 dollars",
+    "id": "{\"acidity\":[\"high\"],\"body\":[],\"dish\":\"\",\"grape\":\"Riesling\",\"intensity\":[],\"max_price_cents\":4500,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "Riesling",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": 4500,
+      "body": [],
+      "acidity": [
+        "high"
+      ],
+      "tannin": [],
+      "sweetness": [],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "bone-dry Sauvignon Blanc",
+    "id": "{\"acidity\":[],\"body\":[],\"dish\":\"\",\"grape\":\"Sauvignon Blanc\",\"intensity\":[],\"max_price_cents\":null,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[\"bone-dry\"],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "Sauvignon Blanc",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": null,
+      "body": [],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [
+        "bone-dry"
+      ],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "full-bodied tannic Pinot Noir",
+    "id": "{\"acidity\":[],\"body\":[\"full\"],\"dish\":\"\",\"grape\":\"Pinot Noir\",\"intensity\":[],\"max_price_cents\":null,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[\"medium\",\"high\"],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "Pinot Noir",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": null,
+      "body": [
+        "full"
+      ],
+      "acidity": [],
+      "tannin": [
+        "medium",
+        "high"
+      ],
+      "sweetness": [],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "light bodied unoaked Gamay under $40",
+    "id": "{\"acidity\":[],\"body\":[\"light\"],\"dish\":\"\",\"grape\":\"Gamay\",\"intensity\":[],\"max_price_cents\":4000,\"oak\":[\"none\"],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "Gamay",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": 4000,
+      "body": [
+        "light"
+      ],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [],
+      "oak": [
+        "none"
+      ],
+      "intensity": []
+    }
+  },
+  {
+    "query": "bright off-dry Chenin Blanc",
+    "id": "{\"acidity\":[\"high\",\"medium\"],\"body\":[],\"dish\":\"\",\"grape\":\"Chenin Blanc\",\"intensity\":[],\"max_price_cents\":null,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[\"off-dry\"],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "Chenin Blanc",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": null,
+      "body": [],
+      "acidity": [
+        "high",
+        "medium"
+      ],
+      "tannin": [],
+      "sweetness": [
+        "off-dry"
+      ],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "Cabernet Sauvignon under 90 dollars with steak",
+    "id": "{\"acidity\":[],\"body\":[],\"dish\":\"\",\"grape\":\"Cabernet Sauvignon\",\"intensity\":[],\"max_price_cents\":9000,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[],\"text\":\"with steak\"}",
+    "expect": {
+      "text": "with steak",
+      "grape": "Cabernet Sauvignon",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": 9000,
+      "body": [],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "Albariño under $25",
+    "id": "{\"acidity\":[],\"body\":[],\"dish\":\"\",\"grape\":\"Albariño\",\"intensity\":[],\"max_price_cents\":2500,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "Albariño",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": 2500,
+      "body": [],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "Albarino under $25",
+    "id": "{\"acidity\":[],\"body\":[],\"dish\":\"\",\"grape\":\"Albarino\",\"intensity\":[],\"max_price_cents\":2500,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "Albarino",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": 2500,
+      "body": [],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "dry oaked Chardonnay under $80.50",
+    "id": "{\"acidity\":[],\"body\":[],\"dish\":\"\",\"grape\":\"Chardonnay\",\"intensity\":[],\"max_price_cents\":8050,\"oak\":[\"light\",\"medium\",\"heavy\"],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[\"bone-dry\",\"dry\"],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "Chardonnay",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": 8050,
+      "body": [],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [
+        "bone-dry",
+        "dry"
+      ],
+      "oak": [
+        "light",
+        "medium",
+        "heavy"
+      ],
+      "intensity": []
+    }
+  },
+  {
+    "query": "sweet Pinot Grigio",
+    "id": "{\"acidity\":[],\"body\":[],\"dish\":\"\",\"grape\":\"Pinot Grigio\",\"intensity\":[],\"max_price_cents\":null,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[\"sweet\",\"medium-sweet\"],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "Pinot Grigio",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": null,
+      "body": [],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [
+        "sweet",
+        "medium-sweet"
+      ],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "UNDER $12.5 crisp",
+    "id": "{\"acidity\":[\"high\"],\"body\":[],\"dish\":\"\",\"grape\":\"\",\"intensity\":[],\"max_price_cents\":1250,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": 1250,
+      "body": [],
+      "acidity": [
+        "high"
+      ],
+      "tannin": [],
+      "sweetness": [],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "under $10.005",
+    "id": "{\"acidity\":[],\"body\":[],\"dish\":\"\",\"grape\":\"\",\"intensity\":[],\"max_price_cents\":1001,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": 1001,
+      "body": [],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "something about the ribeye",
+    "id": "{\"acidity\":[],\"body\":[],\"dish\":\"\",\"grape\":\"\",\"intensity\":[],\"max_price_cents\":null,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[],\"text\":\"something about the ribeye\"}",
+    "expect": {
+      "text": "something about the ribeye",
+      "grape": "",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": null,
+      "body": [],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "shiraz",
+    "id": "{\"acidity\":[],\"body\":[],\"dish\":\"\",\"grape\":\"Shiraz\",\"intensity\":[],\"max_price_cents\":null,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "Shiraz",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": null,
+      "body": [],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [],
+      "oak": [],
+      "intensity": []
+    }
+  },
+  {
+    "query": "",
+    "id": "{\"acidity\":[],\"body\":[],\"dish\":\"\",\"grape\":\"\",\"intensity\":[],\"max_price_cents\":null,\"oak\":[],\"producer\":\"\",\"region\":\"\",\"style\":\"\",\"sweetness\":[],\"tannin\":[],\"text\":\"\"}",
+    "expect": {
+      "text": "",
+      "grape": "",
+      "producer": "",
+      "region": "",
+      "dish": "",
+      "style": "",
+      "max_price_cents": null,
+      "body": [],
+      "acidity": [],
+      "tannin": [],
+      "sweetness": [],
+      "oak": [],
+      "intensity": []
+    }
+  }
+]

@@ -148,6 +148,7 @@ def ensure_sku(
         )
         session.add(sku)
         session.flush()
+        _mark_embed(session, venue_id, organization_id, sku.id)
         return sku
 
     incoming = _code(barcode) if barcode else ""
@@ -162,7 +163,14 @@ def ensure_sku(
     if currency:
         sku.currency = currency
     session.flush()
+    _mark_embed(session, venue_id, organization_id, sku.id)
     return sku
+
+
+def _mark_embed(session: Session, venue_id: uuid.UUID, organization_id: uuid.UUID, sku_id: uuid.UUID) -> None:
+    from madira.domain.embeddings.schedule import mark
+
+    mark(session, venue_id, organization_id, "sku", sku_id)
 
 
 def beverage_fields(sku: Sku) -> dict[str, str]:

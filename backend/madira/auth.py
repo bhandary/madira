@@ -8,7 +8,8 @@ is first-party: HttpOnly, SameSite=Lax, and Secure when that URL is https.
 The flow is the authorization code grant with S256 PKCE, `state`, and
 `nonce`. joserfc checks the ID token (RS256, issuer, audience, expiry,
 nonce) before a User row is written. The cookie is an HMAC of the Google
-subject, not the Google token. Settings is limited to the Owner role.
+subject, not the Google token. A signed CSRF cookie is set with the session
+and sent back in a header on writes. Settings is limited to the Owner role.
 """
 
 from __future__ import annotations
@@ -26,14 +27,16 @@ from typing import Any
 from urllib.parse import urlencode, urlparse
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel
 from joserfc import jwt
 from joserfc.errors import InvalidKeyIdError, MissingKeyError
 from joserfc.jwk import KeySet
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from madira.csrf import CSRF_COOKIE
 from madira.db import SessionLocal
 from madira.models import User
 
@@ -304,8 +307,10 @@ def upsert_google_user(profile: dict[str, str]) -> str:
             session.add(user)
             try:
                 from madira.tenancy import grant_configured_owner
+                from madira.domain.team.service import accept_invites_for_user
 
                 grant_configured_owner(session, user)
+                accept_invites_for_user(session, user)
                 session.commit()
                 return sub
             except IntegrityError:
@@ -318,8 +323,10 @@ def upsert_google_user(profile: dict[str, str]) -> str:
         user.picture = profile["picture"]
         user.last_login_at = now
         from madira.tenancy import grant_configured_owner
+        from madira.domain.team.service import accept_invites_for_user
 
         grant_configured_owner(session, user)
+        accept_invites_for_user(session, user)
         session.commit()
         return sub
     except AuthError:
@@ -457,8 +464,31 @@ def _set_cookie(response: JSONResponse | RedirectResponse, name: str, value: str
     )
 
 
-def _clear_cookie(response: JSONResponse | RedirectResponse, name: str) -> None:
-    response.delete_cookie(name, path="/", secure=cookie_secure(), httponly=True, samesite="lax")
+def _clear_cookie(response: JSONResponse | RedirectResponse, name: str, *, httponly: bool = True) -> None:
+    response.delete_cookie(name, path="/", secure=cookie_secure(), httponly=httponly, samesite="lax")
+
+
+def _set_csrf_cookie(response: JSONResponse | RedirectResponse, value: str) -> None:
+    # Readable by the page so it can copy the value into the CSRF header.
+    response.set_cookie(
+        CSRF_COOKIE,
+        value,
+        max_age=SESSION_TTL,
+        httponly=False,
+        secure=cookie_secure(),
+        samesite="lax",
+        path="/",
+    )
+
+
+def _attach_csrf(response: JSONResponse | RedirectResponse, session_token: str | None) -> None:
+    from madira.csrf import sign_csrf
+
+    if not session_subject(session_token):
+        return
+    token = sign_csrf(session_token or "")
+    if token:
+        _set_csrf_cookie(response, token)
 
 
 def _fail(code: str) -> RedirectResponse:
@@ -476,14 +506,66 @@ def auth_config() -> JSONResponse:
 
 @router.get("/auth/me")
 def auth_me(request: Request) -> JSONResponse:
-    return _no_store(JSONResponse({"user": user_from_session(request.cookies.get(SESSION_COOKIE))}))
+    session_token = request.cookies.get(SESSION_COOKIE)
+    response = JSONResponse({"user": user_from_session(session_token)})
+    _attach_csrf(response, session_token)
+    return _no_store(response)
+
+
+@router.get("/auth/csrf")
+def auth_csrf(request: Request) -> JSONResponse:
+    """Set the CSRF cookie for a session that was issued before this cookie existed."""
+
+    session_token = request.cookies.get(SESSION_COOKIE)
+    if not session_subject(session_token):
+        raise HTTPException(status_code=401, detail="Sign in required.")
+    response = JSONResponse({"ok": True})
+    _attach_csrf(response, session_token)
+    return _no_store(response)
+
+
+class PersonaBody(BaseModel):
+    slug: str
+
+
+@router.get("/auth/demo-personas")
+def auth_demo_personas(request: Request) -> JSONResponse:
+    from madira.tenancy import DEMO_PERSONA_COOKIE, demo_persona_catalog, demo_posture
+
+    if not demo_posture():
+        raise HTTPException(status_code=404, detail="Not found.")
+    catalog = demo_persona_catalog()
+    known = {row["slug"] for row in catalog}
+    slug = (request.cookies.get(DEMO_PERSONA_COOKIE) or "owner").strip().lower()
+    if slug not in known:
+        slug = "owner"
+    return _no_store(JSONResponse({"active": slug, "personas": catalog}))
+
+
+@router.post("/auth/demo-persona")
+def auth_demo_persona(body: PersonaBody) -> JSONResponse:
+    from madira.tenancy import DEMO_PERSONA_COOKIE, demo_persona_catalog, demo_posture
+
+    if not demo_posture():
+        raise HTTPException(status_code=404, detail="Not found.")
+    slug = body.slug.strip().lower()
+    catalog = {row["slug"]: row for row in demo_persona_catalog()}
+    if slug not in catalog:
+        raise HTTPException(status_code=404, detail="Not found.")
+    response = JSONResponse(catalog[slug])
+    _set_cookie(response, DEMO_PERSONA_COOKIE, slug, SESSION_TTL)
+    return _no_store(response)
 
 
 @router.post("/auth/logout")
 def auth_logout() -> JSONResponse:
+    from madira.tenancy import DEMO_PERSONA_COOKIE
+
     response = JSONResponse({"ok": True})
     _clear_cookie(response, SESSION_COOKIE)
     _clear_cookie(response, OIDC_COOKIE)
+    _clear_cookie(response, DEMO_PERSONA_COOKIE)
+    _clear_cookie(response, CSRF_COOKIE, httponly=False)
     return _no_store(response)
 
 
@@ -514,5 +596,6 @@ def auth_callback(request: Request, code: str = "", state: str = "", error: str 
         return _fail(exc.code)
     response = RedirectResponse("/", status_code=302)
     _set_cookie(response, SESSION_COOKIE, session_token, SESSION_TTL)
+    _attach_csrf(response, session_token)
     _clear_cookie(response, OIDC_COOKIE)
     return _no_store(response)

@@ -7,15 +7,21 @@ a movement row. A count correction is a new ``count_adjustment``.
 
 Depletion over the trailing 30 days:
 
-* When the SKU has any ``sale`` movement in the window, depletion is the sum
-  of the absolute sale quantities. Those rows are the POS sales. Other
-  movement types in the window are ignored so a transfer or a breakage does
-  not double-count usage the till already recorded.
-* When the window has no ``sale`` rows, depletion is count-derived. It is the
-  absolute value of the sum of negative ``count_adjustment`` quantities, plus
-  other shrinkage outflows: ``breakage``, ``comp``, ``faulty_bottle``, and a
-  negative ``return``. Transfers are excluded in both directions. A bottle
-  that moved from the cellar to the bar is still in the venue.
+* When the venue has an active POS connection, depletion is the sum of
+  absolute ``sale`` quantities in the window. Those rows are the POS sales,
+  including sales this sync posts with reason ``pos_sale``. Count adjustments
+  and other shrinkage are not used, including for a SKU with no sale in the
+  window.
+* Otherwise, when the SKU has any ``sale`` movement in the window, depletion
+  is the sum of the absolute sale quantities. Other movement types in the
+  window are ignored so a transfer or a breakage does not double-count usage
+  the till already recorded.
+* When the window has no ``sale`` rows and the venue has no active POS
+  connection, depletion is count-derived. It is the absolute value of the sum
+  of negative ``count_adjustment`` quantities, plus other shrinkage outflows:
+  ``breakage``, ``comp``, ``faulty_bottle``, and a negative ``return``.
+  Transfers are excluded in both directions. A bottle that moved from the
+  cellar to the bar is still in the venue.
 
 Valuation is ``on_hand * unit_cost_cents`` using the SKU's current cost, not a
 moving average of movement costs. Tenths are kept (``-0.5`` for an open
@@ -543,8 +549,21 @@ def list_movements(
     return [movement_public(row, barcode, name, place, bin_code) for row, barcode, name, place, bin_code in session.execute(stmt).all()]
 
 
+def _pos_sales_are_source(session: Session, venue_id: uuid.UUID) -> bool:
+    """True when this venue's depletion should come from POS sale movements."""
+
+    from madira.models import PosConnection
+
+    row = session.scalar(
+        select(PosConnection.id)
+        .where(PosConnection.venue_id == venue_id, PosConnection.status == "active")
+        .limit(1)
+    )
+    return row is not None
+
+
 def depletion_by_sku(session: Session, venue_id: uuid.UUID, *, now: datetime | None = None) -> dict[uuid.UUID, Decimal]:
-    """Trailing 30-day depletion. See the module docstring for the two paths."""
+    """Trailing 30-day depletion. See the module docstring for the source switch."""
 
     moment = _when(now)
     cutoff = moment - timedelta(days=30)
@@ -554,6 +573,7 @@ def depletion_by_sku(session: Session, venue_id: uuid.UUID, *, now: datetime | N
             StockMovement.created_at >= cutoff,
         )
     ).all()
+    pos = _pos_sales_are_source(session, venue_id)
     sales: dict[uuid.UUID, Decimal] = {}
     counts: dict[uuid.UUID, Decimal] = {}
     shrink: dict[uuid.UUID, Decimal] = {}
@@ -563,10 +583,12 @@ def depletion_by_sku(session: Session, venue_id: uuid.UUID, *, now: datetime | N
         if kind == "sale":
             sold.add(sku_id)
             sales[sku_id] = sales.get(sku_id, Decimal("0")) + abs(qty)
-        elif kind == "count_adjustment" and qty < 0:
+        elif not pos and kind == "count_adjustment" and qty < 0:
             counts[sku_id] = counts.get(sku_id, Decimal("0")) + abs(qty)
-        elif kind in _SHRINK and qty < 0:
+        elif not pos and kind in _SHRINK and qty < 0:
             shrink[sku_id] = shrink.get(sku_id, Decimal("0")) + abs(qty)
+    if pos:
+        return {sku_id: sales.get(sku_id, Decimal("0")) for sku_id in sold}
     found = set(sales) | set(counts) | set(shrink) | sold
     out: dict[uuid.UUID, Decimal] = {}
     for sku_id in found:

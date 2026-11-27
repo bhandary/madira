@@ -60,12 +60,25 @@ def run(live: bool) -> int:
         listed = _import_list(ctx.venue_id)
         extraction, extract_problems = _score_extraction(ctx.venue_id, cases)
         pairing, pair_problems = _score_pairing(ctx.venue_id, cases, listed)
+        curation, curation_problems = _score_curation(ctx.venue_id)
+        training, training_problems = _score_training(ctx.venue_id)
+        auditor, auditor_problems = _score_auditor(live)
     finally:
         reset(token)
 
     _print_extraction(extraction)
     _print_pairing(pairing)
-    problems = extract_problems + pair_problems + _threshold_problems(extraction, pairing)
+    _print_curation(curation)
+    _print_training(training)
+    _print_auditor(auditor)
+    problems = (
+        extract_problems
+        + pair_problems
+        + curation_problems
+        + training_problems
+        + auditor_problems
+        + _threshold_problems(extraction, pairing)
+    )
     if problems:
         print("result: fail")
         for line in problems:
@@ -80,13 +93,17 @@ def _forbid_fixtures() -> None:
         raise RuntimeError("live eval must not fall back to fixtures")
 
     import madira.agents.demo.menu as demo_menu
+    import madira.domain.lists.copy as list_copy
     import madira.domain.menu.extract as extract
     import madira.domain.pairing.copy as copy
+    import madira.domain.training.lessons as lessons
 
     demo_menu.extraction_json = boom
     demo_menu.known_payloads = boom
     extract.demo_complete = boom
     copy.demo_lines = boom
+    list_copy.demo_complete = boom
+    lessons.demo_complete = boom
 
 
 def _cases() -> list[dict]:
@@ -491,6 +508,251 @@ def _print_extraction(totals: dict) -> None:
     for key, label in FIELDS:
         accuracy = _rate(totals["hits"][key], totals["matched"])
         print(f"  {label}={accuracy:.3f} (min {FIELD_MIN:.2f})")
+
+
+def _score_curation(venue_id) -> tuple[dict, list[str]]:
+    """Curate from the confirmed eval menus and score the imported list too.
+
+    A name without a catalog id, a spend over the budget, or a margin that
+    disagrees with the pricing service fails the run.
+    """
+
+    from madira.domain.errors import DraftFailed
+    from madira.domain.lists.pricing import economics
+    from madira.domain.lists.service import curate, list_lists
+
+    problems = []
+    try:
+        created = curate(venue_id, budget=12000, target_margin=3.2, name="Eval house list")
+    except DraftFailed as exc:
+        return {"items": 0, "grounded": 0, "margin_ok": 0, "spent": 0, "budget": 0, "published": 0}, [exc.message]
+    stored = list_lists(venue_id)["lists"]
+    imported = next((row for row in stored if row.get("source_filename") == "sample_list.csv"), None)
+    examined = [created]
+    if imported is not None:
+        examined.append(imported)
+    items = 0
+    grounded = 0
+    margin_ok = 0
+    for row in examined:
+        budget = int(row.get("budget") or 0)
+        spent = int(row.get("spent") or 0)
+        if budget > 0 and spent > budget:
+            problems.append(f"{row.get('name')} spends {spent} cents over a {budget} cent budget")
+        capacity = row.get("capacity_bottles")
+        if capacity is not None and int(row.get("bottles") or 0) > int(capacity):
+            problems.append(f"{row.get('name')} holds more bottles than the cellar")
+        for item in row.get("items") or []:
+            items += 1
+            if item.get("product_id"):
+                grounded += 1
+            else:
+                problems.append(f"{item.get('name') or 'item'} is not a catalog product")
+            priced = economics(int(item.get("cost") or 0), int(item.get("bottle_price") or 0), int(item.get("pour_price") or 0))
+            if priced["margin_pct"] == item.get("margin_pct"):
+                margin_ok += 1
+            else:
+                problems.append(f"{item.get('name')} margin does not match the pricing service")
+        for cell in row.get("suggestions") or []:
+            if cell.get("product_id"):
+                problems.append(f"buying suggestion {cell.get('name')} names a product")
+    published = _score_published_list(venue_id, created.get("list_id"), problems)
+    return {
+        "items": items,
+        "grounded": grounded,
+        "margin_ok": margin_ok,
+        "spent": int(created.get("spent") or 0),
+        "budget": int(created.get("budget") or 0),
+        "published": published,
+    }, problems
+
+
+def _score_training(venue_id) -> tuple[dict, list[str]]:
+    """A drafted lesson may cite only house standards and on-list bottles.
+
+    Quiz answers have to match the service card or the catalog. The seeded
+    floor quiz is not part of this score.
+    """
+
+    from madira.domain.errors import DraftFailed
+    from madira.domain.session import session_scope
+    from madira.domain.training.grounding import ensure_floor_cards, on_list_facts
+    from madira.domain.training.lessons import draft_lesson, ungrounded_citations
+    from madira.domain.training.quizzes import from_list, inconsistent_answers
+    from madira.models import Lesson, Quiz
+    from madira.tenancy import current_request, ensure_demo_tenant
+
+    empty = {"lessons": 0, "ungrounded": 0, "questions": 0, "consistent": 0}
+    actor = current_request() or ensure_demo_tenant()
+    with session_scope() as session:
+        ensure_floor_cards(session, venue_id, actor.user_id)
+        session.commit()
+    try:
+        drafted = draft_lesson(venue_id, "server")
+    except DraftFailed as exc:
+        return empty, [exc.message]
+    problems = []
+    with session_scope() as session:
+        lesson = session.get(Lesson, drafted["id"])
+        ungrounded = ungrounded_citations(session, venue_id, lesson) if lesson is not None else 1
+        facts = on_list_facts(session, venue_id)
+        quiz = session.get(Quiz, drafted.get("quiz_id")) if drafted.get("quiz_id") else None
+        lesson_questions = list(quiz.questions or []) if quiz is not None else []
+    lesson_bad = inconsistent_answers(facts, lesson_questions)
+    if ungrounded:
+        problems.append(f"training lesson cites {ungrounded} unknown standards or bottles")
+    if not lesson_questions:
+        problems.append("training lesson quiz has no questions")
+    if lesson_bad:
+        problems.append(f"training lesson quiz has {lesson_bad} answers that disagree with the catalog")
+    try:
+        listed = from_list(venue_id)
+    except DraftFailed as exc:
+        problems.append(exc.message)
+        list_questions: list[dict] = []
+        list_bad = 0
+    else:
+        with session_scope() as session:
+            stored = session.get(Quiz, listed["id"])
+            list_questions = list(stored.questions or []) if stored is not None else []
+            facts = on_list_facts(session, venue_id)
+        list_bad = inconsistent_answers(facts, list_questions)
+        if not list_questions:
+            problems.append("list quiz has no questions")
+        if list_bad:
+            problems.append(f"list quiz has {list_bad} answers that disagree with the catalog")
+    questions = len(lesson_questions) + len(list_questions)
+    consistent = questions - lesson_bad - list_bad
+    if questions == 0:
+        problems.append("training quizzes produced no questions")
+    return {
+        "lessons": 1,
+        "ungrounded": ungrounded,
+        "questions": questions,
+        "consistent": consistent,
+    }, problems
+
+
+def _score_auditor(live: bool) -> tuple[dict, list[str]]:
+    """The auditor's spoken totals are the AuditTable totals, not a second guess."""
+
+    import json
+
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    from madira.agents.tools import query_stock_movements
+    from madira.domain.compliance.queries import answer_from_audit_table
+
+    payload = json.loads(query_stock_movements())
+    table = payload.get("audit_table") or {}
+    answer = answer_from_audit_table(table)
+    problems = []
+    if "AuditorTable" not in json.dumps(payload.get("a2ui_operations") or []):
+        problems.append("auditor result has no AuditorTable")
+    totals = table.get("totals") or {}
+    if "movement_count" not in totals or "depletion" not in totals:
+        problems.append("auditor table is missing stock totals")
+    for key, value in totals.items():
+        if str(value) not in answer:
+            problems.append(f"auditor answer omits {key}")
+    rows = table.get("rows") or []
+    if int((table.get("page") or {}).get("total") or 0) > 0:
+        linked = [link for row in rows for link in row.get("links") or []]
+        if not any(str(link.get("href") or "").startswith("/") for link in linked):
+            problems.append("auditor rows have no source link")
+    if not live:
+        from madira.agents.demo.model import DemoChatModel
+
+        prompt = "Query stock movements and depletion. Read only. Answer from the audit table."
+        model = DemoChatModel(role="compliance-auditor")
+        first = model.invoke([HumanMessage(content=prompt)])
+        calls = getattr(first, "tool_calls", None) or []
+        if not calls or calls[0].get("name") != "query_stock_movements":
+            problems.append("demo auditor did not query the stock audit table")
+        second = model.invoke(
+            [
+                HumanMessage(content=prompt),
+                first if isinstance(first, AIMessage) else AIMessage(content=""),
+                ToolMessage(content=json.dumps(payload), name="query_stock_movements", tool_call_id="eval-stock"),
+            ]
+        )
+        spoken = second.content if isinstance(second.content, str) else str(second.content)
+        if str(totals.get("movement_count")) not in spoken:
+            problems.append("demo auditor did not answer from the audit table")
+    return {"rows": int((table.get("page") or {}).get("total") or 0), "answered": 0 if problems else 1}, problems
+
+
+def _print_auditor(counts: dict) -> None:
+    print(f"auditor summary  rows={counts['rows']}  answered={counts['answered']}")
+
+
+def _print_training(counts: dict) -> None:
+    print(
+        "training summary  "
+        f"lessons={counts['lessons']}  "
+        f"ungrounded={counts['ungrounded']}  "
+        f"questions={counts['questions']}  "
+        f"consistent={counts['consistent']}"
+    )
+
+
+def _guest_field_problems(value, path: str = "") -> list[str]:
+    """Guest JSON may carry names, descriptions, and prices. Costs and margins stay out."""
+
+    found = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            lowered = str(key).lower()
+            if "cost" in lowered or "margin" in lowered:
+                found.append(f"{path}/{key}")
+            found.extend(_guest_field_problems(child, f"{path}/{key}"))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            found.extend(_guest_field_problems(child, f"{path}/{index}"))
+    return found
+
+
+def _score_published_list(venue_id, list_id, problems: list[str]) -> int:
+    """Publish the curated list through the Owner approval and check the guest page."""
+
+    import uuid
+
+    from madira.domain.errors import NotFound
+    from madira.domain.lists import versions as list_versions
+
+    if not list_id:
+        problems.append("curated list has no id to publish")
+        return 0
+    try:
+        pending = list_versions.submit_list(venue_id, uuid.UUID(str(list_id)))
+        if pending.get("status") != "pending_approval" or pending.get("public_token"):
+            problems.append("submit_list published a list before the Owner approved it")
+            return 0
+        published = list_versions.approve(venue_id, uuid.UUID(str(pending["id"])))
+        guest = list_versions.public_list(published.get("public_token") or "")
+    except (NotFound, list_versions.ListVersionError, ValueError) as exc:
+        problems.append(getattr(exc, "message", "the curated list could not be published"))
+        return 0
+    leaked = _guest_field_problems(guest)
+    if leaked:
+        problems.append("guest list includes " + ", ".join(leaked))
+        return 0
+    if published.get("status") != "published":
+        problems.append("approved list version is not published")
+        return 0
+    return 1
+
+
+def _print_curation(counts: dict) -> None:
+    print(
+        "curation summary  "
+        f"items={counts['items']}  "
+        f"grounded={counts['grounded']}  "
+        f"margin_ok={counts['margin_ok']}  "
+        f"spent={counts['spent']}  "
+        f"budget={counts['budget']}  "
+        f"published={counts.get('published', 0)}"
+    )
 
 
 def _print_pairing(counts: dict) -> None:

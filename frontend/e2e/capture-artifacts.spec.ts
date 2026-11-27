@@ -35,9 +35,16 @@ test("capture key states for walkthrough artifacts", async ({ page }) => {
   await page.screenshot({ path: path.join(OUT, "screenshots", "inventory_reorder_draft.png"), fullPage: true });
 
   await page.goto("/training");
-  await page.getByTestId("training-quiz").click();
-  await page.getByTestId("training-workbench-submit").click();
-  await expect(page.getByTestId("quiz-score")).toBeVisible({ timeout: 90_000 });
+  const lesson = page.getByTestId("my-lesson").filter({ hasText: "Tonight's pairing briefing" });
+  await lesson.getByTestId("lesson-quiz").click();
+  const questions = page.getByTestId("quiz-question");
+  await expect(questions.first()).toBeVisible();
+  const count = await questions.count();
+  for (let index = 0; index < count; index += 1) {
+    await questions.nth(index).getByTestId("quiz-choice").nth(1).click();
+  }
+  await page.getByTestId("quiz-submit").click();
+  await expect(page.getByTestId("quiz-score")).toBeVisible();
   await page.screenshot({ path: path.join(OUT, "screenshots", "training_quiz_score.png"), fullPage: true });
 
   await page.goto("/suppliers");

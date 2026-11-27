@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AgentWorkbench } from "@/components/AgentWorkbench";
+import { CatalogSearch } from "@/components/CatalogSearch";
 import { CellarBoard } from "@/components/CellarBoard";
 import { ZoneConditionCard } from "@/components/ZoneConditionCard";
-import { getInventory, listStorageZones, patchStock, type StorageZone } from "@/lib/api";
+import { getInventory, getSensors, listStorageZones, patchStock, type SensorRecord, type StorageZone } from "@/lib/api";
+import { SensorStatusView } from "@/components/SensorViews";
 
 type Item = {
   sku: string;
@@ -23,6 +25,7 @@ export default function InventoryPage() {
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [zones, setZones] = useState<StorageZone[]>([]);
+  const [sensors, setSensors] = useState<SensorRecord[]>([]);
 
   async function refresh() {
     const data = await getInventory();
@@ -35,6 +38,9 @@ export default function InventoryPage() {
     listStorageZones()
       .then((data) => setZones(data.zones || []))
       .catch(() => setZones([]));
+    getSensors()
+      .then((data) => setSensors(data.sensors || []))
+      .catch(() => setSensors([]));
   }, []);
 
   useEffect(() => {
@@ -67,6 +73,7 @@ export default function InventoryPage() {
       blurb="Adjust stock on the floor, then let Inventory & Purchasing draft supplier POs. Seeded cellar data ships with the demo."
       prompt={prompt}
     >
+      <CatalogSearch />
       <p className="mt-4">
         <Link href="/inventory/count" className="btn btn-primary" data-testid="open-count">
           Count on a phone
@@ -134,6 +141,23 @@ export default function InventoryPage() {
         <p className="mt-1 text-sm text-muted">
           Log a temperature and humidity reading. An out-of-range reading opens an excursion for the bottles in that zone.
         </p>
+        <div className="mt-3 min-w-0">
+          <SensorStatusView
+            sensors={sensors.map((row) => ({
+              id: row.id,
+              name: row.name,
+              zone_name: row.zone_name,
+              location_name: row.location_name,
+              metric: row.metric,
+              external_id: row.external_id,
+              masked: row.masked,
+              last_value: row.last_value,
+              last_at: row.last_at,
+              stale: row.stale,
+              stale_after_hours: row.stale_after_hours,
+            }))}
+          />
+        </div>
         <div className="mt-3 space-y-3">
           {zones.map((zone) => (
             <ZoneConditionCard key={zone.id} zone={zone} onChanged={refreshZones} />

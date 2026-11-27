@@ -11,7 +11,8 @@ from sqlalchemy import select
 
 from madira.db import SessionLocal, init_db
 from madira.domain.errors import NotFound
-from madira.domain.procurement.service import build_ics, ics_text, list_suppliers, list_tastings, schedule
+from madira.domain.procurement.service import list_suppliers
+from madira.domain.tastings.service import create_session, ics_text, list_sessions, plan
 from madira.main import app
 from madira.models import Supplier, Venue
 from madira.seed import seed
@@ -37,21 +38,21 @@ def test_schedule_builds_a_draft_ics_and_does_not_mark_it_sent():
     init_db()
     seed()
     demo = ensure_demo_tenant()
-    notes = "Draft hold — export .ics, do not send invites."
-    payload = schedule(
+    payload = create_session(
         demo.venue_id,
         supplier_name="Kermit Lynch Wine Merchant",
         title="Service Loire tasting",
         starts_at="2026-12-01T15:00",
         ends_at="2026-12-01T17:00",
         location="Maison Madira cellar",
-        notes=notes,
     )
     draft = payload["draft"]
     assert draft["sent"] is False
-    assert draft["ics"] == build_ics("Service Loire tasting", "2026-12-01T15:00", "2026-12-01T17:00", "Maison Madira cellar", notes)
-    assert "DTSTART:20261201T1500" in draft["ics"]
-    listed = list_tastings(demo.venue_id)["tastings"]
+    assert draft["ics"].startswith("BEGIN:VCALENDAR\r\n")
+    assert "DTSTART:20261201T150000Z" in draft["ics"]
+    assert "DTEND:20261201T170000Z" in draft["ics"]
+    assert "Service Loire tasting" in draft["ics"]
+    listed = list_sessions(demo.venue_id)["sessions"]
     saved = next(row for row in listed if row["id"] == draft["id"])
     assert saved["ics"] == draft["ics"]
     assert "ics" not in next(row for row in payload["tastings"] if row["id"] == draft["id"])
@@ -63,14 +64,14 @@ def test_tastings_and_suppliers_stay_inside_the_venue():
     seed()
     demo = ensure_demo_tenant()
     other = _other_venue(demo.organization_id)
-    created = schedule(
+    created = create_session(
         other,
         supplier_name="Other House Wines",
         title="Other house tasting",
         starts_at="2026-12-02T15:00",
         ends_at="2026-12-02T16:00",
     )
-    demo_ids = {row["id"] for row in list_tastings(demo.venue_id)["tastings"]}
+    demo_ids = {row["id"] for row in list_sessions(demo.venue_id)["sessions"]}
     assert created["draft"]["id"] not in demo_ids
     with pytest.raises(NotFound):
         ics_text(demo.venue_id, created["draft"]["id"])
@@ -78,8 +79,8 @@ def test_tastings_and_suppliers_stay_inside_the_venue():
     other_names = {row["name"] for row in list_suppliers(other)["suppliers"]}
     assert "Other House Wines" not in demo_names
     assert "Kermit Lynch Wine Merchant" not in other_names
-    empty = schedule(uuid.uuid4(), supplier_name="Nobody", title="Missing")
-    assert empty == {"error": "no supplier"}
+    with pytest.raises(NotFound):
+        plan(uuid.uuid4(), supplier="Nobody", title="Missing")
 
 
 def test_tasting_routes_return_the_calendar_surface():
@@ -100,8 +101,8 @@ def test_tasting_routes_return_the_calendar_surface():
         assert body["draft"]["sent"] is False
         assert body["a2ui_operations"][0]["createSurface"]["surfaceId"] == "tasting"
         assert "TastingCalendar" in json.dumps(body["a2ui_operations"])
-        ics = client.get(f"/tastings/{body['draft']['id']}/ics")
+        ics = client.get(f"/tastings/{body['draft']['id']}.ics")
         assert ics.status_code == 200
         assert ics.text.startswith("BEGIN:VCALENDAR")
-        missing = client.get(f"/tastings/{uuid.uuid4()}/ics")
+        missing = client.get(f"/tastings/{uuid.uuid4()}.ics")
         assert missing.status_code == 404

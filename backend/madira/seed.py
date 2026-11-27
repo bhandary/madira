@@ -34,16 +34,51 @@ def seed(session: Session | None = None) -> None:
             from madira.domain.compliance.service import ensure_demo_records
 
             ensure_demo_records(session, ctx)
+            from madira.domain.reminders.service import ensure_demo_license
+
+            ensure_demo_license(session, ctx)
             _ensure_demo_ledger(session, venue_id)
             from madira.domain.inventory.storage import ensure_demo_zones
 
             ensure_demo_zones(session, venue_id)
+            _ensure_list_pricing(session, venue_id)
+            _ensure_training_floor(session, venue_id, ctx.user_id)
             session.commit()
         finally:
             reset(token)
     finally:
         if own:
             session.close()
+
+
+def _ensure_list_pricing(session: Session, venue_id) -> None:
+    """House pricing bands, a drink window on the Muscadet, and a best-by on the stout.
+
+    Capacity on the two demo zones is what the selector spends bottles against.
+    A second seed does not overwrite a band or a date someone already set.
+    """
+
+    from datetime import date, timedelta
+
+    from madira.domain.lists.pricing import ensure_default_rules
+    from madira.models import ProductVariant, StorageZone
+
+    ensure_default_rules(session, venue_id)
+    year = date.today().year
+    muscadet = session.scalar(select(Sku).where(Sku.venue_id == venue_id, Sku.barcode == "W-MUS-01"))
+    if muscadet is not None:
+        variant = session.get(ProductVariant, muscadet.product_variant_id)
+        if variant is not None and variant.drink_by_year is None:
+            variant.drink_from_year = year - 1
+            variant.drink_by_year = year
+    stout = session.scalar(select(Sku).where(Sku.venue_id == venue_id, Sku.barcode == "B-STT-01"))
+    if stout is not None and stout.best_by is None:
+        stout.best_by = date.today() + timedelta(days=30)
+    for name, bottles in (("Main Cellar", 48), ("Bar & Cold Box", 24)):
+        zone = session.scalar(select(StorageZone).where(StorageZone.venue_id == venue_id, StorageZone.name == name))
+        if zone is not None and zone.capacity_bottles is None:
+            zone.capacity_bottles = bottles
+    session.flush()
 
 
 def _seed_demo_catalog(session: Session, venue_id) -> None:
@@ -76,8 +111,20 @@ def _seed_demo_catalog(session: Session, venue_id) -> None:
                 unit=row.get("unit", "btl"),
             )
         )
+    positions = {
+        "waitstaff": "server",
+        "server": "server",
+        "bartender": "bartender",
+        "barback": "barback",
+        "host": "host",
+        "all": "all",
+    }
     for row in LESSONS:
-        lesson = Lesson(**row, venue_id=venue_id)
+        data = dict(row)
+        data["position"] = positions.get(str(data.get("role", "")).lower(), "all")
+        data["status"] = "approved"
+        data["source"] = "seed"
+        lesson = Lesson(**data, venue_id=venue_id)
         session.add(lesson)
         session.flush()
         if row["slug"] == "daily-briefing":
@@ -87,8 +134,58 @@ def _seed_demo_catalog(session: Session, venue_id) -> None:
                     lesson_id=lesson.id,
                     title=QUIZ["title"],
                     questions=QUIZ["questions"],
+                    status="approved",
+                    source="lesson",
                 )
             )
+
+
+_SERVICE_ROWS = (
+    {
+        "barcode": "W-MUS-01",
+        "glassware": "White wine glass",
+        "serving_temperature": "8–10°C",
+        "decanting": "No decant",
+        "pour_size": "150 ml",
+        "server_hook": "Lean and salty. It cuts shellfish and anything with lemon.",
+        "guest_description": "A coastal white that stays bright next to crab or a lemon sauce.",
+    },
+    {
+        "barcode": "W-BAR-01",
+        "glassware": "Bordeaux glass",
+        "serving_temperature": "16–18°C",
+        "decanting": "Decant 60–90 minutes",
+        "pour_size": "150 ml",
+        "server_hook": "Rose and tar. Give the decant the time on the card.",
+        "guest_description": "A firm red that wants time in the glass before the main course.",
+    },
+    {
+        "barcode": "W-CHA-01",
+        "glassware": "White wine glass",
+        "serving_temperature": "10–12°C",
+        "decanting": "No decant",
+        "pour_size": "150 ml",
+        "server_hook": "Chalk and green apple. Keep the glass cold.",
+        "guest_description": "A cool white with chalk and green apple.",
+    },
+    {
+        "barcode": "W-COT-01",
+        "glassware": "Burgundy glass",
+        "serving_temperature": "16–18°C",
+        "decanting": "Decant 30–60 minutes",
+        "pour_size": "150 ml",
+        "server_hook": "Olive, smoke, and bacon. Decant it before the main course.",
+        "guest_description": "A savory red of olive, smoke, and bacon.",
+    },
+)
+
+
+def _ensure_training_floor(session: Session, venue_id, actor_id) -> None:
+    from madira.domain.training.grounding import ensure_house_list
+    from madira.domain.training.standards import ensure_default_standards
+
+    ensure_default_standards(session, venue_id)
+    ensure_house_list(session, venue_id, actor_id, list(_SERVICE_ROWS))
 
 
 _PROFILES = {
