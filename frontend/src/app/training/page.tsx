@@ -25,6 +25,22 @@ const PERSONAS = [
   ["celebration", "Celebration"],
 ] as const;
 
+/** A dev-proxy reset or a brief sqlite lock returns 500 once. The next call is fine. */
+async function readTraining<T>(load: () => Promise<T>): Promise<T> {
+  let last: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await load();
+    } catch (err) {
+      last = err;
+      const again = attempt < 2 && (!(err instanceof ApiError) || err.status >= 500);
+      if (!again) break;
+      await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+    }
+  }
+  throw last;
+}
+
 export default function TrainingPage() {
   const [data, setData] = useState<TrainingLessons | null>(null);
   const [due, setDue] = useState<DueReview[]>([]);
@@ -37,22 +53,31 @@ export default function TrainingPage() {
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [lessons, reviews] = await Promise.all([getTrainingLessons(), getDueReviews()]);
+    const [lessons, reviews] = await Promise.all([
+      readTraining(getTrainingLessons),
+      readTraining(getDueReviews),
+    ]);
     setData(lessons);
     setDue(reviews.reviews);
   }, []);
 
   useEffect(() => {
     let live = true;
-    Promise.all([getTrainingLessons(), getDueReviews()])
-      .then(([lessons, reviews]) => {
-        if (!live) return;
-        setData(lessons);
-        setDue(reviews.reviews);
+    // Lessons and the due list are independent. A failed review request must not hide the quiz.
+    readTraining(getTrainingLessons)
+      .then((lessons) => {
+        if (live) setData(lessons);
       })
       .catch((err: unknown) => {
         if (!live) return;
         setError(err instanceof ApiError ? err.message : "Lessons could not be loaded.");
+      });
+    readTraining(getDueReviews)
+      .then((reviews) => {
+        if (live) setDue(reviews.reviews);
+      })
+      .catch(() => {
+        // The due tab stays empty. Lessons still render.
       });
     return () => {
       live = false;
