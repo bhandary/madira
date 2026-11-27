@@ -6,7 +6,8 @@ event fields, including ``prev_hash``. The first event in a venue uses
 ``GENESIS``. ``verify_audit_chain`` recomputes that hash and walks ``seq``,
 so a row edit or a gap fails the check.
 
-Vault files go through the disk storage layer under ``{venue_id}/vault/``.
+Vault files go through storage. Disk keys are ``{venue_id}/vault/``.
+S3 keys are ``{organization_id}/{venue_id}/vault/``.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from madira.domain.errors import NotFound
 from madira.models import DOC_TYPES, AuditEvent, Document, Organization, Venue
-from madira.storage import StorageError, get_storage, normalize_content_type
+from madira.storage import StorageError, get_storage, key_in_venue, normalize_content_type
 from madira.tenancy import current_request
 
 GENESIS = "GENESIS"
@@ -399,8 +400,9 @@ def store_document(
         filename=safe_name,
         allowed_types=ALLOWED_CONTENT_TYPES,
         binary=media not in _TEXT_TYPES,
+        organization_id=org_id,
     )
-    if not stored.key.startswith(f"{venue_id}/vault/"):
+    if not key_in_venue(stored.key, venue_id, "vault"):
         storage.delete(stored.key)
         raise StorageError("This file could not be stored.", 400)
     digest = hashlib.sha256(body).hexdigest()
@@ -453,18 +455,9 @@ def get_document(session: Session, venue_id: uuid.UUID, document_id: uuid.UUID) 
     row = session.get(Document, document_id)
     if row is None or row.venue_id != venue_id or row.org_id is None:
         raise NotFound("document not found")
-    if not (row.storage_key or "").startswith(f"{venue_id}/vault/"):
+    if not key_in_venue(row.storage_key or "", venue_id, "vault"):
         raise NotFound("document not found")
     return row
-
-
-def get_document_bytes(session: Session, venue_id: uuid.UUID, document_id: uuid.UUID) -> tuple[Document, bytes]:
-    row = get_document(session, venue_id, document_id)
-    try:
-        payload = get_storage().read(row.storage_key)
-    except StorageError as exc:
-        raise NotFound("document not found") from exc
-    return row, payload
 
 
 def get_retention_policy(session: Session, org_id: uuid.UUID) -> int:

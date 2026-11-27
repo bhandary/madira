@@ -18,7 +18,7 @@ from madira.domain.compliance.audit_pack import (
 from madira.domain.compliance.service import (
     Rejected,
     document_public,
-    get_document_bytes,
+    get_document,
     get_retention_policy,
     list_audit_events,
     list_documents,
@@ -29,7 +29,7 @@ from madira.domain.compliance.service import (
 from madira.domain.errors import NotFound
 from madira.domain.session import session_scope
 from madira.rbac import Capability, require
-from madira.storage import StorageError, upload_max_bytes
+from madira.storage import StorageError, stored_file_response, upload_max_bytes
 from madira.tenancy import OWNER, RequestContext, active_venue_id, current_organization_id, current_request
 
 router = APIRouter()
@@ -134,17 +134,13 @@ async def documents_upload(
 def documents_download(document_id: uuid.UUID) -> Response:
     try:
         with session_scope() as session:
-            row, payload = get_document_bytes(session, active_venue_id(), document_id)
+            row = get_document(session, active_venue_id(), document_id)
+            key = row.storage_key
             filename = row.filename
             media = row.content_type or "application/octet-stream"
+        return stored_file_response(key=key, filename=filename, media=media)
     except (NotFound, StorageError) as exc:
         raise _fail(exc) from exc
-    quoted = filename.replace("\\", "").replace('"', "")
-    return Response(
-        content=payload,
-        media_type=media,
-        headers={"Content-Disposition": f'attachment; filename="{quoted}"'},
-    )
 
 
 @router.get("/compliance/retention")

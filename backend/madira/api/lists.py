@@ -27,7 +27,7 @@ from madira.domain.lists.service import (
     update_item,
 )
 from madira.rbac import Capability, require
-from madira.storage import StorageError, upload_max_bytes
+from madira.storage import StorageError, stored_file_response, upload_max_bytes
 from madira.tenancy import STAFF, active_venue_id, current_request
 
 router = APIRouter()
@@ -100,6 +100,8 @@ def _fail(exc: Exception) -> HTTPException:
     if isinstance(exc, ListVersionError):
         return HTTPException(exc.status, exc.message)
     if isinstance(exc, DraftFailed):
+        return HTTPException(exc.status, exc.message)
+    if isinstance(exc, StorageError):
         return HTTPException(exc.status, exc.message)
     raise exc
 
@@ -303,15 +305,10 @@ def post_list_version_reject(version_id: uuid.UUID, body: DecisionBody | None = 
 @router.get("/lists/versions/{version_id}/pdf", dependencies=[require(Capability.RECORDS)])
 def get_list_version_pdf(version_id: uuid.UUID) -> Response:
     try:
-        filename, payload = list_versions.version_pdf(active_venue_id(), version_id)
-    except NotFound as exc:
+        filename, key = list_versions.version_pdf(active_venue_id(), version_id)
+        return stored_file_response(key=key, filename=filename, media="application/pdf", disposition="inline")
+    except (NotFound, StorageError) as exc:
         raise _fail(exc) from exc
-    quoted = filename.replace('"', "")
-    return Response(
-        content=payload,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{quoted}"'},
-    )
 
 
 @router.get("/lists/versions/{version_id}/qr.png", dependencies=[require(Capability.EDIT)])
