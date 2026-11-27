@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from madira.domain.compliance.service import record_audit_event
@@ -501,8 +502,21 @@ def sync_count_lines(venue_id: uuid.UUID, session_id: uuid.UUID, entries: list[d
                 counted_at=_stamp_at(entry.get("counted_at")),
                 notes=_clip(entry.get("notes"), 2000, "notes"),
             )
-            session.add(line)
-            session.flush()
+            try:
+                with session.begin_nested():
+                    session.add(line)
+                    session.flush()
+            except IntegrityError:
+                existing = session.scalar(
+                    select(CountLine).where(
+                        CountLine.session_id == count.id,
+                        CountLine.client_mutation_id == mutation,
+                    )
+                )
+                if existing is None:
+                    raise
+                saved.append(existing)
+                continue
             saved.append(line)
         sku_ids = {line.sku_id for line in saved}
         stocks = _skus(session, sku_ids)

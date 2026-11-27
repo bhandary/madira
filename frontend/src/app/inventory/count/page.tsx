@@ -55,6 +55,7 @@ export default function CountPage() {
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const proposalLoad = useRef(0);
+  const syncing = useRef<Promise<void> | null>(null);
 
   const refreshProposals = useCallback(async () => {
     const token = ++proposalLoad.current;
@@ -147,16 +148,25 @@ export default function CountPage() {
 
   const flush = useCallback(
     async (id: string) => {
-      const pending = readQueue(id);
-      if (!pending.length) {
+      if (syncing.current) return syncing.current;
+      const run = (async () => {
+        const pending = readQueue(id);
+        if (!pending.length) {
+          setQueued([]);
+          return;
+        }
+        if (typeof navigator !== "undefined" && !navigator.onLine) return;
+        await syncCountLines(id, pending);
+        clearQueue(id);
         setQueued([]);
-        return;
+        await loadSession(id);
+      })();
+      syncing.current = run;
+      try {
+        await run;
+      } finally {
+        if (syncing.current === run) syncing.current = null;
       }
-      if (typeof navigator !== "undefined" && !navigator.onLine) return;
-      await syncCountLines(id, pending);
-      clearQueue(id);
-      setQueued([]);
-      await loadSession(id);
     },
     [loadSession],
   );
