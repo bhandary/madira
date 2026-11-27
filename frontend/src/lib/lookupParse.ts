@@ -1,20 +1,8 @@
 /** Deterministic floor-lookup parser. A port of madira.domain.training.lookup.parse_query. */
 
-export type LookupFilters = {
-  text: string;
-  grape: string;
-  producer: string;
-  region: string;
-  dish: string;
-  style: string;
-  max_price_cents: number | null;
-  body: string[];
-  acidity: string[];
-  tannin: string[];
-  sweetness: string[];
-  oak: string[];
-  intensity: string[];
-};
+import type { LookupFilters } from "@/lib/api-types.gen";
+
+export type { LookupFilters };
 
 const DOLLARS = /\bunder\s+(\d+(?:\.\d+)?)\s+dollars?\b/i;
 const PRICE = /\bunder\s*\$?\s*(\d+(?:\.\d+)?)\b/i;

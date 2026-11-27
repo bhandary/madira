@@ -40,6 +40,11 @@ jobs:
           backend/.venv/bin/pip install -U pip
           backend/.venv/bin/pip install -r backend/requirements.txt
 
+      - name: Generated API types are current
+        run: |
+          make types
+          git diff --exit-code
+
       - name: Backend tests
         run: make test
 
