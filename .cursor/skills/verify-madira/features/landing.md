@@ -1,40 +1,38 @@
-# Floor chat
+# Tonight
 
-The floor is a Head Sommelier chat with four section cards beside it. In demo mode the banner says DEMO MODE, the sidebar lists the sections, and a message about the supplier calendar returns a reply plus an empty tasting calendar when no tasting has been stored yet. The conversation is kept: a reload in the same browser shows it again.
+Tonight is the service board on `/`. It shows the published briefing, low stock, storage, sensors, reminders, deliveries, POS gaps, certificates, and approvals, and the Head Sommelier chat sits under that board. The level-1 heading is `Tonight`.
 
 ## Sub-features
 
-- `floor-banner` shows DEMO MODE once status has loaded.
-- `floor-nav` lists the seven sections and a Sign in link.
-- `floor-chat` sends a message and renders the assistant reply in the chat.
-- `floor-cards` links to Menu & pairings, Cellar, List, and Team from the home page.
-- `floor-sections` opens More on a narrow viewport.
+- `tonight-board` loads `GET /tonight` for the Owner and shows the section headings.
+- `tonight-briefing` walks the published cards and acknowledges the last one.
+- `tonight-chat` still sends a floor message and gets a demo delegation reply.
+- `tonight-nav` is the desktop sidebar and the phone `More` sheet.
 
 ## How to get to it (user POV)
 
 - Open `http://127.0.0.1:3000/`.
-- Choose `Floor` in the sidebar. The link is the first item in `[id=app-nav]`.
-- On a 390px-wide viewport, choose the `Floor` tab. `More` opens `[data-testid=mobile-menu]` for suppliers, settings, and sign-in.
+- The desktop sidebar's first link is `Tonight`.
+- On a phone the first tab is `Tonight`.
 
 ## Driving it with Playwright and curl
 
 Preconditions:
 
-- `/health` reports `demo_mode` true.
-- No tasting has been stored yet if the empty calendar is the assertion. A later supplier run inserts one.
+- Demo mode banner is past `connecting`. The active persona is the demo Owner (`Demo Owner`).
+- A published briefing exists. `POST http://127.0.0.1:8123/tonight/briefing/rebuild` and then `POST /tonight/briefing/publish` are both 200. Source: `frontend/src/app/page.tsx`, `frontend/src/components/BriefingCards.tsx`.
 
-- **Banner.** Open `/`. Wait until `[data-testid=mode-banner]` does not contain `connecting`. The banner text is `DEMO MODE` and `deterministic fixtures, no API key`. The level-1 heading named `Ask the Head Sommelier` is visible. It is the only heading on the page.
-- **Nav.** Read the links in `#app-nav`. They are `Floor`, `Menu & pairings`, `List curation`, `Inventory`, `Staff training`, `Supplier tastings`, `Settings`. The sidebar `[data-testid=sign-in-link]` reads `Sign in`.
-- **Cards.** The `a.bento` links are `Menu & pairings` (`/menu`), `Cellar` (`/inventory`), `List` (`/list`), and `Team` (`/training`), each with a one-line description and `Open`. Choosing `Cellar` lands on `/inventory`.
-- **Send.** In `[data-testid=copilot-chat]`, fill the placeholder `Type a message...` with `Show the supplier tasting calendar.` and choose the button `Send message`. The chat text contains `Head Sommelier` and `nothing was emailed or purchased`. `[data-testid=copilot-chat-error]` is absent. `[data-testid=tasting-calendar]` is visible and reads `No tastings held yet.`
-- **Kept.** Reload `/` in the same browser context. The prompt, the calendar, and the reply are back without sending again.
-- **Narrow nav.** Set the viewport to 390×844 and open `/inventory`. `Supplier tastings` is not in the tab bar. Choose `More`. `[data-testid=mobile-menu]` shows `Supplier tastings`.
-- **Proof.** Screenshot the banner and cards before send, the chat after the calendar line appears, and the open `More` menu.
+- **Board.** Open `/`. The level-1 heading is `Tonight`. The lead is `The floor, before service.` `[data-testid=lookup-link]` reads `Lookup`. With a published briefing, `[data-testid=briefing-stack]` is visible.
+- **Acknowledge.** Choose `[data-testid=briefing-next]` until `[data-testid=briefing-ack]` is visible, then choose it. `[data-testid=briefing-acked]` reads `Acknowledged in 1s.`
+- **Empty sections.** On a fresh seed before any sensor or POS run, the Sensors section says `No sensors yet.` and the POS section says `No POS gaps.` The certificates section says `No certificates are due.`
+- **Chat.** In `.sommelier-chat`, fill `Type a message...` with `What is open by the glass?` and choose `Send message`. The last `[data-testid=copilot-assistant-message]` names a specialist and says nothing was emailed or purchased. Scope the chat to `.sommelier-chat`. CopilotKit also stamps `data-testid=copilot-chat` on an inner node.
+- **Phone nav.** At 390×844 on `/inventory`, `Suppliers` is not a visible link until `More` is opened. `[data-testid=mobile-menu]` then contains `Suppliers`, `Tastings`, `Sourcing`, `POS`, `Sensors`, `Audit`, `Usage`, `Records`, and `Settings`.
+- **Read back.** `curl -sS http://127.0.0.1:8123/tonight` includes `role`, `low_stock`, and `briefing`.
+- **Proof.** Screenshot the briefing card and the assistant reply.
 
 ## Gotchas
 
-- The banner reads `DEMO MODE connecting` until `GET /status` returns. Do not assert the model label during that gap.
-- Do not wait for an empty-chat heading such as `How can I help you today?`. The page has none.
-- Because the conversation is kept, a second drive in the same browser context starts with the earlier messages. Use a new context for the empty state.
-- The chat calendar lists stored tastings. After a supplier run it is no longer empty.
-- The send control is the accessible name `Send message`, not the arrow icon alone.
+- `next dev` may add `Upgrade Next.js to a safe version.` as a heading inside the Next.js overlay. The floor's own level-1 heading is `Tonight`.
+- Staff (`POST /auth/demo-persona` body `{"slug":"ana"}`) sees three phone tabs, `Tonight`, `Lookup`, and `Lessons`, and no `More` button. A Staff visit to `/menu` is replaced with `/`. Switch back with `{"slug":"owner"}` before an Owner recipe.
+- The offline board (`?day=` or the browser `offline` event) hides the live sections and says the rest of the board needs the network. The service worker registers only when the `madira_sw` cookie is `1` (`frontend/e2e/pwa-offline.spec.ts`).
+- The chat thread is stored in `localStorage` (`madira-thread:floor`). A new browser context is a clean chat.
