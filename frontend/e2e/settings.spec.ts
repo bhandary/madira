@@ -79,4 +79,43 @@ test.describe("settings", () => {
     await page.goto("/");
     await expect(page.getByTestId("mode-banner")).toContainText(/DEMO MODE/i);
   });
+
+  test("a saved key shows one LIVE label without a reload", async ({ page, request }) => {
+    const bannerKey = "sk-test-banner-key-9876";
+    const pending: Array<() => void> = [];
+    let held = false;
+    await page.route("**/madira-api/status", async (route) => {
+      if (!held) {
+        held = true;
+        await new Promise<void>((resolve) => {
+          pending.push(resolve);
+        });
+      }
+      await route.continue();
+    });
+    const releaseHeld = () => {
+      const waiting = pending.splice(0, pending.length);
+      for (const release of waiting) release();
+    };
+
+    try {
+      await page.goto("/settings");
+      await page.getByTestId("settings-provider").selectOption("openai");
+      await page.getByTestId("settings-model").fill("gpt-4.1-mini");
+      await page.getByTestId("settings-api-key").fill(bannerKey);
+      await page.getByTestId("settings-save").click();
+      await expect(page.getByTestId("settings-key-hint")).toContainText("ends in …9876");
+
+      const banner = page.getByTestId("mode-banner");
+      await expect(banner).toContainText("openai:gpt-4.1-mini");
+      await expect(banner).not.toContainText(/DEMO MODE/i);
+      releaseHeld();
+      await expect(banner).toContainText("openai:gpt-4.1-mini");
+      expect(await banner.innerText()).toMatch(/^LIVE\nopenai:gpt-4\.1-mini$/);
+    } finally {
+      releaseHeld();
+      removeSavedKey();
+      await request.delete("/madira-api/settings/llm");
+    }
+  });
 });

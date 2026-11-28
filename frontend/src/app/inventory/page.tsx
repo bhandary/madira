@@ -106,6 +106,7 @@ export default function InventoryPage() {
           data-testid="inv-adjust"
           className="btn btn-secondary"
           onClick={async () => {
+            setError("");
             try {
               await patchStock(sku, qty);
               setRevision((value) => value + 1);

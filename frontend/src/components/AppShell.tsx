@@ -148,9 +148,13 @@ function OfflineBanner() {
   );
 }
 
+function modeDetail(label: string) {
+  return label.replace(/^(?:DEMO MODE|LIVE)\s*(?:—|-)\s*/i, "");
+}
+
 function ModeBanner({ status }: { status: { demo_mode?: boolean; label?: string } | null }) {
   const demo = status?.demo_mode !== false;
-  const detail = (status?.label || "connecting").replace(/^DEMO MODE\s*[—-]\s*/i, "");
+  const detail = modeDetail(status?.label || "connecting");
   return (
     <div className="announce sticky top-0 z-30" data-testid="mode-banner">
       <span className={demo ? "mode-dot" : "mode-dot mode-dot-live"} aria-hidden="true" />
@@ -170,6 +174,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [openPath, setOpenPath] = useState<string | null>(null);
   const moreOpen = openPath === pathname;
   const [status, setStatus] = useState<{ demo_mode?: boolean; label?: string; llm_model?: string } | null>(null);
+  const statusTicket = useRef(0);
   const [role, setRole] = useState<string | null>(null);
   const { user, signOut } = useAccount();
   const staff = role === "Staff";
@@ -192,12 +197,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     const load = () => {
       if (bare) return;
+      const ticket = ++statusTicket.current;
       getStatus()
         .then((next) => {
-          if (!cancelled) setStatus(next);
+          if (cancelled || ticket !== statusTicket.current) return;
+          setStatus(next);
         })
         .catch(() => {
-          if (!cancelled) setStatus({ demo_mode: true, label: "DEMO MODE — backend starting" });
+          if (cancelled || ticket !== statusTicket.current) return;
+          setStatus({ demo_mode: true, label: "DEMO MODE — backend starting" });
         });
     };
     load();
