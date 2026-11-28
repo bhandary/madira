@@ -375,10 +375,34 @@ def transfer_stock(
     return outgoing, incoming
 
 
+def _draw_count(holders: list[tuple[Decimal, str, uuid.UUID]], need: Decimal) -> list[tuple[uuid.UUID, Decimal]]:
+    """Take ``need`` from the fullest locations first. A tie follows the location name.
+
+    This is the same draw the seeded sales use: never take more than a location
+    currently holds, so a count cannot push that location below zero.
+    """
+
+    remaining = need
+    drawn: list[tuple[uuid.UUID, Decimal]] = []
+    for amount, _name, place_id in sorted(holders, key=lambda row: (-row[0], row[1])):
+        if remaining <= 0:
+            break
+        if amount <= 0:
+            continue
+        take = amount if amount <= remaining else remaining
+        drawn.append((place_id, take))
+        remaining -= take
+    if remaining > 0:
+        raise Rejected("That count would take a location below zero.")
+    return drawn
+
+
 def apply_count(session: Session, venue_id: uuid.UUID, sku: str, on_hand) -> None:
     """PATCH /inventory/{sku}: the delta from the movement sum is a count adjustment.
 
-    A request that already matches the ledger still writes the inventory audit
+    An increase is posted on Main Cellar. A decrease is drawn from the locations
+    that hold the bottles, fullest first, and stops at zero in each one. A
+    request that already matches the ledger still writes the inventory audit
     event, and it does not insert a zero-quantity row.
     """
 
@@ -409,22 +433,47 @@ def apply_count(session: Session, venue_id: uuid.UUID, sku: str, on_hand) -> Non
             after={"sku": code, "on_hand": desired},
         )
         return
-    place = ensure_location(session, venue_id, _MAIN_CELLAR, "cellar")
-    post_movement(
-        session,
-        venue_id,
-        sku=sku,
-        location_id=place.id,
-        quantity=delta,
-        movement_type="count_adjustment",
-        source_type="count",
-        reason="On-hand count",
-        action=ACTION_INVENTORY,
-        entity_type="inventory_item",
-        entity_id=items[0].id,
-        before={"sku": code, "on_hand": previous},
-        after={"sku": code, "on_hand": desired},
-    )
+    if delta > 0:
+        place = ensure_location(session, venue_id, _MAIN_CELLAR, "cellar")
+        post_movement(
+            session,
+            venue_id,
+            sku=sku,
+            location_id=place.id,
+            quantity=delta,
+            movement_type="count_adjustment",
+            source_type="count",
+            reason="On-hand count",
+            action=ACTION_INVENTORY,
+            entity_type="inventory_item",
+            entity_id=items[0].id,
+            before={"sku": code, "on_hand": previous},
+            after={"sku": code, "on_hand": desired},
+        )
+        return
+    balances = balances_by_sku(session, venue_id).get(stock.id, {})
+    places = list(session.scalars(select(Location).where(Location.venue_id == venue_id)).all())
+    holders = [
+        (balances.get(place.id, Decimal("0")), place.name, place.id)
+        for place in places
+        if balances.get(place.id, Decimal("0")) > 0
+    ]
+    for place_id, take in _draw_count(holders, -delta):
+        post_movement(
+            session,
+            venue_id,
+            sku=sku,
+            location_id=place_id,
+            quantity=-take,
+            movement_type="count_adjustment",
+            source_type="count",
+            reason="On-hand count",
+            action=ACTION_INVENTORY,
+            entity_type="inventory_item",
+            entity_id=items[0].id,
+            before={"sku": code, "on_hand": previous},
+            after={"sku": code, "on_hand": desired},
+        )
 
 
 def ensure_location(session: Session, venue_id: uuid.UUID, name: str, kind: str, notes: str = "") -> Location:

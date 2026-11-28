@@ -479,7 +479,7 @@ export async function patchStock(sku: string, on_hand: number) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ on_hand }),
   });
-  return res.json();
+  return readJson(res);
 }
 
 export async function getCellar(): Promise<CellarBoard> {
@@ -1305,7 +1305,9 @@ export async function saveLlmSettings(body: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  return readSettings(res);
+  const saved = await readSettings(res);
+  notifyStatusChanged();
+  return saved;
 }
 
 export async function getAuthConfig(): Promise<AuthConfig> {
@@ -1630,7 +1632,9 @@ export async function acceptReceipt(
 
 export async function deleteLlmSettings(): Promise<LlmSettings> {
   const res = await apiFetch(`${API}/settings/llm`, { method: "DELETE", credentials: "same-origin" });
-  return readSettings(res);
+  const saved = await readSettings(res);
+  notifyStatusChanged();
+  return saved;
 }
 
 export async function getSensors(): Promise<SensorList> {

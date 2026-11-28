@@ -114,6 +114,8 @@ def test_inventory_routes_return_the_same_surfaces():
         assert body["a2ui_operations"][0]["createSurface"]["surfaceId"] == "inventory"
         muscadet = next(item for item in body["items"] if item["sku"] == "W-MUS-01")
         assert muscadet["on_hand"] == 1
+        assert all(place["quantity"] >= 0 for place in muscadet["locations"])
+        assert sum(place["quantity"] for place in muscadet["locations"]) == 1
         drafted = client.post("/purchase-orders/draft")
         assert drafted.status_code == 200
         orders = drafted.json()

@@ -607,6 +607,61 @@ def test_inventory_api_locations_bins_qr_and_isolation(client):
     assert "valuation_cents" in after
 
 
+def test_count_decrement_draws_stock_without_going_negative():
+    venue_id = _venue()
+    barcode = _sku(venue_id, f"NEG-{uuid.uuid4().hex[:8]}")
+    cellar = _location(venue_id, "Main Cellar", "cellar")
+    bar = _location(venue_id, "Main Bar", "bar")
+    walk_in = _location(venue_id, "Walk-In Cooler", "walk_in")
+    with session_scope() as session:
+        ledger.post_movement(
+            session,
+            venue_id=venue_id,
+            sku=barcode,
+            location_id=bar,
+            quantity=Decimal("2"),
+            movement_type="opening_balance",
+        )
+        ledger.post_movement(
+            session,
+            venue_id=venue_id,
+            sku=barcode,
+            location_id=walk_in,
+            quantity=Decimal("2"),
+            movement_type="opening_balance",
+        )
+        session.commit()
+        sku_id = session.scalar(sa.select(Sku.id).where(Sku.venue_id == venue_id, Sku.barcode == barcode))
+        ledger.apply_count(session, venue_id, barcode, 1)
+        session.commit()
+        places = ledger.balances_by_sku(session, venue_id)[sku_id]
+        assert places.get(cellar, Decimal("0")) == Decimal("0")
+        assert places[bar] == Decimal("0")
+        assert places[walk_in] == Decimal("1")
+        assert sum(places.values(), Decimal("0")) == Decimal("1")
+        assert all(amount >= 0 for amount in places.values())
+        adjustments = session.scalars(
+            sa.select(StockMovement).where(
+                StockMovement.venue_id == venue_id,
+                StockMovement.sku_id == sku_id,
+                StockMovement.movement_type == "count_adjustment",
+            )
+        ).all()
+        assert {(row.location_id, as_qty(row.quantity)) for row in adjustments} == {
+            (bar, Decimal("-2")),
+            (walk_in, Decimal("-1")),
+        }
+        events = session.scalars(
+            sa.select(AuditEvent)
+            .where(AuditEvent.venue_id == venue_id, AuditEvent.action == "inventory.adjust")
+            .order_by(AuditEvent.seq.asc())
+        ).all()
+        assert [event.before_json["on_hand"] for event in events] == [4, 4]
+        assert [event.after_json["on_hand"] for event in events] == [1, 1]
+        chain = verify_audit_chain(session, venue_id)
+        assert chain["valid"] is True
+
+
 def test_rbac_staff_cannot_read_and_auditor_cannot_write(client, monkeypatch):
     _cookie(client, monkeypatch, STAFF)
     assert client.get("/inventory").status_code == 403
